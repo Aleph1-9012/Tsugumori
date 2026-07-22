@@ -1,4 +1,4 @@
-> Forked and re-themed as **Sidonia/Tsugumori** by Aleph1-9012 — Knights of Sidonia inspired palette.
+**Sidonia/Tsugumori** by Aleph1-9012 — Knights of Sidonia inspired palette.
 
 > [!WARNING]
 
@@ -12,7 +12,10 @@ Hyprland + Quickshell + Waybar rice for Arch Linux, with a Knights of Sidonia ae
 
 # SHOW OFF
 
-https://github.com/user-attachments/assets/f92c243b-8252-49f0-8998-a81a3a6d70d4
+
+https://github.com/user-attachments/assets/af51b507-1511-4ae2-ab97-889a92a6597f
+
+
 
 
 ### Quick install
