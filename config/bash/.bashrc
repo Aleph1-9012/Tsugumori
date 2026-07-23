@@ -25,8 +25,11 @@ _nier_prompt_cmd() {
 PROMPT_COMMAND='_nier_prompt_cmd'
 
 # ─── Welcome banner (only on first interactive shell) ──────────────
-if [[ -x ~/.config/quickshell/nier-welcome.sh ]] && command -v figlet >/dev/null; then
-    ~/.config/quickshell/nier-welcome.sh
+if [[ -x ~/.config/quickshell/tsugumori-welcome.sh ]] && command -v figlet >/dev/null; then
+    ~/.config/quickshell/tsugumori-welcome.sh
 fi
 # ─── User-specific overrides ───────────────────────────────────────
 [ -f ~/.bashrc.local ] && . ~/.bashrc.local
+
+# Hermes Agent — ensure ~/.local/bin is on PATH
+export PATH="$HOME/.local/bin:$PATH"

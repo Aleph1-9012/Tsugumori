@@ -25,6 +25,19 @@ ShellRoot {
     property bool   lockError:   false
     property bool   lockPending: false
 
+    // — Power actions —
+    Process {
+        id: powerProc
+        property string pending: ""
+        command: ["sh", "-c", pending]
+        running: false
+    }
+    function powerAction(cmd) {
+        if (!cmd) return
+        powerProc.pending = cmd
+        powerProc.running = true
+    }
+
     property string currentUser: "user"
     Process {
         id: getUserProc; command:["sh","-c","echo $USER"]; running:true
@@ -369,7 +382,7 @@ ShellRoot {
                                 opacity:root.lockError?1:0;height:14;Behavior on opacity{NumberAnimation{duration:200}}}
                             Item{width:1;height:10}
 
-                            Item{width:parent.width;height:42
+                            Item{width:254;height:30;anchors.horizontalCenter:parent.horizontalCenter
                                 Rectangle{anchors.fill:parent;color:"transparent";border.color:"#cc1515";border.width:1}
                                 Rectangle{id:unlockFill;anchors.left:parent.left;anchors.top:parent.top;anchors.bottom:parent.bottom;color:"#cc1515";width:0
                                     Behavior on width{NumberAnimation{duration:280;easing.type:Easing.InOutQuart}}}
@@ -379,6 +392,30 @@ ShellRoot {
                                     onEntered:unlockFill.width=parent.width;onExited:unlockFill.width=0
                                     onClicked:root.doAuth()}
                             }
+                            
+Item{width:1;height:16}
+                Item{width:parent.width;height:34
+    Row{anchors.horizontalCenter:parent.horizontalCenter;spacing:14
+        Rectangle{width:120;height:30;color:"transparent";border.color:"#cc1515";border.width:1
+            Rectangle{id:shutdownFill;anchors.left:parent.left;anchors.top:parent.top;anchors.bottom:parent.bottom;color:"#cc1515";width:0
+                Behavior on width{NumberAnimation{duration:280;easing.type:Easing.InOutQuart}}}
+            Text{anchors.centerIn:parent;text:"SHUTDOWN";font.family:"Share Tech Mono";font.pixelSize:9;font.letterSpacing:2
+                color:shutdownMA.containsMouse?"#c8c8c4":"#cc1515";Behavior on color{ColorAnimation{duration:200}}}
+            MouseArea{id:shutdownMA;anchors.fill:parent;hoverEnabled:true
+                onEntered:shutdownFill.width=parent.width;onExited:shutdownFill.width=0
+                onClicked:root.powerAction("systemctl poweroff")}
+        }
+        Rectangle{width:120;height:30;color:"transparent";border.color:"#cc1515";border.width:1
+            Rectangle{id:restartFill;anchors.left:parent.left;anchors.top:parent.top;anchors.bottom:parent.bottom;color:"#cc1515";width:0
+                Behavior on width{NumberAnimation{duration:280;easing.type:Easing.InOutQuart}}}
+            Text{anchors.centerIn:parent;text:"RESTART";font.family:"Share Tech Mono";font.pixelSize:9;font.letterSpacing:2
+                color:restartMA.containsMouse?"#c8c8c4":"#cc1515";Behavior on color{ColorAnimation{duration:200}}}
+            MouseArea{id:restartMA;anchors.fill:parent;hoverEnabled:true
+                onEntered:restartFill.width=parent.width;onExited:restartFill.width=0
+                onClicked:root.powerAction("systemctl reboot")}
+        }
+    }
+}
                         }
                     }
                 }

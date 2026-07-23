@@ -602,7 +602,7 @@ Item {
                             Rectangle {
                                 width: 4; height: 4
                                 color: root.mpPlaying
-                                    ? Qt.rgba(88/255,158/255,110/255,0.55)
+                                    ? Qt.rgba(204/255,21/255,21/255,0.55)
                                     : Qt.rgba(204/255,21/255,21/255,0.15)
                                 SequentialAnimation on opacity {
                                     running: root.mpPlaying; loops: Animation.Infinite
