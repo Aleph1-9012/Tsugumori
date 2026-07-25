@@ -59,6 +59,16 @@ ShellRoot {
             : "awww img --outputs " + monitor + " \"" + file + "\""
         applyProc.command = ["sh", "-c", cmd]
         applyProc.running = true
+
+        // — Persist selection so it survives reboot —
+        var saveCmd = "echo '" + file + "' > " + xdgConfigHome + "/quickshell/current_wallpaper.txt"
+        saveProc.command = ["sh", "-c", saveCmd]
+        saveProc.running = true
+    }
+
+    Process {
+        id: saveProc
+        running: false
     }
 
     Process {
