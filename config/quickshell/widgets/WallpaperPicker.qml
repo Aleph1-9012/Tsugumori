@@ -194,20 +194,20 @@ ShellRoot {
                                 SequentialAnimation on opacity { running:root.frozen; loops:Animation.Infinite
                                     NumberAnimation{to:0.3;duration:900} NumberAnimation{to:1;duration:900} }
                             }
-                            Text{text:"WALLPAPER SELECT";font.family:"Share Tech Mono";font.pixelSize:9;font.letterSpacing:2;color:"#cc1515"}
+                            Text{text:"WALLPAPER SELECT";font.family:"Share Tech Mono";font.pixelSize:9;font.letterSpacing:2;color:"#e8e8e8"}
                         }
-                        Text{text:"NODE · "+root.activeMonitor;font.family:"Share Tech Mono";font.pixelSize:9;font.letterSpacing:2;color:"#cc1515"}
+                        Text{text:"NODE · "+root.activeMonitor;font.family:"Share Tech Mono";font.pixelSize:9;font.letterSpacing:2;color:"#e8e8e8"}
                     }
                 }
                 Item {
                     anchors{top:parent.top;right:parent.right;topMargin:28;rightMargin:30}
                     z:5; opacity:parent.uiOp
-                    Text{text:root.clockFull;font.family:"Share Tech Mono";font.pixelSize:9;font.letterSpacing:2;color:"#cc1515"}
+                    Text{text:root.clockFull;font.family:"Share Tech Mono";font.pixelSize:9;font.letterSpacing:2;color:"#e8e8e8"}
                 }
                 Item {
                     anchors{bottom:parent.bottom;left:parent.left;bottomMargin:28;leftMargin:30}
                     z:5; opacity:parent.uiOp
-                    Text{text:"↑↓ / SCROLL  NAVIGATE  ·  ESC  QUIT";font.family:"Share Tech Mono";font.pixelSize:9;font.letterSpacing:2;color:"#cc1515"}
+                    Text{text:"↑↓ / SCROLL  NAVIGATE  ·  ESC  QUIT";font.family:"Share Tech Mono";font.pixelSize:9;font.letterSpacing:2;color:"#e8e8e8"}
                 }
 
                 // ── Boutons apply — toujours visibles ──
