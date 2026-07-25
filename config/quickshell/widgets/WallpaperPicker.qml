@@ -55,8 +55,8 @@ ShellRoot {
         if (root.wallpapers.length === 0) return
         var file = root.wallpaperDir + "/" + root.wallpapers[idx]
         var cmd = monitor === "both"
-            ? "awww img \"" + file + "\""
-            : "awww img --outputs " + monitor + " \"" + file + "\""
+            ? "awww img --transition-type fade --transition-duration 0.6 --transition-fps 60 \"" + file + "\""
+            : "awww img --transition-type fade --transition-duration 0.6 --transition-fps 60 --outputs " + monitor + " \"" + file + "\""
         applyProc.command = ["sh", "-c", cmd]
         applyProc.running = true
 
@@ -150,11 +150,15 @@ ShellRoot {
                 id: hideFadeTimer; interval:800; repeat:false
                 onTriggered: hideFadeAnim.start()
             }
+            Timer { id:applyDelayTimer; interval:800; repeat:false
+                property int pendingIdx: -1
+                property string pendingMon: ""
+                onTriggered: if (pendingIdx >= 0) root.applyWallpaper(pendingIdx, pendingMon)
+            }
             NumberAnimation {
                 id: hideFadeAnim
                 target: voHide; property: "opacity"
-                from:1.0; to:0.0; duration:250
-                easing.type: Easing.InQuad
+                from:1.0; to:0.0; duration:0
                 onFinished: { root.done=true; exitTimer.restart() }
             }
             Timer { id:exitTimer; interval:50; repeat:false
@@ -254,7 +258,7 @@ ShellRoot {
                                         Behavior on color{ColorAnimation{duration:200}} }
                                     MouseArea { id:ma1;anchors.fill:parent;hoverEnabled:true
                                         onEntered:fill1.width=parent.width;onExited:fill1.width=0
-                                        onClicked:{ root.applyWallpaper(root.currentIndex, root.activeMonitor); root.doClose() } }
+                                        onClicked:{ root.doClose(); applyDelayTimer.pendingIdx=root.currentIndex; applyDelayTimer.pendingMon=root.activeMonitor; applyDelayTimer.restart() } }
                                 }
 
                                 // Bouton les deux écrans
@@ -269,7 +273,7 @@ ShellRoot {
                                         Behavior on color{ColorAnimation{duration:200}} }
                                     MouseArea { id:ma2;anchors.fill:parent;hoverEnabled:true
                                         onEntered:fill2.width=parent.width;onExited:fill2.width=0
-                                        onClicked:{ root.applyWallpaper(root.currentIndex, "both"); root.doClose() } }
+                                        onClicked:{ root.doClose(); applyDelayTimer.pendingIdx=root.currentIndex; applyDelayTimer.pendingMon="both"; applyDelayTimer.restart() } }
                                 }
                             }
                         }
@@ -380,6 +384,9 @@ ShellRoot {
                                     fillMode: Image.PreserveAspectCrop
                                     asynchronous: true
                                     smooth: true
+                                    cache: true
+                                    sourceSize.width: 800
+                                    sourceSize.height: 500
                                 }
 
                                 // Bandeau avec le nom, visible seulement sur la vignette centrale
