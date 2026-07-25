@@ -108,6 +108,24 @@ ShellRoot {
             property bool isPrimary: modelData.name === root.activeMonitor
             property bool isActive:  modelData.name === root.activeMonitor
 
+            // --- Solid opaque backdrop to stop edge/window bleed-through ---
+            Rectangle {
+                anchors.fill: parent
+                color: "#0c0c0c"
+                z: -2
+            }
+
+            // --- Full-screen click-trap for input passthrough ---
+            MouseArea {
+                anchors.fill: parent
+                z: -1
+                onClicked: {
+                    if (root.activeMonitor !== modelData.name) {
+                        root.activeMonitor = modelData.name
+                    }
+                }
+            }
+
             // ── Vidéo reveal ──
             MediaPlayer {
                 id: reveal
