@@ -464,6 +464,7 @@ Item {
 
                             // Contrôles
                             Row {
+        z: 20
                                 spacing: 4; topPadding: 5
 
                                 // PREV
