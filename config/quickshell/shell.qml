@@ -113,6 +113,7 @@ ShellRoot {
             exclusionMode:ExclusionMode.Ignore
             aboveWindows:menuItem.menuOpen||menuItem.wipeHideRunning
             color:"transparent"
+            visible:menuItem.menuOpen||menuItem.wipeHideRunning
             WlrLayershell.keyboardFocus:menuItem.menuOpen?WlrKeyboardFocus.Exclusive:WlrKeyboardFocus.None
             implicitWidth:modelData.width;implicitHeight:modelData.height
             Menu{id:menuItem;anchors.fill:parent;screenW:modelData.width;screenH:modelData.height}
@@ -140,6 +141,7 @@ ShellRoot {
             Connections{target:root;function onPlayerVisibleChanged(){playerItem.toggleVisible()}}
         }
     }
+
 
     // ── COMPANIONS ──
     Variants {
