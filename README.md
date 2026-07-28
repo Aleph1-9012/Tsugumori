@@ -17,7 +17,7 @@ Hyprland + Quickshell + Waybar rice for Arch Linux, with a Knights of Sidonia ae
 https://github.com/user-attachments/assets/5b950538-f5c5-4334-abc7-b451dc3d63a0
 
 
-
+Better quality showcase :https://youtu.be/VwLABphh-E0?si=obrjjakcOhFq8bV5
 
 ### Quick install
 
