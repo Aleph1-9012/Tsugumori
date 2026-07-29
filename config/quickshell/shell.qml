@@ -31,26 +31,33 @@ ShellRoot {
 
     Process {
         id: playerctlMeta
-        command: ["playerctl","metadata","--format",
+        command: ["playerctl","-i","mpv","metadata","--format",
                   "{{title}}|{{artist}}|{{mpris:artUrl}}|{{status}}|{{position}}|{{mpris:length}}"]
         running: false
         stdout: SplitParser {
             onRead: data => {
                 var p = data.trim().split("|")
                 if (p.length >= 4) {
-                    if (p[0]) root.mpTitle    = p[0]
-                    if (p[1]) root.mpArtist   = p[1]
-                    root.mpCoverUrl = p[2] || ""
-                    root.mpPlaying  = (p[3] === "Playing")
-                    root.mpPosition = parseFloat(p[4] || "0") / 1000000
-                    root.mpLength   = Math.max(1, parseFloat(p[5] || "341000000") / 1000000)
+                    if (p[3] === "Playing" && root.localMode) {
+                        root.localMode = false
+                        root.mpvSend(["set_property", "pause", true])
+                    }
+                    if (!root.localMode) {
+                        if (p[0]) root.mpTitle    = p[0]
+                        if (p[1]) root.mpArtist   = p[1]
+                        root.mpCoverUrl = p[2] || ""
+                        root.mpPlaying  = (p[3] === "Playing")
+                        root.mpPosition = parseFloat(p[4] || "0") / 1000000
+                        root.mpLength   = Math.max(1, parseFloat(p[5] || "341000000") / 1000000)
+                    }
                 }
             }
         }
     }
-    Process { id: pcPlay; command: ["playerctl","play-pause"]; running: false }
-    Process { id: pcNext; command: ["playerctl","next"];       running: false }
-    Process { id: pcPrev; command: ["playerctl","previous"];   running: false }
+    Process { id: pcPlay; command: ["playerctl","-i","mpv","play-pause"]; running: false }
+    Process { id: pcNext; command: ["playerctl","-i","mpv","next"];       running: false }
+    Process { id: pcPrev; command: ["playerctl","-i","mpv","previous"];   running: false }
+    Process { id: pcPauseExternal; command: ["playerctl","-i","mpv","pause"]; running: false }
     Timer { interval:1000; running:true; repeat:true; onTriggered: playerctlMeta.running=true }
 
     // ── LOCAL MUSIC ──
@@ -83,7 +90,7 @@ ShellRoot {
 
     Process {
         id: mpvProc
-        command: ["mpv","--idle","--no-video","--input-ipc-server=" + root.mpvSocket]
+        command: ["mpv","--idle","--no-video","--reset-on-next-file=pause","--input-ipc-server=" + root.mpvSocket]
         running: false
     }
 
@@ -111,8 +118,19 @@ ShellRoot {
     function playLocalTrack(path) {
         root.localTrackIndex = root.localTracks.indexOf(path)
         root.localMode = true
-        if (!mpvProc.running) { mpvProc.running = true }
-        mpvSend(["loadfile", path, "replace"])
+        pcPauseExternal.running = true
+        var fname = path.split("/").pop().replace(/\.[^.]+$/, "")
+        root.mpTitle = fname
+        root.mpArtist = "LOCAL FILE"
+        root.mpPosition = 0
+        root.mpCoverUrl = ""
+        if (!mpvProc.running) {
+            mpvProc.running = true
+            mpvStartupDelay.pendingPath = path
+            mpvStartupDelay.start()
+        } else {
+            root.mpvSend(["loadfile", path, "replace"])
+        }
         root.mpPlaying = true
     }
 
@@ -214,7 +232,7 @@ ShellRoot {
                 mpTitle:root.mpTitle;mpArtist:root.mpArtist;mpCoverUrl:root.mpCoverUrl
                 mpPlaying:root.mpPlaying;mpPosition:root.mpPosition;mpLength:root.mpLength
                 localTracks:root.localTracks
-                onPlayPause:{ if(root.localMode){root.mpvSend(["cycle","pause"])} else {pcPlay.running=true} }
+                onPlayPause:{ if(root.localMode){root.mpPlaying = !root.mpPlaying; root.mpvSend(["cycle","pause"])} else {pcPlay.running=true} }
                 onNextTrack:{ if(root.localMode){root.nextLocalTrack()} else {pcNext.running=true} }
                 onPrevTrack:{ if(root.localMode){root.prevLocalTrack()} else {pcPrev.running=true} }
                 onLocalTrackSelected: function(path){ root.playLocalTrack(path) }
@@ -234,5 +252,13 @@ ShellRoot {
             implicitWidth:Settings.companionsSpriteSize+58;implicitHeight:compItem.implicitHeight
             Companions{id:compItem;anchors.fill:parent}
         }
+    }
+
+    Timer {
+        id: mpvStartupDelay
+        interval: 400
+        repeat: false
+        property string pendingPath: ""
+        onTriggered: root.mpvSend(["loadfile", pendingPath, "replace"])
     }
 }
