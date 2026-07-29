@@ -53,6 +53,82 @@ ShellRoot {
     Process { id: pcPrev; command: ["playerctl","previous"];   running: false }
     Timer { interval:1000; running:true; repeat:true; onTriggered: playerctlMeta.running=true }
 
+    // ── LOCAL MUSIC ──
+    property string homeDir: ""
+    property var    localTracks: []
+    property bool   localMode: false
+    property string mpvSocket: "/tmp/mpv-tsugumori.sock"
+
+    Process {
+        id: getHomeProc
+        command: ["sh","-c","echo $HOME"]
+        running: true
+        stdout: SplitParser { onRead: data => { var h=data.trim(); if(h!=="") { root.homeDir=h; musicScanProc.running=true } } }
+    }
+
+    Process {
+        id: musicScanProc
+        command: ["find", root.homeDir + "/Music", "-type","f","(",
+                  "-iname","*.mp3","-o","-iname","*.flac","-o",
+                  "-iname","*.wav","-o","-iname","*.m4a","-o",
+                  "-iname","*.ogg",")"]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                var lines = this.text.trim().split("\n").filter(function(l){ return l.length>0 })
+                root.localTracks = lines
+            }
+        }
+    }
+
+    Process {
+        id: mpvProc
+        command: ["mpv","--idle","--no-video","--input-ipc-server=" + root.mpvSocket]
+        running: false
+    }
+
+    Process {
+        id: mpvSendProc
+        property string pendingCmd: ""
+        command: ["python3", root.homeDir + "/.config/quickshell/scripts/mpv_ctl.py", root.mpvSocket, pendingCmd]
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (this.text.indexOf("ERR") === 0 || this.text.trim() === "") {
+                    if (!mpvProc.running) { mpvProc.running = true }
+                }
+            }
+        }
+    }
+
+    function mpvSend(cmdArr) {
+        mpvSendProc.pendingCmd = JSON.stringify({ command: cmdArr })
+        mpvSendProc.running = true
+    }
+
+    property int localTrackIndex: -1
+
+    function playLocalTrack(path) {
+        root.localTrackIndex = root.localTracks.indexOf(path)
+        root.localMode = true
+        if (!mpvProc.running) { mpvProc.running = true }
+        mpvSend(["loadfile", path, "replace"])
+        root.mpPlaying = true
+    }
+
+    function nextLocalTrack() {
+        if (root.localTracks.length === 0) return
+        var i = (root.localTrackIndex + 1) % root.localTracks.length
+        root.playLocalTrack(root.localTracks[i])
+    }
+
+    function prevLocalTrack() {
+        if (root.localTracks.length === 0) return
+        var i = (root.localTrackIndex - 1 + root.localTracks.length) % root.localTracks.length
+        root.playLocalTrack(root.localTracks[i])
+    }
+
+
     property string currentUser: "user"
     Process {
         id: getUserProc; command:["sh","-c","echo $USER"]; running:true
@@ -137,7 +213,12 @@ ShellRoot {
             Player{id:playerItem;anchors.fill:parent
                 mpTitle:root.mpTitle;mpArtist:root.mpArtist;mpCoverUrl:root.mpCoverUrl
                 mpPlaying:root.mpPlaying;mpPosition:root.mpPosition;mpLength:root.mpLength
-                onPlayPause:pcPlay.running=true;onNextTrack:pcNext.running=true;onPrevTrack:pcPrev.running=true}
+                localTracks:root.localTracks
+                onPlayPause:{ if(root.localMode){root.mpvSend(["cycle","pause"])} else {pcPlay.running=true} }
+                onNextTrack:{ if(root.localMode){root.nextLocalTrack()} else {pcNext.running=true} }
+                onPrevTrack:{ if(root.localMode){root.prevLocalTrack()} else {pcPrev.running=true} }
+                onLocalTrackSelected: function(path){ root.playLocalTrack(path) }
+            }
             Connections{target:root;function onPlayerVisibleChanged(){playerItem.toggleVisible()}}
         }
     }

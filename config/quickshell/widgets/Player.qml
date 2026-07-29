@@ -23,6 +23,9 @@ Item {
     signal playPause
     signal nextTrack
     signal prevTrack
+    property var    localTracks: []
+    property bool   showTrackList: false
+    signal localTrackSelected(string path)
 
     property bool   shown:    false
     property string clockStr: "--:--"
@@ -508,10 +511,59 @@ Item {
                                         z: 1
                                     }
                                 }
+
+                                // TRACKS
+                                CBtn {
+                                id: tracksBtn
+                                svgIcon: true
+                                onClicked: root.showTrackList = !root.showTrackList
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "≡"; font.pixelSize: 9
+                                    color: tracksBtn.textColor
+                                    z: 1
+                                }
+                                }
                             }
                         }
                     }
-                }
+
+                    // Track list overlay (local music)
+                    Rectangle {
+                        anchors.fill: parent
+                        visible: root.showTrackList
+                        color: "#0c0c0c"
+                        border.color: "#cc1515"; border.width: 1
+                        z: 50
+
+                        MouseArea { anchors.fill: parent; onClicked: {} }
+
+                        ListView {
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            clip: true
+                            model: root.localTracks
+                            delegate: Rectangle {
+                                width: ListView.view.width; height: 16
+                                color: "transparent"
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: modelData.split("/").pop()
+                                    font.family: "Share Tech Mono"; font.pixelSize: 7
+                                    color: "#e8e8e8"; elide: Text.ElideRight; width: parent.width
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        root.localTrackSelected(modelData)
+                                        root.showTrackList = false
+                                    }
+                                }
+                            }
+                    }
+                    }
+
+                                    }
 
                 // ── PROGRESS ──
                 Column {
