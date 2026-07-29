@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell.Io
+import Quickshell.Wayland
 import "../components"
 import "../settings"
 

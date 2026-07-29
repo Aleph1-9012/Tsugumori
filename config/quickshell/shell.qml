@@ -226,7 +226,7 @@ ShellRoot {
             required property var modelData;screen:modelData
             anchors.top:true;anchors.right:true
             margins.top:Math.round(modelData.height*Settings.playerPositionY);margins.right:20
-            exclusionMode:ExclusionMode.Ignore;aboveWindows:root.playerOnTop;color:"transparent"
+            exclusionMode:ExclusionMode.Ignore;WlrLayershell.layer:WlrLayer.Top;color:"transparent"
             implicitWidth:Settings.playerWidth;implicitHeight:playerItem.implicitHeight
             Player{id:playerItem;anchors.fill:parent
                 mpTitle:root.mpTitle;mpArtist:root.mpArtist;mpCoverUrl:root.mpCoverUrl
