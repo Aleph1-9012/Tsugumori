@@ -261,4 +261,28 @@ ShellRoot {
         property string pendingPath: ""
         onTriggered: root.mpvSend(["loadfile", pendingPath, "replace"])
     }
+
+    Process {
+        id: localPlayerctlMeta
+        command: ["playerctl", "-p", "mpv", "metadata", "--format", "{{position}}|{{mpris:length}}"]
+        running: false
+        stdout: SplitParser {
+            onRead: data => {
+                var p = data.trim().split("|")
+                if (p.length >= 2) {
+                    var pos = parseFloat(p[0])
+                    var len = parseFloat(p[1])
+                    if (!isNaN(pos)) root.mpPosition = pos / 1000000
+                    if (!isNaN(len) && len > 0) root.mpLength = len / 1000000
+                }
+            }
+        }
+    }
+
+    Timer {
+        interval: 1000
+        running: root.localMode && root.mpPlaying
+        repeat: true
+        onTriggered: localPlayerctlMeta.running = true
+    }
 }
