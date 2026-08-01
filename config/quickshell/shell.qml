@@ -249,6 +249,18 @@ ShellRoot {
             margins.top:Math.round(modelData.height*Settings.playerPositionY);margins.right:20
             exclusionMode:ExclusionMode.Ignore;WlrLayershell.layer:WlrLayer.Top;color:"transparent"
             implicitWidth:Settings.playerWidth;implicitHeight:playerItem.implicitHeight
+            // Real input-accepting region — must track the ACTUAL current visible content
+            // (collapsed or expanded, per the drawer state), not the padded window buffer
+            // above. Without this, a transparent layer-shell surface claims pointer input
+            // across its whole rectangle regardless of what's drawn, silently blocking
+            // clicks/scroll/hover in the empty space below the real content. When the
+            // player is hidden (mid wipe-out/before wipe-in), the mask collapses to
+            // nothing so the screen area is fully click-through.
+            mask: Region {
+                x: 0; y: 0
+                width:  playerItem.shown ? Settings.playerWidth        : 0
+                height: playerItem.shown ? playerItem.currentContentHeight : 0
+            }
             Player{id:playerItem;anchors.fill:parent
                 mpTitle:root.mpTitle;mpArtist:root.mpArtist;mpCoverUrl:root.mpCoverUrl
                 mpPlaying:root.mpPlaying;mpPosition:root.mpPosition;mpLength:root.mpLength

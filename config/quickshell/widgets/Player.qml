@@ -32,9 +32,23 @@ Item {
     property bool   shown:    false
     property string clockStr: "--:--"
 
-    // Stabilize Wayland window size to prevent surface reconfiguration jump
+    // ── Window sizing: buffer stays CONSTANT (no resize → no Wayland jump) ──
+    // Real fix for the "dead zone blocks clicks/scroll/hover" bug is the PanelWindow's
+    // `mask` in shell.qml, not this. This property just needs to (a) never shrink the
+    // buffer, to avoid a visible resize pop, while (b) still growing to fit the tallest
+    // state the drawer ever reaches, so content never gets clipped by the window itself.
+    property int  maxContentHeight: 0
+    // Real, exact current visible height (collapsed or expanded) — changes instantly,
+    // no animation — used by shell.qml to size the input mask precisely to what's
+    // actually drawn right now, independent of the padded window buffer above.
+    readonly property int currentContentHeight: content.implicitHeight
+
+    onCurrentContentHeightChanged: {
+        if (currentContentHeight > maxContentHeight) maxContentHeight = currentContentHeight
+    }
+
     implicitWidth:  pw
-    implicitHeight: s(420)
+    implicitHeight: maxContentHeight > 0 ? maxContentHeight : currentContentHeight
 
     // ──────────────────────────────────────────────────────────────
     // WIPE HOST — Item clipé contenant rideau + contenu comme frères
@@ -634,32 +648,71 @@ Item {
                             }
 
                             // ── DRAWER (HOVER + HIGHLIGHT DESIGN) ──
+                            // Two-level split, now that the Wayland buffer concern is fully
+                            // handled elsewhere (shell.qml's mask + root.maxContentHeight):
+                            //   • outer `drawer` — reserves layout space INSTANTLY (drives the
+                            //     panel/window sizing chain so the buffer ratchets up once and
+                            //     never needs to resize again — no Wayland involvement here).
+                            //   • inner `drawerReveal` — the actual visible height, animates
+                            //     smoothly via a real Behavior, clipped so content grows/shrinks
+                            //     progressively. Purely a QML-layout animation happening INSIDE
+                            //     an already correctly-sized window, so no stutter risk.
+                            // Open: outer reserves space instantly, inner grows smoothly into it.
+                            // Close: inner shrinks smoothly first; only once that finishes does
+                            // the outer instantly release the reserved space (by then invisible).
                             Item {
                                 id: drawer
                                 width: parent.width
-                                implicitHeight: root.showTrackList ? drawerCol.implicitHeight : 0
+                                property bool roomReserved: false
+                                implicitHeight: roomReserved ? drawerCol.implicitHeight : 0
                                 clip: true
 
-                                Behavior on implicitHeight {
-                                    NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                                Connections {
+                                    target: root
+                                    function onShowTrackListChanged() {
+                                        if (root.showTrackList) {
+                                            drawer.roomReserved = true    // reserve instantly, room is there
+                                        }
+                                        // closing: roomReserved stays true until drawerReveal's
+                                        // shrink animation finishes (see below), then releases
+                                    }
                                 }
 
-                                Column {
-                                    id: drawerCol
+                                Item {
+                                    id: drawerReveal
                                     width: parent.width
-                                    spacing: s(4)
+                                    height: root.showTrackList ? drawerCol.implicitHeight : 0
+                                    clip: true
 
-                                    Item { width: 1; height: s(6) }
+                                    Behavior on height {
+                                        NumberAnimation {
+                                            duration: 220
+                                            easing.type: Easing.OutCubic
+                                            onRunningChanged: {
+                                                if (!running && !root.showTrackList) {
+                                                    drawer.roomReserved = false
+                                                }
+                                            }
+                                        }
+                                    }
 
-                                    Repeater {
-                                        model: root.localTracks
-                                        Item {
-                                            width: parent.width
-                                            height: s(24)
+                                    Column {
+                                        id: drawerCol
+                                        width: parent.width
+                                        spacing: s(4)
 
-                                            readonly property bool isCurrent: index === root.localTrackIndex
-                                            readonly property string rawName: modelData.split("/").pop().replace(/\.[^.]+$/, "")
-                                            readonly property string numStr: (index + 1 < 10 ? "0" : "") + (index + 1)
+                                        Item { width: 1; height: s(6) }
+
+                                        Repeater {
+                                            model: root.localTracks
+
+                                            Item {
+                                                width: parent.width
+                                                height: s(24)
+
+                                                readonly property bool isCurrent: index === root.localTrackIndex
+                                                readonly property string rawName: modelData.split("/").pop().replace(/\.[^.]+$/, "")
+                                                readonly property string numStr: (index + 1 < 10 ? "0" : "") + (index + 1)
 
                                             // Hover / Active Background Highlight
                                             Rectangle {
@@ -716,6 +769,7 @@ Item {
                                     }
 
                                     Item { width: 1; height: s(6) }
+                                }
                                 }
                             }
 
@@ -892,7 +946,11 @@ Item {
     function fmtTime(secs) {
         if (isNaN(secs) || secs === undefined || secs === null) return "0:00"
         var s = Math.max(0, Math.floor(secs))
-        return Math.floor(s/60) + ":" + String(s%60).padStart(2,"0")
+        var h = Math.floor(s/3600)
+        var m = Math.floor((s%3600)/60)
+        var ss = String(s%60).padStart(2,"0")
+        if (h > 0) return h + ":" + String(m).padStart(2,"0") + ":" + ss
+        return m + ":" + ss
     }
 
     Component.onCompleted: {
