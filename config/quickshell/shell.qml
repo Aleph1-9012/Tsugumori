@@ -15,11 +15,10 @@ ShellRoot {
     // ── CONTROLCENTER ──
     ControlCenter {}
 
-
     // ── VOLUMEBAR ──
     VolumeBar {}
 
-    // ── PLAYERCTL ──
+    // ── PLAYERCTL (BROWSER MEDIA) ──
     property bool   playerVisible: false
     property bool   playerOnTop:   false
     property string mpTitle:    "END OF EVANGELION"
@@ -146,6 +145,34 @@ ShellRoot {
         root.playLocalTrack(root.localTracks[i])
     }
 
+    // Direct IPC socket process to fetch time-pos and duration from mpv
+    Process {
+        id: localMpvPosProc
+        command: ["python3", "-c", "import socket,json\ntry:\n s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)\n s.settimeout(0.5)\n s.connect('/tmp/mpv-tsugumori.sock')\n s.sendall(b'{\"command\":[\"get_property\",\"time-pos\"]}\\n{\"command\":[\"get_property\",\"duration\"]}\\n')\n d=s.recv(4096).decode('utf-8',errors='ignore').strip().split('\\n')\n p=json.loads(d[0]).get('data',0) if len(d)>0 else 0\n dur=json.loads(d[1]).get('data',0) if len(d)>1 else 0\n print(f'{p}|{dur}')\nexcept Exception:\n print('0|0')"]
+        running: false
+        stdout: SplitParser {
+            onRead: data => {
+                var parts = data.trim().split("|")
+                if (parts.length >= 2) {
+                    var pos = parseFloat(parts[0])
+                    var len = parseFloat(parts[1])
+                    if (!isNaN(pos) && pos >= 0) root.mpPosition = pos
+                    if (!isNaN(len) && len > 0) root.mpLength = len
+                }
+            }
+        }
+    }
+
+    Timer {
+        interval: 1000
+        running: root.localMode && root.mpPlaying
+        repeat: true
+        onTriggered: {
+            if (!localMpvPosProc.running) {
+                localMpvPosProc.running = true
+            }
+        }
+    }
 
     property string currentUser: "user"
     Process {
@@ -192,11 +219,6 @@ ShellRoot {
         }
     }
 
-
-
-
-
-
     // ── MENU ──
     Variants {
         model: Quickshell.screens
@@ -218,7 +240,6 @@ ShellRoot {
         }
     }
 
-
     // ── PLAYER ──
     Variants {
         model:Quickshell.screens
@@ -232,15 +253,21 @@ ShellRoot {
                 mpTitle:root.mpTitle;mpArtist:root.mpArtist;mpCoverUrl:root.mpCoverUrl
                 mpPlaying:root.mpPlaying;mpPosition:root.mpPosition;mpLength:root.mpLength
                 localTracks:root.localTracks
+                localMode:root.localMode
                 onPlayPause:{ if(root.localMode){root.mpPlaying = !root.mpPlaying; root.mpvSend(["cycle","pause"])} else {pcPlay.running=true} }
                 onNextTrack:{ if(root.localMode){root.nextLocalTrack()} else {pcNext.running=true} }
                 onPrevTrack:{ if(root.localMode){root.prevLocalTrack()} else {pcPrev.running=true} }
                 onLocalTrackSelected: function(path){ root.playLocalTrack(path) }
+                onSeekToSecs: function(secs){
+                    if (root.localMode) {
+                        root.mpPosition = secs
+                        root.mpvSend(["set_property", "time-pos", secs])
+                    }
+                }
             }
             Connections{target:root;function onPlayerVisibleChanged(){playerItem.toggleVisible()}}
         }
     }
-
 
     // ── COMPANIONS ──
     Variants {
@@ -260,29 +287,5 @@ ShellRoot {
         repeat: false
         property string pendingPath: ""
         onTriggered: root.mpvSend(["loadfile", pendingPath, "replace"])
-    }
-
-    Process {
-        id: localPlayerctlMeta
-        command: ["playerctl", "-p", "mpv", "metadata", "--format", "{{position}}|{{mpris:length}}"]
-        running: false
-        stdout: SplitParser {
-            onRead: data => {
-                var p = data.trim().split("|")
-                if (p.length >= 2) {
-                    var pos = parseFloat(p[0])
-                    var len = parseFloat(p[1])
-                    if (!isNaN(pos)) root.mpPosition = pos / 1000000
-                    if (!isNaN(len) && len > 0) root.mpLength = len / 1000000
-                }
-            }
-        }
-    }
-
-    Timer {
-        interval: 1000
-        running: root.localMode && root.mpPlaying
-        repeat: true
-        onTriggered: localPlayerctlMeta.running = true
     }
 }

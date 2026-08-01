@@ -9,7 +9,7 @@ Item {
     // ── Shorthand Settings (scale global) ──
     readonly property int  pw:      Settings.playerWidth
     readonly property real sc:      Settings.scale
-    property int  coverSz: s(200)   // Calculated dynamically on completed for symmetry
+    property int  coverSz: s(200)   // Calculated dynamically for 100% bottom symmetry
     function s(px) { return Math.round(px * sc) }
 
     // ── Bindings playerctl depuis shell.qml ──
@@ -19,10 +19,12 @@ Item {
     property bool   mpPlaying:  false
     property real   mpPosition: 0
     property real   mpLength:   341
+    property bool   localMode:  false
 
     signal playPause
     signal nextTrack
     signal prevTrack
+    signal seekToSecs(real secs)
     property var    localTracks: []
     property bool   showTrackList: false
     signal localTrackSelected(string path)
@@ -365,8 +367,16 @@ Item {
                         width: pw - coverSz
                         height: panelCol.implicitHeight + 18
 
+                        Connections {
+                            target: panelCol
+                            function onImplicitHeightChanged() {
+                                if (!root.showTrackList && drawer.implicitHeight === 0) {
+                                    root.coverSz = panelCol.implicitHeight + 18
+                                }
+                            }
+                        }
+
                         Component.onCompleted: {
-                            // Set coverSz to exact collapsed panel height (including 18px margins) for symmetry
                             root.coverSz = panelCol.implicitHeight + 18
                         }
 
@@ -416,7 +426,7 @@ Item {
                                 width: parent.width
                                 text:  root.mpTitle
                                 font.family: "Share Tech Mono"
-                                font.pixelSize: s(19)
+                                font.pixelSize: s(21)
                                 font.weight: Font.Bold
                                 font.letterSpacing: 1.5
                                 color: Qt.rgba(224/255,50/255,50/255,0.95)
@@ -440,7 +450,7 @@ Item {
                                 width: parent.width
                                 text:  root.mpArtist
                                 font.family: "Share Tech Mono"
-                                font.pixelSize: s(12)
+                                font.pixelSize: s(13)
                                 font.letterSpacing: 1
                                 color: Qt.rgba(204/255,21/255,21/255,0.5)
                                 elide: Text.ElideRight
@@ -475,37 +485,46 @@ Item {
                                 }
                             }
 
-                            Item { width: 1; height: 14 }
+                            Item { width: 1; height: 12 }
 
-                            // Contrôles
+                            // ── CONTRÔLES (MOCKUP PILL BUTTONS) ──
                             Row {
-                                spacing: 8
+                                width: parent.width
+                                spacing: s(8)
 
                                 // PREV
                                 CBtn {
                                     id: prevBtn
+                                    width: s(46)
+                                    height: s(32)
+                                    radius: s(8)
                                     onClicked: root.prevTrack()
                                     Text {
                                         anchors.centerIn: parent
-                                        text: "◀"
+                                        text: "«"
                                         font.family: "Share Tech Mono"
-                                        font.pixelSize: 12
+                                        font.pixelSize: s(15)
+                                        font.weight: Font.Bold
                                         color: prevBtn.textColor
                                         z: 1
                                     }
                                 }
 
-                                // PLAY / PAUSE
+                                // PLAY / PAUSE (WIDE PILL)
                                 CBtn {
                                     id: playBtn
                                     isPlay: true
+                                    width: parent.width - (s(46) * 2) - s(16)
+                                    height: s(32)
+                                    radius: s(8)
                                     onClicked: root.playPause()
                                     Text {
                                         anchors.centerIn: parent
                                         text: root.mpPlaying ? "PAUSE" : "PLAY"
                                         font.family: "Share Tech Mono"
-                                        font.pixelSize: 7
-                                        font.letterSpacing: 1
+                                        font.pixelSize: s(13)
+                                        font.weight: Font.Bold
+                                        font.letterSpacing: 2
                                         color: playBtn.textColor
                                         z: 1
                                     }
@@ -514,89 +533,107 @@ Item {
                                 // NEXT
                                 CBtn {
                                     id: nextBtn
+                                    width: s(46)
+                                    height: s(32)
+                                    radius: s(8)
                                     onClicked: root.nextTrack()
                                     Text {
                                         anchors.centerIn: parent
-                                        text: "▶"
+                                        text: "»"
                                         font.family: "Share Tech Mono"
-                                        font.pixelSize: 12
+                                        font.pixelSize: s(15)
+                                        font.weight: Font.Bold
                                         color: nextBtn.textColor
                                         z: 1
                                     }
                                 }
                             }
 
-                            Item { width: 1; height: 14 }
+                            Item { width: 1; height: 12 }
 
                             // ── SEEK / PROGRESS ──
-                            Item {
-                                width: parent.width;  height: s(14)
-                                Text {
-                                    anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                                    text: root.fmtTime(root.mpPosition)
-                                    font.family: "Share Tech Mono"; font.pixelSize: s(11); font.letterSpacing: 1
-                                    color: Qt.rgba(204/255,21/255,21/255,0.5)
-                                }
-                                Text {
-                                    anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                                    text: root.fmtTime(root.mpLength)
-                                    font.family: "Share Tech Mono"; font.pixelSize: s(11); font.letterSpacing: 1
-                                    color: Qt.rgba(204/255,21/255,21/255,0.5)
-                                }
-                            }
+                            Column {
+                                width: parent.width
+                                spacing: s(4)
 
-                            Item { width: 1; height: 5 }
+                                // Progress Line
+                                Item {
+                                    id:     seekBar
+                                    width:  parent.width;  height: s(6)
 
-                            Item {
-                                id:     seekBar
-                                width:  parent.width;  height: s(4)
+                                    Rectangle {
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width; height: s(4)
+                                        radius: s(2)
+                                        color: Qt.rgba(204/255,21/255,21/255,0.15)
+                                    }
+                                    Rectangle {
+                                        anchors { verticalCenter: parent.verticalCenter; left: parent.left }
+                                        height: s(4)
+                                        radius: s(2)
+                                        color:  Qt.rgba(224/255,50/255,50/255,0.9)
+                                        width:  root.mpLength > 0
+                                                ? seekBar.width * root.mpPosition / root.mpLength
+                                                : 0
+                                    }
 
-                                Rectangle {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: parent.width; height: 4
-                                    color: Qt.rgba(204/255,21/255,21/255,0.15)
+                                    MouseArea {
+                                        anchors { fill: parent; topMargin: -6; bottomMargin: -6 }
+                                        property bool dragging: false
+                                        onPressed:  { dragging = true;  doSeek(mouseX) }
+                                        onReleased: { dragging = false }
+                                        onPositionChanged: if (dragging) doSeek(mouseX)
+                                        function doSeek(mx) {
+                                            var pct = Math.max(0, Math.min(1, mx / seekBar.width))
+                                            var targetSecs = pct * root.mpLength
+                                            if (root.localMode) {
+                                                root.seekToSecs(targetSecs)
+                                            } else {
+                                                seekProc.seekSecs = targetSecs
+                                                seekProc.running = true
+                                            }
+                                        }
+                                    }
                                 }
-                                Rectangle {
-                                    anchors { verticalCenter: parent.verticalCenter; left: parent.left }
-                                    height: 4
-                                    color:  Qt.rgba(224/255,50/255,50/255,0.85)
-                                    width:  root.mpLength > 0
-                                            ? seekBar.width * root.mpPosition / root.mpLength
-                                            : 0
-                                }
 
-                                MouseArea {
-                                    anchors { fill: parent; topMargin: -6; bottomMargin: -6 }
-                                    property bool dragging: false
-                                    onPressed:  { dragging = true;  doSeek(mouseX) }
-                                    onReleased: { dragging = false }
-                                    onPositionChanged: if (dragging) doSeek(mouseX)
-                                    function doSeek(mx) {
-                                        var pct  = Math.max(0, Math.min(1, mx / seekBar.width))
-                                        seekProc.seekSecs = pct * root.mpLength
-                                        seekProc.running  = true
+                                // Timestamp Readouts
+                                Item {
+                                    width: parent.width;  height: s(14)
+                                    Text {
+                                        anchors { left: parent.left; verticalCenter: parent.verticalCenter }
+                                        text: root.fmtTime(root.mpPosition)
+                                        font.family: "Share Tech Mono"; font.pixelSize: s(12); font.letterSpacing: 1
+                                        color: Qt.rgba(204/255,21/255,21/255,0.5)
+                                    }
+                                    Text {
+                                        anchors { right: parent.right; verticalCenter: parent.verticalCenter }
+                                        text: root.fmtTime(root.mpLength)
+                                        font.family: "Share Tech Mono"; font.pixelSize: s(12); font.letterSpacing: 1
+                                        color: Qt.rgba(204/255,21/255,21/255,0.5)
                                     }
                                 }
                             }
 
-                            Item { width: 1; height: 14 }
+                            Item { width: 1; height: 10 }
 
-                            // ── TRACKS TOGGLE ──
+                            // ── TRACKS TOGGLE BUTTON ──
                             CBtn {
                                 id: tracksBtn
                                 fullWidth: true
+                                height: s(30)
+                                radius: s(8)
                                 onClicked: root.showTrackList = !root.showTrackList
                                 Text {
                                     anchors.centerIn: parent
                                     text: (root.showTrackList ? "▲ CLOSE" : "▼ TRACKS")
                                     font.family: "Share Tech Mono"
-                                    font.pixelSize: s(11); font.letterSpacing: 2; font.weight: Font.Bold
+                                    font.pixelSize: s(12); font.letterSpacing: 2; font.weight: Font.Bold
                                     color: tracksBtn.textColor
                                     z: 1
                                 }
                             }
 
-                            // ── DRAWER (Smooth Push-Down) ──
+                            // ── DRAWER (HOVER + HIGHLIGHT DESIGN) ──
                             Item {
                                 id: drawer
                                 width: parent.width
@@ -610,27 +647,66 @@ Item {
                                 Column {
                                     id: drawerCol
                                     width: parent.width
+                                    spacing: s(4)
 
-                                    Rectangle {
-                                        width: parent.width; height: 1
-                                        color: Qt.rgba(204/255,21/255,21/255,0.15)
-                                    }
-                                    Item { width: 1; height: 10 }
+                                    Item { width: 1; height: s(6) }
 
                                     Repeater {
                                         model: root.localTracks
-                                        Rectangle {
-                                            width: parent.width; height: s(18)
-                                            color: "transparent"
-                                            Text {
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                text: modelData.split("/").pop()
-                                                font.family: "Share Tech Mono"; font.pixelSize: s(12)
-                                                color: Qt.rgba(224/255,50/255,50/255,0.85)
-                                                elide: Text.ElideRight; width: parent.width
-                                            }
-                                            MouseArea {
+                                        Item {
+                                            width: parent.width
+                                            height: s(24)
+
+                                            readonly property bool isCurrent: index === root.localTrackIndex
+                                            readonly property string rawName: modelData.split("/").pop().replace(/\.[^.]+$/, "")
+                                            readonly property string numStr: (index + 1 < 10 ? "0" : "") + (index + 1)
+
+                                            // Hover / Active Background Highlight
+                                            Rectangle {
                                                 anchors.fill: parent
+                                                radius: s(4)
+                                                color: trackMa.containsMouse
+                                                    ? Qt.rgba(204/255, 21/255, 21/255, 0.18)
+                                                    : (isCurrent ? Qt.rgba(204/255, 21/255, 21/255, 0.08) : "transparent")
+                                                border.width: trackMa.containsMouse ? 1 : 0
+                                                border.color: Qt.rgba(224/255, 50/255, 50/255, 0.3)
+
+                                                Behavior on color { ColorAnimation { duration: 120 } }
+                                            }
+
+                                            // Active Track / Hover Indicator Bar
+                                            Rectangle {
+                                                anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
+                                                width: 3
+                                                radius: 1
+                                                color: Qt.rgba(224/255,50/255,50/255,0.95)
+                                                visible: isCurrent || trackMa.containsMouse
+                                                opacity: isCurrent ? 1.0 : 0.5
+                                            }
+
+                                            // Track Info Row
+                                            Row {
+                                                anchors { fill: parent; leftMargin: s(10); rightMargin: s(6) }
+                                                Text {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    text: numStr + " // " + rawName
+                                                    font.family: "Share Tech Mono"
+                                                    font.pixelSize: s(13)
+                                                    font.weight: (isCurrent || trackMa.containsMouse) ? Font.Bold : Font.Normal
+                                                    font.letterSpacing: 1
+                                                    color: (isCurrent || trackMa.containsMouse)
+                                                        ? Qt.rgba(224/255,50/255,50/255,0.95)
+                                                        : Qt.rgba(204/255,21/255,21/255,0.45)
+                                                    elide: Text.ElideRight
+                                                    width: parent.width
+                                                }
+                                            }
+
+                                            MouseArea {
+                                                id: trackMa
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: Qt.PointingHandCursor
                                                 onClicked: {
                                                     root.localTrackSelected(modelData)
                                                     root.showTrackList = false
@@ -639,7 +715,7 @@ Item {
                                         }
                                     }
 
-                                    Item { width: 1; height: 8 }
+                                    Item { width: 1; height: s(6) }
                                 }
                             }
 
@@ -774,7 +850,7 @@ Item {
         easing.type: Easing.OutQuad
     }
 
-    // ── SEEK PROCESS ──
+    // ── SEEK PROCESS (EXTERNAL/BROWSER MEDIA) ──
     Process {
         id: seekProc
         property real seekSecs: 0
@@ -824,27 +900,31 @@ Item {
         clockStr = String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0")
     }
 
-    // ── COMPOSANT BOUTON CONTRÔLE ──
+    // ── COMPOSANT BOUTON CONTRÔLE (PILL ROUNDED) ──
     component CBtn: Item {
         id:            btnRoot
         property bool isPlay:  false
         property bool fullWidth: false
+        property real radius: s(4)
         signal clicked
 
         width:  fullWidth ? btnRoot.parent.width : (isPlay ? 44 : 22)
         height: 22
 
         Rectangle {
-            anchors.fill: parent; color: "transparent"
+            anchors.fill: parent
+            color: "transparent"
+            radius: btnRoot.radius
             border.width: 1
             border.color: parent.isPlay
-                ? Qt.rgba(204/255,21/255,21/255,0.3)
+                ? Qt.rgba(204/255,21/255,21/255,0.4)
                 : Qt.rgba(204/255,21/255,21/255,0.3)
 
             Rectangle {
                 id:    cbFill
                 anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
                 width: 0; z: 0
+                radius: btnRoot.radius
                 color: Qt.rgba(204/255,21/255,21/255,0.8)
                 Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.InOutQuart } }
             }
