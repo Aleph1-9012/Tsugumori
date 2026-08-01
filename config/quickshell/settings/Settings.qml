@@ -45,7 +45,7 @@ QtObject {
     readonly property int playerMarginRight: s(20)
 
     // Largeur du player en pixels (scalée automatiquement)
-    readonly property int playerWidth: s(320)
+    readonly property int playerWidth: s(700)
 
 
     // ── COMPANIONS ──────────────────────────────────────────────
