@@ -132,7 +132,7 @@ Item {
 
                         Rectangle {
                             anchors.fill: parent
-                            color: Settings.playerBackground ? Settings.playerBgColor : "#0a0505"
+                            color: "#000000"
                             border.color: Qt.rgba(204/255,21/255,21/255,0.35); border.width: 1
                         }
 
@@ -396,7 +396,7 @@ Item {
 
                         Rectangle {
                             anchors.fill: parent
-                            color: Settings.playerBackground ? Settings.playerBgColor : "transparent"
+                            color: "#000000"
                             border.color: Qt.rgba(204/255,21/255,21/255,0.35); border.width: 1
                         }
 
@@ -511,7 +511,7 @@ Item {
                                     id: prevBtn
                                     width: s(46)
                                     height: s(32)
-                                    radius: s(8)
+                                    radius: 0
                                     onClicked: root.prevTrack()
                                     Text {
                                         anchors.centerIn: parent
@@ -530,7 +530,7 @@ Item {
                                     isPlay: true
                                     width: parent.width - (s(46) * 2) - s(16)
                                     height: s(32)
-                                    radius: s(8)
+                                    radius: 0
                                     onClicked: root.playPause()
                                     Text {
                                         anchors.centerIn: parent
@@ -549,7 +549,7 @@ Item {
                                     id: nextBtn
                                     width: s(46)
                                     height: s(32)
-                                    radius: s(8)
+                                    radius: 0
                                     onClicked: root.nextTrack()
                                     Text {
                                         anchors.centerIn: parent
@@ -635,7 +635,7 @@ Item {
                                 id: tracksBtn
                                 fullWidth: true
                                 height: s(30)
-                                radius: s(8)
+                                radius: 0
                                 onClicked: root.showTrackList = !root.showTrackList
                                 Text {
                                     anchors.centerIn: parent
@@ -717,29 +717,37 @@ Item {
                                             // Hover / Active Background Highlight
                                             Rectangle {
                                                 anchors.fill: parent
-                                                radius: s(4)
+                                                radius: 0
                                                 color: trackMa.containsMouse
                                                     ? Qt.rgba(204/255, 21/255, 21/255, 0.18)
                                                     : (isCurrent ? Qt.rgba(204/255, 21/255, 21/255, 0.08) : "transparent")
-                                                border.width: trackMa.containsMouse ? 1 : 0
-                                                border.color: Qt.rgba(224/255, 50/255, 50/255, 0.3)
+                                                border.width: 1
+                                                border.color: trackMa.containsMouse
+                                                    ? Qt.rgba(224/255, 50/255, 50/255, 0.3)
+                                                    : Qt.rgba(224/255, 50/255, 50/255, 0.0)
 
-                                                Behavior on color { ColorAnimation { duration: 120 } }
+                                                Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                                                Behavior on border.color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
                                             }
 
-                                            // Active Track / Hover Indicator Bar
+                                            // Active Track / Hover Indicator Bar — grows + fades in smoothly instead of snapping on/off
                                             Rectangle {
                                                 anchors { left: parent.left; top: parent.top; bottom: parent.bottom }
-                                                width: 3
-                                                radius: 1
+                                                width: trackMa.containsMouse ? 4 : 3
+                                                radius: 0
                                                 color: Qt.rgba(224/255,50/255,50/255,0.95)
-                                                visible: isCurrent || trackMa.containsMouse
-                                                opacity: isCurrent ? 1.0 : 0.5
+                                                opacity: isCurrent ? 1.0 : (trackMa.containsMouse ? 0.7 : 0.0)
+
+                                                Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                                                Behavior on width   { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
                                             }
 
-                                            // Track Info Row
+                                            // Track Info Row — subtle slide-in on hover
                                             Row {
-                                                anchors { fill: parent; leftMargin: s(10); rightMargin: s(6) }
+                                                anchors { fill: parent; leftMargin: s(10) + (trackMa.containsMouse ? s(3) : 0); rightMargin: s(6) }
+
+                                                Behavior on anchors.leftMargin { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+
                                                 Text {
                                                     anchors.verticalCenter: parent.verticalCenter
                                                     text: numStr + " // " + rawName
@@ -752,6 +760,8 @@ Item {
                                                         : Qt.rgba(204/255,21/255,21/255,0.45)
                                                     elide: Text.ElideRight
                                                     width: parent.width
+
+                                                    Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
                                                 }
                                             }
 
@@ -963,7 +973,7 @@ Item {
         id:            btnRoot
         property bool isPlay:  false
         property bool fullWidth: false
-        property real radius: s(4)
+        property real radius: 0
         signal clicked
 
         width:  fullWidth ? btnRoot.parent.width : (isPlay ? 44 : 22)
