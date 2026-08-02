@@ -1,6 +1,7 @@
 ##sudo pacman -S python-opencv
 
 import cv2
+import os
 import sys
 
 
@@ -25,7 +26,10 @@ def get_last_frame(cap):
 def extract_last_frame_from_path(video_path):
     cap = open_video_capture(video_path)
     last_frame = get_last_frame(cap)
-    cv2.imwrite('/home/samyns/.config/quickshell/videos/wave_last_frame.png', last_frame)  # Save the last frame as an image
+    xdg_config_home = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    out_path = os.path.join(xdg_config_home, "quickshell", "videos", "wave_last_frame.png")
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    cv2.imwrite(out_path, last_frame)  # Save the last frame as an image
     print(video_path)
 
 extract_last_frame_from_path(video_path)
