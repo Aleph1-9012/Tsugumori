@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # ═══════════════════════════════════════════════════════════════════
-#   Unit-3 installer — Hyprland + Quickshell + Waybar rice
-#   Usage: bash <(curl -fsSL https://raw.githubusercontent.com/samyns/Unit-3/main/install.sh)
+#   Tsugumori installer — Hyprland + Quickshell + Waybar rice
+#   Usage: bash <(curl -fsSL https://raw.githubusercontent.com/Aleph1-9012/Tsugumori/main/install.sh)
 # ═══════════════════════════════════════════════════════════════════
 set -euo pipefail
 
 # ─── Configuration ──────────────────────────────────────────────────
-readonly REPO_URL="https://github.com/samyns/Unit-3.git"
-readonly REPO_BRANCH="${UNIT3_BRANCH:-main}"
-readonly CLONE_DIR="${TMPDIR:-/tmp}/Unit-3-install-$$"
+readonly REPO_URL="https://github.com/Aleph1-9012/Tsugumori.git"
+readonly REPO_BRANCH="${TSUGUMORI_BRANCH:-main}"
+readonly CLONE_DIR="${TMPDIR:-/tmp}/Tsugumori-install-$$"
 BACKUP_DIR="$HOME/.config-backup-$(date +%Y%m%d-%H%M%S)"
 readonly BACKUP_DIR
 readonly CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -25,7 +25,7 @@ PINNED_MODE=false
 VM_GL_TWEAKS=false          # Mesa llvmpipe + libgl software for Quickshell/Kitty (VirtualBox et al.)
 BOOT_WALLPAPER_VM=false     # exec-once awww img → first wallpaper in ~/Pictures/wallpapers
 
-[[ "${UNIT3_VM:-}" == "1" || "${UNIT3_VM:-}" == "yes" ]] && VM_GL_TWEAKS=true
+[[ "${TSUGUMORI_VM:-}" == "1" || "${TSUGUMORI_VM:-}" == "yes" ]] && VM_GL_TWEAKS=true
 
 for arg in "$@"; do
     case "$arg" in
@@ -40,9 +40,9 @@ Usage: install.sh [options]
   --pinned   Install exact versions tested by the maintainer.
              Use this if --latest broke something on your system.
   --vm       VirtualBox / weak GPU: patch Quickshell + Kitty to use software OpenGL
-             (llvmpipe), optional boot wallpaper. Or set env UNIT3_VM=1.
+             (llvmpipe), optional boot wallpaper. Or set env TSUGUMORI_VM=1.
 
-  Also: UNIT3_VM=1 same effect as --vm for non-interactive installs.
+  Also: TSUGUMORI_VM=1 same effect as --vm for non-interactive installs.
 EOF
             exit 0
             ;;
@@ -116,11 +116,11 @@ collect_choices() {
     BACKUP_OLD=true;          ask_yn "Backup existing configs to $BACKUP_DIR?" y || BACKUP_OLD=false
     INSTALL_AUR=true;         ask_yn "Install AUR packages (quickshell-git, awww)? Highly recommended." y || INSTALL_AUR=false
     INSTALL_WALLPAPERS=true;  ask_yn "Install default wallpapers to ~/Pictures/wallpapers?" y || INSTALL_WALLPAPERS=false
-    INSTALL_BASHRC=true;      ask_yn "Install Unit-3 .bashrc (welcome banner + NieR prompt)?" y || INSTALL_BASHRC=false
+    INSTALL_BASHRC=true;      ask_yn "Install Tsugumori .bashrc (welcome banner + NieR prompt)?" y || INSTALL_BASHRC=false
     ENABLE_SERVICES=true;     ask_yn "Enable system services (NetworkManager, pipewire)?" y || ENABLE_SERVICES=false
 
     if $VM_GL_TWEAKS; then
-        log "VirtualBox / software-GL mode enabled (--vm or UNIT3_VM=1)."
+        log "VirtualBox / software-GL mode enabled (--vm or TSUGUMORI_VM=1)."
     elif ask_yn "VirtualBox or limited GPU? Apply software OpenGL for Quickshell + Kitty (fixes many VM crashes)" n; then
         VM_GL_TWEAKS=true
     fi
@@ -150,7 +150,7 @@ bootstrap_aur_helper() {
 
 # ─── Clone ──────────────────────────────────────────────────────────
 clone_repo() {
-    log "Cloning Unit-3 ($REPO_BRANCH)…"
+    log "Cloning Tsugumori ($REPO_BRANCH)…"
     git clone --depth=1 --branch "$REPO_BRANCH" "$REPO_URL" "$CLONE_DIR"
 }
 
@@ -324,11 +324,11 @@ apply_vm_software_gl_tweaks_deployed() {
         warn "Could not find default Quickshell exec-once line in hyprland.conf — skip auto-patch (edit manually if needed)."
     fi
 
-    local mark="# unit3-install-vm-gl"
+    local mark="# tsugumori-install-vm-gl"
     if [[ -f "$ucs" ]] && ! grep -qF "$mark" "$ucs" 2>/dev/null; then
         cat >>"$ucs" <<'VMGL'
 
-# unit3-install-vm-gl — Kitty + software GL (VirtualBox / GPU limitada; Quickshell ya va en hyprland.conf)
+# tsugumori-install-vm-gl — Kitty + software GL (VirtualBox / limited GPU; Quickshell already patched in hyprland.conf)
 unbind = SUPER, T
 bind = SUPER, T, exec, env LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe KITTY_GPU_DISABLED=1 /usr/bin/kitty
 VMGL
@@ -342,7 +342,7 @@ VMGL
         warn "No images in ~/Pictures/wallpapers — skipping boot wallpaper exec-once."
         return 0
     fi
-    local wb="# unit3-install-boot-wallpaper"
+    local wb="# tsugumori-install-boot-wallpaper"
     if [[ -f "$ucs" ]] && grep -qF "$wb" "$ucs" 2>/dev/null; then
         return 0
     fi
@@ -379,8 +379,8 @@ deploy_shell_config() {
 
     [[ -f "$bashrc_src" ]] || { warn "No bundled .bashrc found in repo."; return; }
 
-    # Backup existing .bashrc if it's not already a Unit-3 one
-    if [[ -f "$bashrc_dest" ]] && ! grep -q "Unit-3 default .bashrc" "$bashrc_dest"; then
+    # Backup existing .bashrc if it's not already a Tsugumori one
+    if [[ -f "$bashrc_dest" ]] && ! grep -q "Tsugumori default .bashrc" "$bashrc_dest"; then
         if $BACKUP_OLD; then
             mkdir -p "$BACKUP_DIR"
             cp "$bashrc_dest" "$BACKUP_DIR/.bashrc"
@@ -388,13 +388,13 @@ deploy_shell_config() {
         fi
     fi
 
-    log "Installing Unit-3 .bashrc (welcome banner enabled)…"
+    log "Installing Tsugumori .bashrc (welcome banner enabled)…"
     cp "$bashrc_src" "$bashrc_dest"
 
     # Create empty user override if missing
     if [[ ! -f "$HOME/.bashrc.local" ]]; then
         cat > "$HOME/.bashrc.local" <<'OVR'
-# Unit-3 user overrides — never touched by updates.
+# Tsugumori user overrides — never touched by updates.
 # Put your personal aliases, functions, exports here.
 #
 # Examples:
@@ -444,7 +444,7 @@ deploy_qshare_symlink() {
     ln -s "$script" "$link"
     ok "Symlinked qshare CLI: $link → $script"
 
-    # Vérifier que ~/.local/bin est dans le PATH
+    # Check that ~/.local/bin is in PATH
     if ! echo "$PATH" | tr ':' '\n' | grep -qFx "$HOME/.local/bin"; then
         warn "~/.local/bin is not in your PATH."
         warn "Add this line to ~/.bashrc.local:"
@@ -474,7 +474,7 @@ finalize() {
     fi
     echo
     echo "  ${C_BOLD}Docs & support:${C_RESET}"
-    echo "    https://github.com/samyns/Unit-3#readme"
+    echo "    https://github.com/Aleph1-9012/Tsugumori#readme"
     echo
 }
 

@@ -32,7 +32,7 @@ This updates `packages/pinned-pacman.txt` and `packages/pinned-aur.txt`.
 If the latest versions break something on your system:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/samyns/Unit-3/main/install.sh) --pinned
+bash <(curl -fsSL https://raw.githubusercontent.com/Aleph1-9012/Tsugumori/main/install.sh) --pinned
 ```
 
 See the README's "When things break" section for details.
