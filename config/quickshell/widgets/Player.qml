@@ -38,6 +38,14 @@ Item {
     // buffer, to avoid a visible resize pop, while (b) still growing to fit the tallest
     // state the drawer ever reaches, so content never gets clipped by the window itself.
     property int  maxContentHeight: 0
+    // Captured once at startup (drawer is guaranteed collapsed=0 at that point) — the
+    // "everything except the drawer" height. Combined with drawerCol's own natural size
+    // (independent of the drawer's current visible height), this lets us know the true
+    // expanded-state total analytically, WITHOUT ever letting the drawer actually expand.
+    // That's what lets maxContentHeight get reserved proactively, before the user ever
+    // opens the drawer — so the real open/close animation below can freely animate the
+    // actual visible height (border included) with zero Wayland-buffer risk.
+    property real collapsedBaseHeight: 0
     // Real, exact current visible height (collapsed or expanded) — changes instantly,
     // no animation — used by shell.qml to size the input mask precisely to what's
     // actually drawn right now, independent of the padded window buffer above.
@@ -432,26 +440,59 @@ Item {
                                 }
                             }
 
-                            Item { width: 1; height: 6 }
+                            Item { width: 1; height: s(6) }
+
+                            // Divider — quiet break before the title
+                            Rectangle {
+                                width: parent.width; height: 1
+                                color: Qt.rgba(204/255,21/255,21/255,0.15)
+                            }
+
+                            Item { width: 1; height: s(8) }
 
                             // Titre
-                            Text {
-                                id:    ciTitle
-                                width: parent.width
-                                text:  root.mpTitle
-                                font.family: "Share Tech Mono"
-                                font.pixelSize: s(21)
-                                font.weight: Font.Bold
-                                font.letterSpacing: 1.5
-                                color: Qt.rgba(224/255,50/255,50/255,0.95)
-                                elide: Text.ElideRight
+                            Row {
+                                width:   parent.width
+                                spacing: 0
 
-                                Behavior on text {
-                                    SequentialAnimation {
-                                        PropertyAnimation { target: ciTitle; property: "opacity"; to: 0; duration: 80 }
-                                        PropertyAnimation { target: ciTitle; property: "x"; to: -10; duration: 0 }
-                                        PropertyAnimation { target: ciTitle; property: "x"; to: 0; duration: 220; easing.type: Easing.OutCubic }
-                                        PropertyAnimation { target: ciTitle; property: "opacity"; to: 1; duration: 180 }
+                                Text {
+                                    id:    titlePrefix
+                                    text:  "// "
+                                    font.family: "Share Tech Mono"
+                                    font.pixelSize: s(21)
+                                    font.weight: Font.Bold
+                                    font.letterSpacing: 1.5
+                                    color: Qt.rgba(224/255,50/255,50/255,0.4)
+                                }
+
+                                // Wrapper isolates ciTitle's own x=0 baseline so the existing
+                                // titleSlideIn reveal animation and the text-change Behavior
+                                // (both target ciTitle.x with absolute values like -12/-10/0)
+                                // keep working unchanged — they don't need to know a prefix exists.
+                                Item {
+                                    width:  parent.width - titlePrefix.implicitWidth
+                                    height: ciTitle.implicitHeight
+                                    clip:   true
+
+                                    Text {
+                                        id:    ciTitle
+                                        width: parent.width
+                                        text:  root.mpTitle
+                                        font.family: "Share Tech Mono"
+                                        font.pixelSize: s(21)
+                                        font.weight: Font.Bold
+                                        font.letterSpacing: 1.5
+                                        color: Qt.rgba(224/255,50/255,50/255,0.95)
+                                        elide: Text.ElideRight
+
+                                        Behavior on text {
+                                            SequentialAnimation {
+                                                PropertyAnimation { target: ciTitle; property: "opacity"; to: 0; duration: 80 }
+                                                PropertyAnimation { target: ciTitle; property: "x"; to: -10; duration: 0 }
+                                                PropertyAnimation { target: ciTitle; property: "x"; to: 0; duration: 220; easing.type: Easing.OutCubic }
+                                                PropertyAnimation { target: ciTitle; property: "opacity"; to: 1; duration: 180 }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -648,58 +689,38 @@ Item {
                             }
 
                             // ── DRAWER (HOVER + HIGHLIGHT DESIGN) ──
-                            // Two-level split, now that the Wayland buffer concern is fully
-                            // handled elsewhere (shell.qml's mask + root.maxContentHeight):
-                            //   • outer `drawer` — reserves layout space INSTANTLY (drives the
-                            //     panel/window sizing chain so the buffer ratchets up once and
-                            //     never needs to resize again — no Wayland involvement here).
-                            //   • inner `drawerReveal` — the actual visible height, animates
-                            //     smoothly via a real Behavior, clipped so content grows/shrinks
-                            //     progressively. Purely a QML-layout animation happening INSIDE
-                            //     an already correctly-sized window, so no stutter risk.
-                            // Open: outer reserves space instantly, inner grows smoothly into it.
-                            // Close: inner shrinks smoothly first; only once that finishes does
-                            // the outer instantly release the reserved space (by then invisible).
+                            // The window buffer is reserved proactively at startup (see
+                            // root.collapsedBaseHeight / drawerCol.onImplicitHeightChanged
+                            // below), so by the time the user ever opens this, root.implicitHeight
+                            // already covers the full expanded size. That means THIS Item's
+                            // real visible height — border and content both — can just animate
+                            // normally with a plain Behavior. No instant-reserve/animated-reveal
+                            // split needed anymore; that was only required when the buffer got
+                            // reserved reactively at open-time instead of proactively up front.
                             Item {
                                 id: drawer
                                 width: parent.width
-                                property bool roomReserved: false
-                                implicitHeight: roomReserved ? drawerCol.implicitHeight : 0
+                                implicitHeight: root.showTrackList ? drawerCol.implicitHeight : 0
                                 clip: true
 
-                                Connections {
-                                    target: root
-                                    function onShowTrackListChanged() {
-                                        if (root.showTrackList) {
-                                            drawer.roomReserved = true    // reserve instantly, room is there
-                                        }
-                                        // closing: roomReserved stays true until drawerReveal's
-                                        // shrink animation finishes (see below), then releases
-                                    }
+                                Behavior on implicitHeight {
+                                    NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
                                 }
 
-                                Item {
-                                    id: drawerReveal
+                                Column {
+                                    id: drawerCol
                                     width: parent.width
-                                    height: root.showTrackList ? drawerCol.implicitHeight : 0
-                                    clip: true
+                                    spacing: s(4)
 
-                                    Behavior on height {
-                                        NumberAnimation {
-                                            duration: 220
-                                            easing.type: Easing.OutCubic
-                                            onRunningChanged: {
-                                                if (!running && !root.showTrackList) {
-                                                    drawer.roomReserved = false
-                                                }
-                                            }
-                                        }
+                                    // Proactive buffer reservation: drawerCol.implicitHeight is
+                                    // computed from its own children regardless of whether the
+                                    // drawer above is currently visible/expanded — so this fires
+                                    // as soon as the track list is populated (well before the user
+                                    // opens the drawer) and ratchets the window buffer up front.
+                                    onImplicitHeightChanged: {
+                                        var theoreticalMax = root.collapsedBaseHeight + implicitHeight
+                                        if (theoreticalMax > root.maxContentHeight) root.maxContentHeight = theoreticalMax
                                     }
-
-                                    Column {
-                                        id: drawerCol
-                                        width: parent.width
-                                        spacing: s(4)
 
                                         Item { width: 1; height: s(6) }
 
@@ -780,7 +801,6 @@ Item {
 
                                     Item { width: 1; height: s(6) }
                                 }
-                                }
                             }
 
                             Item { width: 1; height: 9 }
@@ -791,6 +811,47 @@ Item {
                             lineColor: Qt.rgba(204/255,21/255,21/255,0.3)
                             size: 18
                             z:    5
+                        }
+                    }
+                }
+
+                // ── FOOTER CAPTION BAR ──
+                Item {
+                    width: pw;  height: s(18)
+
+                    Rectangle {
+                        anchors.fill: parent
+                        color: "#000000"
+                    }
+
+                    Rectangle {
+                        anchors.top: parent.top
+                        width: parent.width; height: 1
+                        color: Qt.rgba(204/255,21/255,21/255,0.15)
+                    }
+
+                    Row {
+                        anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: s(4) }
+                        Text {
+                            text: "TYPE // FLAC-17"
+                            font.family: "Share Tech Mono"; font.pixelSize: s(8); font.letterSpacing: 1.5
+                            color: Qt.rgba(1,1,1,0.32)
+                        }
+                    }
+                    Row {
+                        anchors.centerIn: parent
+                        Text {
+                            text: "TSUGUMORI PLAYER"
+                            font.family: "Share Tech Mono"; font.pixelSize: s(8); font.letterSpacing: 1.5
+                            color: Qt.rgba(1,1,1,0.32)
+                        }
+                    }
+                    Row {
+                        anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: s(4) }
+                        Text {
+                            text: "REV 2"
+                            font.family: "Share Tech Mono"; font.pixelSize: s(8); font.letterSpacing: 1.5
+                            color: Qt.rgba(1,1,1,0.32)
                         }
                     }
                 }
@@ -966,6 +1027,7 @@ Item {
     Component.onCompleted: {
         var d = new Date()
         clockStr = String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0")
+        collapsedBaseHeight = content.implicitHeight
     }
 
     // ── COMPOSANT BOUTON CONTRÔLE (PILL ROUNDED) ──
