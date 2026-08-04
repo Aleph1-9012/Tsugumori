@@ -765,13 +765,26 @@ Item {
 
                                             // Track Info Row — subtle slide-in on hover
                                             Row {
+                                                id: trackInfoRow
                                                 anchors { fill: parent; leftMargin: s(10) + (trackMa.containsMouse ? s(3) : 0); rightMargin: s(6) }
+                                                spacing: 0
 
                                                 Behavior on anchors.leftMargin { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
                                                 Text {
+                                                    id: trackNumText
                                                     anchors.verticalCenter: parent.verticalCenter
-                                                    text: numStr + " // " + rawName
+                                                    text: numStr + " // "
+                                                    font.family: "Share Tech Mono"
+                                                    font.pixelSize: s(13)
+                                                    font.weight: (isCurrent || trackMa.containsMouse) ? Font.Bold : Font.Normal
+                                                    font.letterSpacing: 1
+                                                    color: Qt.rgba(224/255,50/255,50/255,0.95)
+                                                }
+
+                                                Text {
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                    text: rawName
                                                     font.family: "Share Tech Mono"
                                                     font.pixelSize: s(13)
                                                     font.weight: (isCurrent || trackMa.containsMouse) ? Font.Bold : Font.Normal
@@ -780,7 +793,7 @@ Item {
                                                         ? Qt.rgba(224/255,50/255,50/255,0.95)
                                                         : Qt.rgba(204/255,21/255,21/255,0.45)
                                                     elide: Text.ElideRight
-                                                    width: parent.width
+                                                    width: trackInfoRow.width - trackNumText.implicitWidth
 
                                                     Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
                                                 }
@@ -827,7 +840,7 @@ Item {
                     Rectangle {
                         anchors.top: parent.top
                         width: parent.width; height: 1
-                        color: Qt.rgba(204/255,21/255,21/255,0.15)
+                        color: Qt.rgba(224/255,50/255,50/255,0.4)
                     }
 
                     Row {
@@ -835,7 +848,7 @@ Item {
                         Text {
                             text: "TYPE // FLAC-17"
                             font.family: "Share Tech Mono"; font.pixelSize: s(8); font.letterSpacing: 1.5
-                            color: Qt.rgba(1,1,1,0.32)
+                            color: Qt.rgba(224/255,50/255,50/255,0.5)
                         }
                     }
                     Row {
@@ -843,7 +856,7 @@ Item {
                         Text {
                             text: "TSUGUMORI PLAYER"
                             font.family: "Share Tech Mono"; font.pixelSize: s(8); font.letterSpacing: 1.5
-                            color: Qt.rgba(1,1,1,0.32)
+                            color: Qt.rgba(224/255,50/255,50/255,0.5)
                         }
                     }
                     Row {
@@ -851,7 +864,7 @@ Item {
                         Text {
                             text: "REV 2"
                             font.family: "Share Tech Mono"; font.pixelSize: s(8); font.letterSpacing: 1.5
-                            color: Qt.rgba(1,1,1,0.32)
+                            color: Qt.rgba(224/255,50/255,50/255,0.5)
                         }
                     }
                 }
