@@ -270,6 +270,11 @@ ShellRoot {
                 onNextTrack:{ if(root.localMode){root.nextLocalTrack()} else {pcNext.running=true} }
                 onPrevTrack:{ if(root.localMode){root.prevLocalTrack()} else {pcPrev.running=true} }
                 onLocalTrackSelected: function(path){ root.playLocalTrack(path) }
+                onShowTrackListChanged: {
+                    // Re-scan on open so newly added files show up without a full
+                    // QuickShell restart — the original scan only ever ran once at startup.
+                    if (showTrackList) musicScanProc.running = true
+                }
                 onSeekToSecs: function(secs){
                     if (root.localMode) {
                         root.mpPosition = secs
