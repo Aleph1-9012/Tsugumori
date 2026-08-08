@@ -240,13 +240,36 @@ Item {
                                 smooth:   false
                                 fillMode: Image.PreserveAspectCrop
                                 z:        -1
+                                property int retryCount: 0
 
                                 onStatusChanged: {
-                                    if (status !== Image.Ready) return
-                                    grabToImage(function(result) {
-                                        extractCanvas.grabResult = result
-                                        extractCanvas.requestPaint()
-                                    }, Qt.size(coverSz, coverSz))
+                                    if (status === Image.Ready) {
+                                        retryCount = 0
+                                        grabToImage(function(result) {
+                                            extractCanvas.grabResult = result
+                                            extractCanvas.requestPaint()
+                                        }, Qt.size(coverSz, coverSz))
+                                    } else if (status === Image.Error) {
+                                        // The browser's thumbnail file can be short-lived —
+                                        // deleted/overwritten right around when we try to read
+                                        // it. A single failed attempt used to just give up
+                                        // silently forever. Retry a few times with a brief
+                                        // delay instead, in case it's just a narrow race.
+                                        if (retryCount < 4) {
+                                            retryCount++
+                                            coverRetryTimer.start()
+                                        }
+                                    }
+                                }
+                            }
+
+                            Timer {
+                                id: coverRetryTimer
+                                interval: 300
+                                onTriggered: {
+                                    var url = coverSrc.source
+                                    coverSrc.source = ""
+                                    coverSrc.source = url
                                 }
                             }
 

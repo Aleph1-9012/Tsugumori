@@ -27,6 +27,9 @@ ShellRoot {
     property bool   mpPlaying:  false
     property real   mpPosition: 0
     property real   mpLength:   341
+    // Grace-period tracking for cover-art on track change — see the parser below.
+    property string pendingCoverTitle: ""
+    property real   coverGraceStartedAt: 0
 
     Process {
         id: playerctlMeta
@@ -42,12 +45,49 @@ ShellRoot {
                         root.mpvSend(["set_property", "pause", true])
                     }
                     if (!root.localMode) {
+                        // Genuine track change — start a grace period rather than either
+                        // clearing the cover instantly (flashes blank even for sources that
+                        // WOULD report new art a moment later) or never clearing it at all
+                        // (leaves the OLD track's art showing forever on sources that never
+                        // report art). Give it a few real seconds; if a real artUrl shows up
+                        // for THIS title within that window, great — display it below. If
+                        // not, fall back to placeholder once the grace period expires.
+                        // Uses wall-clock time (Date.now()), not a tick counter — a tick
+                        // counter assumes exactly one onRead per second, which isn't
+                        // guaranteed if stdout ever buffers/flushes multiple lines at once.
+                        if (p[0] && p[0] !== root.mpTitle) {
+                            root.pendingCoverTitle    = p[0]
+                            root.coverGraceStartedAt  = Date.now()
+                        }
+
                         if (p[0]) root.mpTitle    = p[0]
                         if (p[1]) root.mpArtist   = p[1]
-                        root.mpCoverUrl = p[2] || ""
+                        if (p[2]) {
+                            root.mpCoverUrl        = p[2]
+                            root.pendingCoverTitle = ""   // real art arrived, grace period over
+                        } else if (root.pendingCoverTitle !== "" && root.mpTitle === root.pendingCoverTitle) {
+                            if (Date.now() - root.coverGraceStartedAt >= 6000) {   // ~6s real time
+                                root.mpCoverUrl        = ""
+                                root.pendingCoverTitle = ""
+                            }
+                        }
                         root.mpPlaying  = (p[3] === "Playing")
-                        root.mpPosition = parseFloat(p[4] || "0") / 1000000
-                        root.mpLength   = Math.max(1, parseFloat(p[5] || "341000000") / 1000000)
+                        // Same 90-sample capture also showed: this browser's MPRIS bridge
+                        // reports GARBAGE position (small single/double-digit numbers, not real
+                        // microseconds) with an EMPTY length for a stretch of ~12+ seconds right
+                        // after a track starts, only reporting real values once something
+                        // (confirmed: a play/pause click) nudges it. We correctly ignore that
+                        // garbage (length-empty guard below) — but that alone just leaves the
+                        // displayed timer frozen for that whole stretch, which reads as "paused".
+                        // So: estimate position locally (tick forward ~1s per poll) while the
+                        // source hasn't reported real data yet, and snap to the authoritative
+                        // value the instant real data does arrive.
+                        if (p[5]) {
+                            root.mpLength = Math.max(1, parseFloat(p[5]) / 1000000)
+                            if (p[4]) root.mpPosition = parseFloat(p[4]) / 1000000
+                        } else if (root.mpPlaying) {
+                            root.mpPosition += 1
+                        }
                     }
                 }
             }
@@ -57,6 +97,10 @@ ShellRoot {
     Process { id: pcNext; command: ["playerctl","-i","mpv","next"];       running: false }
     Process { id: pcPrev; command: ["playerctl","-i","mpv","previous"];   running: false }
     Process { id: pcPauseExternal; command: ["playerctl","-i","mpv","pause"]; running: false }
+
+    // Simple poll — the earlier "watchdog" (killing/restarting a stuck-seeming process)
+    // was solving a hang that wasn't actually happening: your terminal test showed
+    // playerctl returning fast every single time. The real bug was in the parser above.
     Timer { interval:1000; running:true; repeat:true; onTriggered: playerctlMeta.running=true }
 
     // ── LOCAL MUSIC ──
