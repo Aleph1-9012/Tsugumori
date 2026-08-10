@@ -72,21 +72,19 @@ ShellRoot {
                             }
                         }
                         root.mpPlaying  = (p[3] === "Playing")
-                        // Same 90-sample capture also showed: this browser's MPRIS bridge
-                        // reports GARBAGE position (small single/double-digit numbers, not real
-                        // microseconds) with an EMPTY length for a stretch of ~12+ seconds right
-                        // after a track starts, only reporting real values once something
-                        // (confirmed: a play/pause click) nudges it. We correctly ignore that
-                        // garbage (length-empty guard below) — but that alone just leaves the
-                        // displayed timer frozen for that whole stretch, which reads as "paused".
-                        // So: estimate position locally (tick forward ~1s per poll) while the
-                        // source hasn't reported real data yet, and snap to the authoritative
-                        // value the instant real data does arrive.
+                        // This browser's MPRIS bridge reports GARBAGE position (small
+                        // single/double-digit numbers, not real microseconds) with an EMPTY
+                        // length for a stretch after a track starts, only reporting real
+                        // values once something (confirmed: a play/pause click) nudges it.
+                        // Only trust position/length together, when length is present —
+                        // this means the displayed timer holds steady (not wrong, just
+                        // briefly static) until real data arrives, rather than guessing.
+                        // (A previous version tried estimating position client-side during
+                        // this gap to avoid the static look — removed after it caused the
+                        // timer to actually show wrong values, which is worse than static.)
                         if (p[5]) {
                             root.mpLength = Math.max(1, parseFloat(p[5]) / 1000000)
                             if (p[4]) root.mpPosition = parseFloat(p[4]) / 1000000
-                        } else if (root.mpPlaying) {
-                            root.mpPosition += 1
                         }
                     }
                 }
