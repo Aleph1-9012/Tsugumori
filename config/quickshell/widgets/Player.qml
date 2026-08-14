@@ -1,5 +1,5 @@
 import QtQuick
-import Quickshell.Io
+import QtQuick.Effects
 import "../components"
 import "../settings"
 
@@ -9,10 +9,101 @@ Item {
     // ── Shorthand Settings (scale global) ──
     readonly property int  pw:      Settings.playerWidth
     readonly property real sc:      Settings.scale
+    readonly property color surfaceColor: Settings.playerBackground
+                                          ? Settings.playerBgColor
+                                          : "transparent"
     property int  coverSz: s(200)   // Calculated dynamically for 100% bottom symmetry
     function s(px) { return Math.round(px * sc) }
 
-    // ── Bindings playerctl depuis shell.qml ──
+    function progressFraction(position, length) {
+        var pos = Number(position)
+        var total = Number(length)
+        if (!Number.isFinite(pos) || !Number.isFinite(total) || total <= 0)
+            return 0
+        return Math.max(0, Math.min(1, pos / total))
+    }
+
+    function placeholderSeed() {
+        var text = mpTitle + "\u0000" + mpArtist
+        var hash = 5381
+        for (var i = 0; i < text.length; ++i)
+            hash = (hash * 33 + text.charCodeAt(i)) % 2147483647
+        return Math.max(1, hash)
+    }
+
+    function clearCoverVisual() {
+        coverRetryTimer.stop()
+        hoverDecayTimer.stop()
+        coverImage.retryCount = 0
+        coverImage.requestGeneration = -1
+        coverImage.mediaUrl = ""
+        coverImage.requestedUrl = ""
+        coverImage.source = ""
+        hoverMask.clearMask()
+    }
+
+    function requestCoverLoad() {
+        coverGeneration++
+        coverRetryTimer.stop()
+        hoverDecayTimer.stop()
+        hoverMask.clearMask()
+        coverImage.retryCount = 0
+        coverImage.fallbackAttempted = false
+
+        var requested = String(mpCoverUrl)
+        coverImage.mediaUrl = requested
+        if (requested.length > 0)
+            startCoverDecode(coverGeneration, requested)
+        else
+            clearCoverVisual()
+    }
+
+    function startCoverDecode(generation, url) {
+        if (generation !== coverGeneration
+                || coverImage.mediaUrl !== String(mpCoverUrl))
+            return
+
+        coverImage.requestGeneration = generation
+        coverImage.requestedUrl = url
+        // Force a fresh asynchronous decode. This matters for browser artwork
+        // backed by short-lived cache files whose URL may be reused.
+        coverImage.source = ""
+        coverImage.source = url
+    }
+
+    function handleCoverDecodeFailure(generation, url) {
+        if (generation !== coverGeneration
+                || url !== coverImage.requestedUrl
+                || coverImage.mediaUrl !== String(mpCoverUrl))
+            return
+
+        if (coverImage.retryCount < 4) {
+            coverImage.retryCount++
+            coverRetryTimer.generation = generation
+            coverRetryTimer.url = url
+            coverRetryTimer.restart()
+            return
+        }
+
+        // YouTube's highest-resolution thumbnail is optional. Keep the media
+        // URL stable for generation guards, but try its reliable HQ variant
+        // after the bounded maxres retries are exhausted.
+        if (!coverImage.fallbackAttempted && url.indexOf("maxresdefault.jpg") >= 0) {
+            coverImage.fallbackAttempted = true
+            coverImage.retryCount = 0
+            coverImage.requestedUrl = url.replace("maxresdefault.jpg", "hqdefault.jpg")
+            coverImage.source = ""
+            coverImage.source = coverImage.requestedUrl
+            return
+        }
+
+        // Do not leave the previous track's artwork under a broken URL.
+        coverImage.requestGeneration = -1
+        coverImage.source = ""
+        hoverMask.clearMask()
+    }
+
+    // ── Media state supplied by shell.qml ──
     property string mpTitle:    "END OF EVANGELION"
     property string mpArtist:   "NEON GENESIS // ANNO"
     property string mpCoverUrl: ""
@@ -20,17 +111,52 @@ Item {
     property real   mpPosition: 0
     property real   mpLength:   341
     property bool   localMode:  false
+    property bool   mediaAvailable: true
 
     signal playPause
     signal nextTrack
     signal prevTrack
     signal seekToSecs(real secs)
     property var    localTracks: []
+    property int    localTrackIndex: -1
     property bool   showTrackList: false
     signal localTrackSelected(string path)
 
-    property bool   shown:    false
-    property string clockStr: "--:--"
+    // This is the single visibility source of truth. shell.qml binds it to its
+    // global playerVisible state, so late-created monitor instances immediately
+    // converge on the correct state instead of waiting for a toggle edge.
+    property bool requestedVisible: false
+    property real revealProgress: 0
+    property bool componentReady: false
+    readonly property int currentInputX: wipeHost.visible
+                                         ? Math.max(0, Math.min(pw, Math.round(
+                                               Math.max(wipeHost.x, curtain.width))))
+                                         : pw
+    readonly property int currentInputWidth: wipeHost.visible
+                                             ? Math.max(0, pw - currentInputX)
+                                             : 0
+    readonly property bool shown: currentInputWidth > 0
+
+    onRequestedVisibleChanged: animateVisibility()
+
+    // Keep the track drawer bounded even for very large music libraries.
+    readonly property int drawerMaxHeight: s(240)
+    readonly property int trackCount: localTracks && localTracks.length !== undefined
+                                      ? localTracks.length : 0
+    readonly property int drawerNaturalHeight: Math.min(drawerMaxHeight,
+        trackCount > 0
+            ? s(12) + trackCount * s(24) + Math.max(0, trackCount - 1) * s(4)
+            : s(44))
+
+    onDrawerNaturalHeightChanged: {
+        var theoreticalMax = collapsedBaseHeight + drawerNaturalHeight
+        if (theoreticalMax > maxContentHeight)
+            maxContentHeight = theoreticalMax
+    }
+
+    // Invalidates asynchronous image work from an older URL.
+    property int coverGeneration: 0
+    readonly property bool coverArtReady: coverImage.status === Image.Ready
 
     // ── Window sizing: buffer stays CONSTANT (no resize → no Wayland jump) ──
     // Real fix for the "dead zone blocks clicks/scroll/hover" bug is the PanelWindow's
@@ -39,9 +165,9 @@ Item {
     // state the drawer ever reaches, so content never gets clipped by the window itself.
     property int  maxContentHeight: 0
     // Captured once at startup (drawer is guaranteed collapsed=0 at that point) — the
-    // "everything except the drawer" height. Combined with drawerCol's own natural size
-    // (independent of the drawer's current visible height), this lets us know the true
-    // expanded-state total analytically, WITHOUT ever letting the drawer actually expand.
+    // "everything except the drawer" height. Combined with the drawer's bounded natural
+    // height, this lets us reserve the true expanded-state total analytically, WITHOUT
+    // ever letting the drawer actually expand beyond its scrolling viewport.
     // That's what lets maxContentHeight get reserved proactively, before the user ever
     // opens the drawer — so the real open/close animation below can freely animate the
     // actual visible height (border included) with zero Wayland-buffer risk.
@@ -66,7 +192,9 @@ Item {
         width:   pw
         height:  content.implicitHeight
         clip:    true
-        x:       pw+2          // commence hors-écran à droite (caché)
+        x: root.revealProgress < 0.58
+             ? (pw + 2) * (1 - root.revealProgress / 0.58)
+             : 0
         opacity: 1
         visible: false         // invisible au démarrage
 
@@ -87,7 +215,7 @@ Item {
 
                     Rectangle {
                         anchors.fill: parent
-                        color: "#0a0505"
+                        color: root.surfaceColor
                         border.color: Qt.rgba(204/255,21/255,21/255,0.2); border.width: 0
                     }
                     Rectangle {
@@ -112,8 +240,12 @@ Item {
                         anchors.fill: parent; clip: true
                         Text {
                             id:   ticker
-                            text: "NR-2B // " + root.mpArtist + " // " + root.mpTitle
-                                  + " // LOSSLESS 48kHz/24bit // NOW PLAYING //\u00a0"
+                            text: root.mediaAvailable
+                                  ? "NR-2B // " + root.mpArtist + " // " + root.mpTitle
+                                    + " // " + (root.localMode ? "LOCAL SOURCE" : "MPRIS SOURCE")
+                                    + " // " + (root.mpPlaying ? "NOW PLAYING" : "PAUSED")
+                                    + " //\u00a0"
+                                  : "NR-2B // NO MEDIA SOURCE // IDLE //\u00a0"
                             font.family: "Share Tech Mono"
                             font.pixelSize: s(8)
                             font.letterSpacing: 1
@@ -140,7 +272,7 @@ Item {
 
                         Rectangle {
                             anchors.fill: parent
-                            color: "#000000"
+                            color: root.surfaceColor
                             border.color: Qt.rgba(204/255,21/255,21/255,0.35); border.width: 1
                         }
 
@@ -150,250 +282,331 @@ Item {
                             anchors.margins: 1
                             clip: true
 
-                            property var hoverIntensity: new Array(32*32).fill(0)
-                            property var hoverR:         new Array(32*32).fill(200)
-                            property var hoverG:         new Array(32*32).fill(184)
-                            property var hoverB:         new Array(32*32).fill(154)
-
-                            Canvas {
-                                id:     coverMain
-                                width:  coverSz; height: coverSz
-                                smooth: false
-
-                                property var  imgPixels:     null
-                                property var  nextImgPixels: null
-                                property int  blockStep:     0
-
-                                onPaint: {
-                                    var ctx  = getContext("2d")
-                                    var GRID = 32, SZ = width
-                                    var CELL = SZ / 32.0
-                                    ctx.clearRect(0, 0, SZ, SZ)
-
-                                    if (!imgPixels) {
-                                        var seed = root.mpTitle.length * 1234567 + root.mpArtist.length * 89 + 42
-                                        function rand() { seed=(seed*16807+0)%2147483647; return(seed-1)/2147483646 }
-                                        for (var r=0; r<GRID; r++) for (var cc=0; cc<GRID; cc++) {
-                                            var n=rand(); var dx=(cc-GRID/2)/(GRID/2); var dy=(r-GRID/2)/(GRID/2)
-                                            var d=Math.sqrt(dx*dx+dy*dy)
-                                            var v=Math.max(0,Math.min(255,(1-d*0.55)*210+n*70-30))
-                                            ctx.fillStyle="rgb("+Math.round(v)+","+Math.round(v)+","+Math.round(v)+")"
-                                            ctx.fillRect(Math.floor(cc*CELL),Math.floor(r*CELL),Math.floor(CELL)-1,Math.floor(CELL)-1)
-                                        }
-                                        return
-                                    }
-
-                                    var bs = (blockStep === 0) ? Math.floor(CELL) : Math.floor(CELL) + blockStep
-                                    bs = Math.max(1, bs)
-
-                                    var src = imgPixels
-                                    var cols = Math.ceil(SZ / bs)
-                                    var rows = Math.ceil(SZ / bs)
-                                    for (var row=0; row<rows; row++) for (var col=0; col<cols; col++) {
-                                        var sx  = Math.min(col*bs + Math.floor(bs/2), SZ-1)
-                                        var sy  = Math.min(row*bs + Math.floor(bs/2), SZ-1)
-                                        var idx = (sy*SZ + sx)*4
-                                        var lum = 0.299*src[idx] + 0.587*src[idx+1] + 0.114*src[idx+2]
-                                        var gv  = Math.round(Math.min(255, Math.max(0, (lum-10)*(255/235))))
-                                        ctx.fillStyle = "rgb("+gv+","+gv+","+gv+")"
-                                        ctx.fillRect(col*bs, row*bs, bs-1, bs-1)
-                                    }
-                                }
-
-                                Component.onCompleted: requestPaint()
-
-                                Connections {
-                                    target: root
-                                    function onMpTitleChanged() {
-                                        if (!coverMain.imgPixels) coverMain.requestPaint()
-                                    }
-                                }
-                            }
-
-                            Timer {
-                                id:       blockTimer
-                                interval: 30; repeat: true; running: false
-                                property int step: 0; property int steps: 12
-
-                                onTriggered: {
-                                    step++
-                                    if (step < steps/2) {
-                                        coverMain.blockStep = Math.floor(step * 3)
-                                        coverMain.requestPaint()
-                                    } else if (step === Math.floor(steps/2)) {
-                                        if (coverMain.nextImgPixels) {
-                                            coverMain.imgPixels = coverMain.nextImgPixels
-                                            coverMain.nextImgPixels = null
-                                        }
-                                    } else {
-                                        coverMain.blockStep = Math.floor((steps-step) * 3)
-                                        coverMain.requestPaint()
-                                    }
-                                    if (step >= steps) { running = false; step = 0; coverMain.blockStep = 0 }
-                                }
-                            }
-
+                            // Decode once at the source's native resolution. Both rendered
+                            // layers use this exact item, so crop and pointer coordinates stay
+                            // aligned regardless of compositor scale or monitor count.
                             Image {
-                                id:       coverSrc
-                                width:    coverSz; height: coverSz
-                                visible:  true; opacity: 0
-                                smooth:   false
+                                id: coverImage
+                                anchors.fill: parent
+                                visible: false
+                                asynchronous: true
+                                cache: false
+                                retainWhileLoading: false
                                 fillMode: Image.PreserveAspectCrop
-                                z:        -1
+                                horizontalAlignment: Image.AlignHCenter
+                                verticalAlignment: Image.AlignVCenter
+                                smooth: true
+                                mipmap: true
+                                // Effects sample the Image's rendered layer so PreserveAspectCrop
+                                // and both center alignments are retained by grayscale/color passes.
+                                layer.enabled: true
+                                layer.smooth: true
+                                property string mediaUrl: ""
+                                property string requestedUrl: ""
+                                property int requestGeneration: -1
                                 property int retryCount: 0
+                                property bool fallbackAttempted: false
 
                                 onStatusChanged: {
+                                    if (requestGeneration !== root.coverGeneration)
+                                        return
+
                                     if (status === Image.Ready) {
+                                        coverRetryTimer.stop()
                                         retryCount = 0
-                                        grabToImage(function(result) {
-                                            extractCanvas.grabResult = result
-                                            extractCanvas.requestPaint()
-                                        }, Qt.size(coverSz, coverSz))
                                     } else if (status === Image.Error) {
-                                        // The browser's thumbnail file can be short-lived —
-                                        // deleted/overwritten right around when we try to read
-                                        // it. A single failed attempt used to just give up
-                                        // silently forever. Retry a few times with a brief
-                                        // delay instead, in case it's just a narrow race.
-                                        if (retryCount < 4) {
-                                            retryCount++
-                                            coverRetryTimer.start()
-                                        }
+                                        root.handleCoverDecodeFailure(requestGeneration,
+                                                                      requestedUrl)
                                     }
                                 }
+                            }
+
+                            MultiEffect {
+                                anchors.fill: parent
+                                source: coverImage
+                                saturation: -1.0
+                                visible: root.coverArtReady
+                            }
+
+                            Canvas {
+                                id: hoverMask
+                                anchors.fill: parent
+                                renderTarget: Canvas.FramebufferObject
+                                property real cursorX: -1000
+                                property real cursorY: -1000
+                                property real opacityLevel: 0
+                                property var trailPoints: []
+                                readonly property real brushRadius: Math.max(24, width * 0.16)
+                                readonly property int trailCellSize: Math.max(5, Math.round(width / 40))
+                                readonly property int trailMaxPoints: 48
+                                readonly property real trailStartOpacity: 0.36
+                                readonly property int trailDurationMs: 480
+                                readonly property int trailAlphaBuckets: 12
+
+                                function clearMask() {
+                                    hoverTrailTimer.stop()
+                                    trailPoints = []
+                                    cursorX = -1000
+                                    cursorY = -1000
+                                    opacityLevel = 0
+                                    requestPaint()
+                                }
+
+                                function addTrailPoint(x, y) {
+                                    var points = trailPoints.slice(0)
+                                    var last = points.length > 0 ? points[points.length - 1] : null
+                                    var now = Date.now()
+
+                                    if (last) {
+                                        var dx = x - last.x
+                                        var dy = y - last.y
+                                        var distance = Math.sqrt(dx * dx + dy * dy)
+                                        if (distance < 0.75)
+                                            return
+
+                                        // Fill gaps between pointer events without snapping the
+                                        // cursor itself. Pixelation is applied only while painting.
+                                        var spacing = Math.max(2, trailCellSize * 0.75)
+                                        var steps = Math.max(1, Math.ceil(distance / spacing))
+                                        for (var step = 1; step <= steps; ++step) {
+                                            var amount = step / steps
+                                            points.push({ x: last.x + dx * amount,
+                                                          y: last.y + dy * amount,
+                                                          born: now })
+                                        }
+                                    } else {
+                                        points.push({ x: x, y: y, born: now })
+                                    }
+
+                                    if (points.length > trailMaxPoints)
+                                        points.splice(0, points.length - trailMaxPoints)
+                                    trailPoints = points
+                                    if (!hoverTrailTimer.running)
+                                        hoverTrailTimer.start()
+                                }
+
+                                function fadeTrail() {
+                                    var points = trailPoints
+                                    var faded = []
+                                    var now = Date.now()
+                                    for (var i = 0; i < points.length; ++i) {
+                                        if (now - points[i].born < trailDurationMs)
+                                            faded.push(points[i])
+                                    }
+                                    trailPoints = faded
+                                    requestPaint()
+                                    if (faded.length === 0)
+                                        hoverTrailTimer.stop()
+                                }
+
+                                onPaint: {
+                                    var ctx = getContext("2d")
+                                    ctx.clearRect(0, 0, width, height)
+
+                                    var points = trailPoints
+                                    var cell = trailCellSize
+                                    var cols = Math.ceil(width / cell)
+                                    var rows = Math.ceil(height / cell)
+                                    var cellLevels = new Array(cols * rows)
+                                    var now = Date.now()
+                                    for (var i = 0; i < points.length; ++i) {
+                                        var radius = brushRadius
+                                        var radiusSquared = radius * radius
+                                        var age = now - points[i].born
+                                        var remaining = Math.max(0, 1 - age / trailDurationMs)
+                                        var level = Math.max(1, Math.ceil(remaining * trailAlphaBuckets))
+                                        var minCol = Math.max(0, Math.floor((points[i].x - radius) / cell))
+                                        var maxCol = Math.min(cols - 1, Math.floor((points[i].x + radius) / cell))
+                                        var minRow = Math.max(0, Math.floor((points[i].y - radius) / cell))
+                                        var maxRow = Math.min(rows - 1, Math.floor((points[i].y + radius) / cell))
+
+                                        for (var row = minRow; row <= maxRow; ++row) {
+                                            for (var col = minCol; col <= maxCol; ++col) {
+                                                var cx = (col + 0.5) * cell
+                                                var cy = (row + 0.5) * cell
+                                                var dx = cx - points[i].x
+                                                var dy = cy - points[i].y
+                                                if (dx * dx + dy * dy <= radiusSquared) {
+                                                    var index = row * cols + col
+                                                    cellLevels[index] = Math.max(cellLevels[index] || 0,
+                                                                                 level)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Collapse overlapping stamps into one draw per pixel cell,
+                                    // grouped by opacity so dual-monitor repaints stay lightweight.
+                                    var buckets = new Array(trailAlphaBuckets + 1)
+                                    for (var bucket = 1; bucket <= trailAlphaBuckets; ++bucket)
+                                        buckets[bucket] = []
+                                    for (var index = 0; index < cellLevels.length; ++index) {
+                                        var cellLevel = cellLevels[index] || 0
+                                        if (cellLevel > 0)
+                                            buckets[cellLevel].push(index)
+                                    }
+                                    for (var bucket = 1; bucket <= trailAlphaBuckets; ++bucket) {
+                                        var bucketCells = buckets[bucket]
+                                        if (bucketCells.length === 0)
+                                            continue
+                                        ctx.beginPath()
+                                        for (var entry = 0; entry < bucketCells.length; ++entry) {
+                                            var index = bucketCells[entry]
+                                            var col = index % cols
+                                            var row = Math.floor(index / cols)
+                                            var x = col * cell
+                                            var y = row * cell
+                                            ctx.rect(x, y, Math.min(cell, width - x),
+                                                     Math.min(cell, height - y))
+                                        }
+                                        ctx.fillStyle = "rgba(255,255,255," +
+                                                        (trailStartOpacity * bucket /
+                                                         trailAlphaBuckets) + ")"
+                                        ctx.fill()
+                                    }
+
+                                    if (opacityLevel <= 0.001)
+                                        return
+
+                                    var gradient = ctx.createRadialGradient(cursorX, cursorY, 0,
+                                                                            cursorX, cursorY,
+                                                                            brushRadius)
+                                    gradient.addColorStop(0, "rgba(255,255,255," + opacityLevel + ")")
+                                    gradient.addColorStop(0.58, "rgba(255,255,255," + (opacityLevel * 0.72) + ")")
+                                    gradient.addColorStop(1, "rgba(255,255,255,0)")
+                                    ctx.fillStyle = gradient
+                                    ctx.fillRect(cursorX - brushRadius, cursorY - brushRadius,
+                                                 brushRadius * 2, brushRadius * 2)
+                                }
+                            }
+
+                            // Canvas can paint while hidden without exposing a texture to an
+                            // effect on every renderer. Capture it explicitly, hide only its
+                            // scene representation, and feed the live texture to MultiEffect.
+                            ShaderEffectSource {
+                                id: hoverMaskTexture
+                                anchors.fill: parent
+                                sourceItem: hoverMask
+                                hideSource: true
+                                live: true
+                                recursive: false
+                                visible: false
+                            }
+
+                            MultiEffect {
+                                anchors.fill: parent
+                                source: coverImage
+                                visible: root.coverArtReady
+                                         && (hoverMask.opacityLevel > 0.001
+                                             || hoverMask.trailPoints.length > 0)
+                                maskEnabled: true
+                                maskSource: hoverMaskTexture
                             }
 
                             Timer {
                                 id: coverRetryTimer
                                 interval: 300
+                                property int generation: -1
+                                property string url: ""
                                 onTriggered: {
-                                    var url = coverSrc.source
-                                    coverSrc.source = ""
-                                    coverSrc.source = url
-                                }
-                            }
-
-                            Canvas {
-                                id:      extractCanvas
-                                width:   coverSz; height: coverSz
-                                visible: false
-                                property var grabResult: null
-
-                                onPaint: {
-                                    if (!grabResult) return
-                                    var ctx = getContext("2d")
-                                    ctx.clearRect(0, 0, width, height)
-                                    ctx.drawImage(grabResult.url, 0, 0, width, height)
-                                    var raw = ctx.getImageData(0, 0, width, height).data
-                                    if (coverMain.imgPixels === null) {
-                                        coverMain.imgPixels = raw
-                                        coverMain.requestPaint()
-                                    } else {
-                                        coverMain.nextImgPixels = raw
-                                        blockTimer.step = 0
-                                        blockTimer.running = true
-                                    }
-                                    coverArea.hoverIntensity = new Array(32*32).fill(0)
-                                    coverArea.hoverR = new Array(32*32).fill(200)
-                                    coverArea.hoverG = new Array(32*32).fill(184)
-                                    coverArea.hoverB = new Array(32*32).fill(154)
-                                    coverHover.requestPaint()
+                                    if (generation !== root.coverGeneration
+                                            || url !== coverImage.requestedUrl
+                                            || coverImage.mediaUrl !== String(root.mpCoverUrl))
+                                        return
+                                    root.startCoverDecode(generation, url)
                                 }
                             }
 
                             Connections {
                                 target: root
                                 function onMpCoverUrlChanged() {
-                                    if (root.mpCoverUrl !== "") {
-                                        coverSrc.source = ""
-                                        coverSrc.source = root.mpCoverUrl
-                                    } else {
-                                        coverMain.imgPixels = null
-                                        coverMain.requestPaint()
-                                    }
-                                }
-                            }
-
-                            Canvas {
-                                id:     coverHover
-                                width:  coverSz; height: coverSz
-                                smooth: false; z: 2
-
-                                onPaint: {
-                                    var ctx  = getContext("2d")
-                                    var GRID = 32, CELL = width/GRID
-                                    var ci = coverArea.hoverIntensity
-                                    var cr = coverArea.hoverR
-                                    var cg = coverArea.hoverG
-                                    var cb = coverArea.hoverB
-                                    ctx.clearRect(0, 0, width, height)
-                                    for (var r = 0; r < GRID; r++) for (var c = 0; c < GRID; c++) {
-                                        var i = r*GRID + c
-                                        if (ci[i] > 0.01) {
-                                            ctx.fillStyle = "rgba(" + cr[i] + "," + cg[i] + "," + cb[i] + "," + ci[i] + ")"
-                                            ctx.fillRect(c*CELL, r*CELL, Math.ceil(CELL)+1, Math.ceil(CELL)+1)
-                                        }
-                                    }
+                                    root.requestCoverLoad()
                                 }
                             }
 
                             Timer {
-                                id: decayTimer; interval: 16; repeat: true; running: false
+                                id: hoverDecayTimer
+                                interval: 16
+                                repeat: true
                                 onTriggered: {
-                                    var ci = coverArea.hoverIntensity.slice()
-                                    var active = false
-                                    for (var i = 0; i < 32*32; i++) {
-                                        if (ci[i] > 0) { ci[i] = Math.max(0, ci[i] - 0.014); active = true }
-                                    }
-                                    coverArea.hoverIntensity = ci
-                                    coverHover.requestPaint()
-                                    if (!active) decayTimer.running = false
+                                    hoverMask.opacityLevel = Math.max(0, hoverMask.opacityLevel - 0.045)
+                                    hoverMask.requestPaint()
+                                    if (hoverMask.opacityLevel <= 0)
+                                        stop()
                                 }
+                            }
+
+                            Timer {
+                                id: hoverTrailTimer
+                                interval: 16
+                                repeat: true
+                                onTriggered: hoverMask.fadeTrail()
                             }
 
                             MouseArea {
                                 anchors.fill: parent
-                                hoverEnabled: true; cursorShape: Qt.CrossCursor
+                                z: 4
+                                hoverEnabled: true
+                                cursorShape: Qt.CrossCursor
                                 onPositionChanged: {
-                                    var GRID = 32, CELL = coverSz/GRID, BRUSH_R = 2
-                                    var cc = Math.floor(mouseX / CELL)
-                                    var cr = Math.floor(mouseY / CELL)
-                                    var ci = coverArea.hoverIntensity.slice()
-                                    var cr2 = coverArea.hoverR.slice()
-                                    var cg  = coverArea.hoverG.slice()
-                                    var cb  = coverArea.hoverB.slice()
-                                    var src = coverMain.imgPixels
-                                    for (var dr = -BRUSH_R; dr <= BRUSH_R; dr++) {
-                                        for (var dc = -BRUSH_R; dc <= BRUSH_R; dc++) {
-                                            var nc = cc+dc, nr = cr+dr
-                                            if (nc<0||nc>=GRID||nr<0||nr>=GRID) continue
-                                            var dist = Math.sqrt(dc*dc + dr*dr)
-                                            var alpha = Math.max(0, 1 - dist/(BRUSH_R+0.5))
-                                            var strength = alpha*alpha
-                                            if (strength < 0.01) continue
-                                            if (src) {
-                                                var sx  = Math.min(Math.floor(nc*CELL + CELL/2), coverSz-1)
-                                                var sy  = Math.min(Math.floor(nr*CELL + CELL/2), coverSz-1)
-                                                var idx = (sy*coverSz + sx)*4
-                                                if (strength > ci[nr*GRID+nc]*0.6) {
-                                                    cr2[nr*GRID+nc] = src[idx]
-                                                    cg[nr*GRID+nc]  = src[idx+1]
-                                                    cb[nr*GRID+nc]  = src[idx+2]
-                                                }
-                                            }
-                                            ci[nr*GRID+nc] = Math.min(1, ci[nr*GRID+nc] + strength*0.9)
+                                    hoverDecayTimer.stop()
+                                    hoverMask.addTrailPoint(mouseX, mouseY)
+                                    hoverMask.cursorX = mouseX
+                                    hoverMask.cursorY = mouseY
+                                    hoverMask.opacityLevel = 1
+                                    hoverMask.requestPaint()
+                                }
+                                onExited: hoverDecayTimer.start()
+                            }
+
+                            Canvas {
+                                id: coverPlaceholder
+                                anchors.fill: parent
+                                visible: !root.coverArtReady
+                                smooth: false
+
+                                onPaint: {
+                                    var ctx = getContext("2d")
+                                    var size = width
+                                    var grid = 32
+                                    var seed = root.placeholderSeed()
+                                    function rand() {
+                                        seed = (seed * 16807) % 2147483647
+                                        return (seed - 1) / 2147483646
+                                    }
+                                    ctx.clearRect(0, 0, width, height)
+                                    for (var row = 0; row < grid; row++) {
+                                        for (var col = 0; col < grid; col++) {
+                                            var noise = rand()
+                                            var dx = (col - grid / 2) / (grid / 2)
+                                            var dy = (row - grid / 2) / (grid / 2)
+                                            var distance = Math.sqrt(dx * dx + dy * dy)
+                                            var value = Math.max(0, Math.min(255,
+                                                (1 - distance * 0.55) * 210 + noise * 70 - 30))
+                                            ctx.fillStyle = "rgb(" + Math.round(value) + ","
+                                                                   + Math.round(value) + ","
+                                                                   + Math.round(value) + ")"
+                                            var x0 = Math.floor(col * size / grid)
+                                            var x1 = Math.floor((col + 1) * size / grid)
+                                            var y0 = Math.floor(row * size / grid)
+                                            var y1 = Math.floor((row + 1) * size / grid)
+                                            ctx.fillRect(x0, y0, x1 - x0, y1 - y0)
                                         }
                                     }
-                                    coverArea.hoverIntensity = ci
-                                    coverArea.hoverR = cr2; coverArea.hoverG = cg; coverArea.hoverB = cb
-                                    coverHover.requestPaint()
-                                    decayTimer.running = true
                                 }
-                                onExited: decayTimer.running = true
+
+                                Connections {
+                                    target: root
+                                    function onMpTitleChanged() { coverPlaceholder.requestPaint() }
+                                    function onMpArtistChanged() { coverPlaceholder.requestPaint() }
+                                }
                             }
 
                             Item {
                                 anchors.fill: parent; z: 3
+                                // The scanline motif belongs to the generated placeholder.
+                                // Real artwork remains edge-to-edge and unobscured.
+                                visible: !root.coverArtReady
                                 Repeater {
                                     model: Math.ceil(coverSz/3)+1
                                     Rectangle {
@@ -410,24 +623,24 @@ Item {
                     Item {
                         id: panel
                         width: pw - coverSz
-                        height: panelCol.implicitHeight + 18
+                        height: panelCol.implicitHeight + s(18)
 
                         Connections {
                             target: panelCol
                             function onImplicitHeightChanged() {
                                 if (!root.showTrackList && drawer.implicitHeight === 0) {
-                                    root.coverSz = panelCol.implicitHeight + 18
+                                    root.coverSz = panelCol.implicitHeight + s(18)
                                 }
                             }
                         }
 
                         Component.onCompleted: {
-                            root.coverSz = panelCol.implicitHeight + 18
+                            root.coverSz = panelCol.implicitHeight + s(18)
                         }
 
                         Rectangle {
                             anchors.fill: parent
-                            color: "#000000"
+                            color: root.surfaceColor
                             border.color: Qt.rgba(204/255,21/255,21/255,0.35); border.width: 1
                         }
 
@@ -540,7 +753,11 @@ Item {
                             Row {
                                 spacing: 6
                                 Repeater {
-                                    model: ["LOSSLESS","48k","FLAC"]
+                                    model: root.mediaAvailable
+                                           ? [root.localMode ? "LOCAL" : "MPRIS",
+                                              root.mpPlaying ? "PLAYING" : "PAUSED",
+                                              "AUDIO"]
+                                           : ["NO SOURCE", "IDLE", "MEDIA"]
                                     Rectangle {
                                         implicitWidth: tagTxt.implicitWidth + 14
                                         height: s(19); color: "transparent"
@@ -650,26 +867,27 @@ Item {
                                         height: s(4)
                                         radius: s(2)
                                         color:  Qt.rgba(224/255,50/255,50/255,0.9)
-                                        width:  root.mpLength > 0
-                                                ? seekBar.width * root.mpPosition / root.mpLength
-                                                : 0
+                                        width: seekBar.width * root.progressFraction(
+                                                   root.mpPosition, root.mpLength)
                                     }
 
                                     MouseArea {
                                         anchors { fill: parent; topMargin: -6; bottomMargin: -6 }
                                         property bool dragging: false
                                         onPressed:  { dragging = true;  doSeek(mouseX) }
-                                        onReleased: { dragging = false }
+                                        // Always send the release coordinate. If an earlier
+                                        // drag update was coalesced by the backend, the user's
+                                        // final intended position still wins.
+                                        onReleased: { doSeek(mouseX); dragging = false }
                                         onPositionChanged: if (dragging) doSeek(mouseX)
                                         function doSeek(mx) {
+                                            if (seekBar.width <= 0 || root.mpLength <= 0)
+                                                return
                                             var pct = Math.max(0, Math.min(1, mx / seekBar.width))
                                             var targetSecs = pct * root.mpLength
-                                            if (root.localMode) {
-                                                root.seekToSecs(targetSecs)
-                                            } else {
-                                                seekProc.seekSecs = targetSecs
-                                                seekProc.running = true
-                                            }
+                                            // shell.qml owns backend selection and command
+                                            // serialization for both local and MPRIS media.
+                                            root.seekToSecs(targetSecs)
                                         }
                                     }
                                 }
@@ -711,52 +929,40 @@ Item {
                                 }
                             }
 
-                            // ── DRAWER (HOVER + HIGHLIGHT DESIGN) ──
-                            // The window buffer is reserved proactively at startup (see
-                            // root.collapsedBaseHeight / drawerCol.onImplicitHeightChanged
-                            // below), so by the time the user ever opens this, root.implicitHeight
-                            // already covers the full expanded size. That means THIS Item's
-                            // real visible height — border and content both — can just animate
-                            // normally with a plain Behavior. No instant-reserve/animated-reveal
-                            // split needed anymore; that was only required when the buffer got
-                            // reserved reactively at open-time instead of proactively up front.
+                            // ── BOUNDED, SCROLLABLE TRACK DRAWER ──
                             Item {
                                 id: drawer
                                 width: parent.width
-                                implicitHeight: root.showTrackList ? drawerCol.implicitHeight : 0
+                                implicitHeight: root.showTrackList ? root.drawerNaturalHeight : 0
                                 clip: true
 
                                 Behavior on implicitHeight {
                                     NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
                                 }
 
-                                Column {
-                                    id: drawerCol
-                                    width: parent.width
-                                    spacing: s(4)
-
-                                    // Proactive buffer reservation: drawerCol.implicitHeight is
-                                    // computed from its own children regardless of whether the
-                                    // drawer above is currently visible/expanded — so this fires
-                                    // as soon as the track list is populated (well before the user
-                                    // opens the drawer) and ratchets the window buffer up front.
-                                    onImplicitHeightChanged: {
-                                        var theoreticalMax = root.collapsedBaseHeight + implicitHeight
-                                        if (theoreticalMax > root.maxContentHeight) root.maxContentHeight = theoreticalMax
+                                ListView {
+                                    id: trackList
+                                    anchors {
+                                        fill: parent
+                                        topMargin: s(6)
+                                        bottomMargin: s(6)
+                                        rightMargin: s(5)
                                     }
+                                    model: root.localTracks
+                                    spacing: s(4)
+                                    clip: true
+                                    boundsBehavior: Flickable.StopAtBounds
+                                    currentIndex: root.localTrackIndex
+                                    keyNavigationEnabled: true
+                                    reuseItems: true
 
-                                        Item { width: 1; height: s(6) }
+                                    delegate: Item {
+                                        width: trackList.width
+                                        height: s(24)
 
-                                        Repeater {
-                                            model: root.localTracks
-
-                                            Item {
-                                                width: parent.width
-                                                height: s(24)
-
-                                                readonly property bool isCurrent: index === root.localTrackIndex
-                                                readonly property string rawName: modelData.split("/").pop().replace(/\.[^.]+$/, "")
-                                                readonly property string numStr: (index + 1 < 10 ? "0" : "") + (index + 1)
+                                        readonly property bool isCurrent: index === root.localTrackIndex
+                                        readonly property string rawName: String(modelData).split("/").pop().replace(/\.[^.]+$/, "")
+                                        readonly property string numStr: (index + 1 < 10 ? "0" : "") + (index + 1)
 
                                             // Hover / Active Background Highlight
                                             Rectangle {
@@ -832,10 +1038,29 @@ Item {
                                                     root.showTrackList = false
                                                 }
                                             }
-                                        }
                                     }
+                                }
 
-                                    Item { width: 1; height: s(6) }
+                                Text {
+                                    anchors.centerIn: parent
+                                    visible: root.trackCount === 0
+                                    text: "NO LOCAL TRACKS FOUND"
+                                    font.family: "Share Tech Mono"
+                                    font.pixelSize: s(11)
+                                    font.letterSpacing: 1
+                                    color: Qt.rgba(204/255,21/255,21/255,0.5)
+                                }
+
+                                Rectangle {
+                                    width: 2
+                                    radius: 1
+                                    color: Qt.rgba(224/255,50/255,50/255,0.55)
+                                    visible: trackList.contentHeight > trackList.height
+                                    height: visible
+                                            ? Math.max(s(12), trackList.height * trackList.visibleArea.heightRatio)
+                                            : 0
+                                    x: drawer.width - width
+                                    y: trackList.y + trackList.height * trackList.visibleArea.yPosition
                                 }
                             }
 
@@ -857,7 +1082,7 @@ Item {
 
                     Rectangle {
                         anchors.fill: parent
-                        color: "#000000"
+                        color: root.surfaceColor
                     }
 
                     Rectangle {
@@ -869,7 +1094,9 @@ Item {
                     Row {
                         anchors { left: parent.left; verticalCenter: parent.verticalCenter; leftMargin: s(4) }
                         Text {
-                            text: "TYPE // FLAC-17"
+                            text: "SOURCE // " + (root.mediaAvailable
+                                                   ? (root.localMode ? "LOCAL" : "MPRIS")
+                                                   : "NONE")
                             font.family: "Share Tech Mono"; font.pixelSize: s(8); font.letterSpacing: 1.5
                             color: Qt.rgba(224/255,50/255,50/255,0.5)
                         }
@@ -898,98 +1125,58 @@ Item {
         Rectangle {
             id:    curtain
             anchors { top: parent.top; bottom: parent.bottom }
-            color: "#e8e8e8"
+            color: Settings.curtainColor
             z:     10
-            width: 2
-            x:     pw-2
+            x: 0
+            width: root.revealProgress <= 0.58
+                     ? pw
+                     : pw * (1 - (root.revealProgress - 0.58) / 0.42)
         }
     }
 
     // ─────────────────────────────────────────────────────────────────
-    // TOGGLE ANIMATIONS
+    // REVERSIBLE VISIBILITY ANIMATION
     // ─────────────────────────────────────────────────────────────────
-
-    SequentialAnimation {
-        id: revealAnim
-
-        ParallelAnimation {
-            NumberAnimation {
-                target: wipeHost; property: "x"
-                from: pw+2; to: 0
-                duration: 460
-                easing.type: Easing.OutExpo
-            }
-            NumberAnimation {
-                target: curtain; property: "width"
-                from: pw; to: pw
-                duration: 460
-            }
-        }
-
-        ParallelAnimation {
-            NumberAnimation {
-                target: curtain; property: "x"
-                from: 0; to: 0
-                duration: 340
-            }
-            NumberAnimation {
-                target: curtain; property: "width"
-                from: pw; to: 0
-                duration: 340
-                easing.type: Easing.OutExpo
+    // A single normalized progress value drives both the host and curtain. A
+    // direction change therefore continues from the exact current frame instead
+    // of resetting either animation to a hard-coded endpoint.
+    NumberAnimation {
+        id: visibilityAnim
+        target: root
+        property: "revealProgress"
+        easing.type: Easing.InOutCubic
+        onFinished: {
+            root.revealProgress = root.requestedVisible ? 1 : 0
+            if (!root.requestedVisible)
+                wipeHost.visible = false
+            else {
+                titleSlideIn.start()
+                artistFadeIn.start()
             }
         }
+    }
 
-        onStarted: {
-            wipeHost.x = pw+2
-            wipeHost.opacity = 1
+    function animateVisibility() {
+        if (!componentReady)
+            return
+
+        var target = requestedVisible ? 1 : 0
+        visibilityAnim.stop()
+        if (target > 0)
             wipeHost.visible = true
-            curtain.x        = 0
-            curtain.width = pw
-        }
-        onFinished: {
-            wipeHost.x    = 0
-            curtain.x     = 0
-            curtain.width = 0
-            titleSlideIn.start()
-            artistFadeIn.start()
-        }
-    }
 
-    SequentialAnimation {
-        id: hideAnim
-
-        ParallelAnimation {
-            NumberAnimation {
-                target: curtain; property: "x"
-                from: 0; to: 0
-                duration: 180
-            }
-            NumberAnimation {
-                target: curtain; property: "width"
-                from: 0; to: pw
-                duration: 180
-                easing.type: Easing.InOutQuart
-            }
+        var distance = Math.abs(target - revealProgress)
+        if (distance < 0.001) {
+            revealProgress = target
+            wipeHost.visible = target > 0
+            return
         }
 
-        NumberAnimation {
-            target: wipeHost; property: "x"
-            from: 0; to: pw+2
-            duration: 380
-            easing.type: Easing.InExpo
-        }
-
-        onStarted: {
-            curtain.x     = 0
-            curtain.width = 0
-        }
-        onFinished: {
-            wipeHost.visible = false
-            wipeHost.x = pw+2
-            curtain.x        = 0
-            curtain.width = pw
-        }
+        visibilityAnim.from = revealProgress
+        visibilityAnim.to = target
+        visibilityAnim.duration = Math.max(1, Math.round(
+            (requestedVisible ? Settings.revealDuration : Settings.hideDuration) * distance))
+        visibilityAnim.start()
     }
 
     SequentialAnimation {
@@ -1011,48 +1198,10 @@ Item {
         easing.type: Easing.OutQuad
     }
 
-    // ── SEEK PROCESS (EXTERNAL/BROWSER MEDIA) ──
-    Process {
-        id: seekProc
-        property real seekSecs: 0
-        command: ["playerctl", "position", String(Math.round(seekSecs))]
-        running: false
-    }
-
-    // ── CLOCK ──
-    Timer {
-        interval: 1000; running: true; repeat: true
-        onTriggered: {
-            var d = new Date()
-            root.clockStr = String(d.getHours()).padStart(2,"0") + ":"
-                          + String(d.getMinutes()).padStart(2,"0")
-        }
-    }
-
-    // ── API PUBLIQUE ──
-    function toggleVisible() {
-        if (root.shown) {
-            root.shown = false
-            revealAnim.stop()
-            hideAnim.start()
-        } else {
-            root.shown = true
-            hideAnim.stop()
-            revealAnim.start()
-        }
-    }
-
-    // ── Expose toggle via IPC Quickshell ──
-    IpcHandler {
-        target: "player"
-        function toggle(): void { root.toggleVisible() }
-        function show(): void   { if (!root.shown) root.toggleVisible() }
-        function hide(): void   { if ( root.shown) root.toggleVisible() }
-    }
-
     function fmtTime(secs) {
-        if (isNaN(secs) || secs === undefined || secs === null) return "0:00"
-        var s = Math.max(0, Math.floor(secs))
+        var value = Number(secs)
+        if (!Number.isFinite(value)) return "0:00"
+        var s = Math.max(0, Math.floor(value))
         var h = Math.floor(s/3600)
         var m = Math.floor((s%3600)/60)
         var ss = String(s%60).padStart(2,"0")
@@ -1061,9 +1210,12 @@ Item {
     }
 
     Component.onCompleted: {
-        var d = new Date()
-        clockStr = String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0")
         collapsedBaseHeight = content.implicitHeight
+        maxContentHeight = Math.max(maxContentHeight,
+                                    collapsedBaseHeight + drawerNaturalHeight)
+        componentReady = true
+        requestCoverLoad()
+        animateVisibility()
     }
 
     // ── COMPOSANT BOUTON CONTRÔLE (PILL ROUNDED) ──

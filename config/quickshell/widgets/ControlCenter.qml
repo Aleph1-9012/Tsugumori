@@ -3,11 +3,11 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import "../services"
 
 // ═════════════════════════════════════════════════════════════════════
 //   NieR Control Center — Quickshell module
 //   Portage 1:1 du mockup HTML v4
-//   Asset requis : ~/.config/quickshell/assets/nier-arrow.png
 //   IPC : qs ipc call ctrl toggle
 // ═════════════════════════════════════════════════════════════════════
 
@@ -17,8 +17,13 @@ ShellRoot {
     // ── Paths ──
     property string home:          Quickshell.env("HOME")
     property string xdgConfigHome: Quickshell.env("XDG_CONFIG_HOME") || (home + "/.config")
-    property string assetsDir:     xdgConfigHome + "/quickshell/assets"
-    property string arrowPng:      "file://" + assetsDir + "/nier-arrow.png"
+    readonly property string runtimeBase: Quickshell.env("XDG_RUNTIME_DIR") || (home + "/.cache/tsugumori/runtime")
+    readonly property string runtimeDir: runtimeBase + (Quickshell.env("XDG_RUNTIME_DIR") ? "/tsugumori" : "")
+    Process {
+        id: runtimeInitProc
+        command: ["install", "-d", "-m", "700", root.runtimeDir]
+        running: true
+    }
 
     // ── Palette NieR ──
     readonly property color colCard:     "#111111"
@@ -260,64 +265,35 @@ ShellRoot {
         return d3 ? d3.on : false
     }
     // ── Données système : Wi-Fi ──
-    property bool   wifiEnabled: false
-    property string wifiCurrentSSID: ""
-    property var    wifiNetworks: []   // [{ssid, signal, security, active}]
+    // Public names stay on root so the presentation and keyboard flow are unchanged.
+    property alias wifiEnabled: wifiService.enabled
+    property alias wifiCurrentSSID: wifiService.currentSsid
+    property alias wifiNetworks: wifiService.networks
+    property alias wifiPasswordInput: wifiService.passwordInput
+    property int wifiPasswordClearSerial: 0
     property string wifiPromptSSID: ""   // SSID en cours de saisie de mot de passe (vide = pas de prompt)
     property string wifiError: ""        // message d'erreur après échec connexion
 
-    Timer {
-        interval: 3000; running: root.open && root.slot === "top"; repeat: true; triggeredOnStart: true
-        onTriggered: pollWifi.running = true
-    }
-    Process {
-        id: pollWifi
-        // Récupère état radio + liste des réseaux scannés
-        command: ["sh","-c",
-            "echo \"$(nmcli radio wifi 2>/dev/null)\"; " +
-            "nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi 2>/dev/null | head -40"
-        ]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var lines = this.text.trim().split("\n")
-                root.wifiEnabled = (lines[0] || "").trim() === "enabled"
-                var seen = ({})  // dedup par SSID
-                var current = ""
-                for (var i = 1; i < lines.length; i++) {
-                    var parts = lines[i].split(":")
-                    if (parts.length < 4) continue
-                    var inUse = parts[0] === "*"
-                    var ssid = parts[1]
-                    var signal = parseInt(parts[2]) || 0
-                    var security = parts[3] || "Open"
-                    if (!ssid) continue
-                    if (inUse) current = ssid
-                    // Garde l'entrée existante si elle a un meilleur signal ou est active
-                    if (seen[ssid]) {
-                        if (seen[ssid].active) continue
-                        if (seen[ssid].signal >= signal && !inUse) continue
-                    }
-                    seen[ssid] = {ssid: ssid, signal: signal, security: security, active: inUse}
-                }
-                // Reconstruit en array, triée par signal décroissant (active en premier)
-                var nets = []
-                for (var k in seen) nets.push(seen[k])
-                nets.sort(function(a,b){
-                    if (a.active && !b.active) return -1
-                    if (!a.active && b.active) return 1
-                    return b.signal - a.signal
-                })
-                root.wifiNetworks = nets
-                root.wifiCurrentSSID = current
+    WifiService {
+        id: wifiService
+        helperPath: root.networkScriptPath
+        active: root.open && root.slot === "top"
+
+        onPasswordConnectionFinished: success => {
+            if (success) {
+                root.wifiPromptSSID = ""
+                root.wifiError = ""
+            } else {
+                root.wifiError = "Connection failed"
             }
         }
+        onPasswordConsumed: root.wifiPasswordClearSerial += 1
     }
 
     // ── Données système : Bluetooth ──
     property bool   btEnabled: false
     property var    btDevices: []   // [{name, mac, connected, paired}]
     property bool   btScanning: false
-    property string wifiPasswordInput: ""
 
     // ── Données système : Audio ──
     property var    audioSinks: []        // [{name, description, default}]
@@ -457,9 +433,12 @@ ShellRoot {
     property string qshareLabel:     ""     // ex. "envoi : photo.jpg" ou "réception → ~/Downloads"
     property string qshareLastTick:  ""     // dernier fichier transféré (pour feedback)
     property bool   qshareCancelled: false
+    property string qshareRunId:     "idle"
     readonly property string qshareScriptPath: xdgConfigHome + "/quickshell/scripts/qshare.py"
-    readonly property string qshareEventFile:  "/tmp/qshare-events"
-    readonly property string qshareQrFile:     "/tmp/qshare-qr.png"
+    readonly property string networkScriptPath: xdgConfigHome + "/quickshell/scripts/network_ctl.py"
+    readonly property string yaziScriptPath: xdgConfigHome + "/quickshell/scripts/launch_yazi_picker.py"
+    readonly property string qshareEventFile: runtimeDir + "/qshare-events-" + qshareRunId
+    readonly property string qshareQrFile: runtimeDir + "/qshare-qr-" + qshareRunId + ".png"
 
     readonly property var qshareOutputDirs: [
         home + "/Downloads",
@@ -468,17 +447,18 @@ ShellRoot {
         "/tmp"
     ]
 
-    Timer {
-        interval: 3000; running: root.open && root.slot === "left"; repeat: true; triggeredOnStart: true
-        onTriggered: qshareEventReader.running = qshareProc.running
-    }
-
     // Process qui lance Yazi pour picker un fichier
     Process {
         id: yaziProc
         running: false
-        command: ["sh","-c","true"]
-        // Le résultat est écrit par yazi dans /tmp/yzi-out, on le lira après
+        command: ["python3", root.yaziScriptPath]
+        // Le résultat est écrit par yazi dans le répertoire runtime privé.
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode === 0) {
+                yaziCheckTimer.count = 0
+                yaziCheckTimer.running = true
+            }
+        }
     }
     // Timer qui vérifie l'existence du fichier choisi par yazi
     Timer {
@@ -494,7 +474,7 @@ ShellRoot {
     }
     Process {
         id: yaziReadProc
-        command: ["sh","-c","cat /tmp/yzi-out 2>/dev/null"]
+        command: ["python3", root.yaziScriptPath, "--read-choice"]
         running: false
         stdout: StdioCollector {
             onStreamFinished: {
@@ -522,20 +502,19 @@ ShellRoot {
     // ═══════════════════════════════════════════════════════════════════
 
     function startQshare(mode, filePath) {
+        // Keep the active process bound to the run-specific event and QR files.
+        if (qshareProc.running)
+            return
+
         // Reset state
+        root.qshareRunId = Date.now().toString()
         root.qshareUrl = ""
         root.qshareQrPath = ""
         root.qshareLastTick = ""
         root.qshareCancelled = false
 
-        // Cleanup ancien event/QR file (sync via touch)
-        cleanupQshareProc.command = ["sh","-c",
-            "rm -f " + qshareEventFile + " " + qshareQrFile + "; " +
-            "touch " + qshareEventFile]
-        cleanupQshareProc.running = true
-
         // Construit la commande
-        var args = [qshareScriptPath, mode]
+        var args = ["python3", qshareScriptPath, mode]
         if (mode === "send") {
             args.push(filePath)
             qshareLabel = "envoi : " + filePath.split("/").pop()
@@ -563,8 +542,6 @@ ShellRoot {
         pendingFilePath = ""
     }
 
-    Process { id: cleanupQshareProc; command: ["sh","-c","true"]; running: false }
-
     Process {
         id: qshareProc
         running: false
@@ -588,6 +565,8 @@ ShellRoot {
             qshareUrl = ""
             qshareQrPath = ""
             qshareLastTick = ""
+            qshareCleanupProc.command = ["rm", "-f", root.qshareEventFile, root.qshareQrFile]
+            qshareCleanupProc.running = true
             // Reset pendingFilePath après un transfert send réussi
             if (!qshareCancelled && root.sub === "send") {
                 pendingFilePath = ""
@@ -595,10 +574,15 @@ ShellRoot {
         }
     }
 
+    Process {
+        id: qshareCleanupProc
+        running: false
+    }
+
     // Poll l'event-file pour récupérer URL/QR/TICK/DONE
     Timer {
         id: qshareEventPoll
-        interval: 250
+        interval: 500
         repeat: true
         running: false
         onTriggered: qshareEventReader.running = true
@@ -607,7 +591,7 @@ ShellRoot {
     Process {
         id: qshareEventReader
         running: false
-        command: ["sh","-c","cat " + root.qshareEventFile + " 2>/dev/null"]
+        command: ["cat", root.qshareEventFile]
         stdout: StdioCollector {
             onStreamFinished: {
                 var lines = this.text.split("\n")
@@ -702,34 +686,13 @@ ShellRoot {
         onTriggered: pollBt.running = true
     }
 
-    // Process pour submission du password Wi-Fi (sépare actProc pour capture stderr)
-    Process {
-        id: wifiSubmitProc
-        command: ["sh","-c","true"]
-        running: false
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var output = this.text.trim()
-                if (output.indexOf("successfully activated") >= 0 || output === "") {
-                    root.wifiPromptSSID = ""
-                    root.wifiPasswordInput = ""
-                    root.wifiError = ""
-                } else {
-                    // erreur, on reste sur le prompt
-                    root.wifiError = "Connection failed"
-                }
-                refreshTimer.restart()
-            }
-        }
-    }
-
     // ── Process pour exécuter les actions ──
     Process { id: actProc; command: ["sh","-c","true"]; running: false }
 
     // Refresh state quand on change de slot
     onSlotChanged: {
         cancelWifiPrompt()
-        if (slot === "top")    { pollWifi.running = true; pollBt.running = true }
+        if (slot === "top")    { wifiService.refresh(); pollBt.running = true }
         if (slot === "bottom") { pollAudio.running = true }
         if (slot === "right")  {
             pollNotifsHistory.running = true
@@ -759,7 +722,8 @@ ShellRoot {
         // ── Wi-Fi ──
         if (slotKey === "top" && subKey === "wifi") {
             if (actionKey === "toggle") {
-                cmd = "nmcli radio wifi " + (wifiEnabled ? "off" : "on")
+                wifiService.toggle()
+                return
             } else if (actionKey.indexOf("connect:") === 0) {
                 var ssid = actionKey.substring(8)
                 // Trouver le réseau dans la liste pour vérifier la sécurité
@@ -769,11 +733,13 @@ ShellRoot {
                 }
                 // Si déjà actif, déconnexion
                 if (net && net.active) {
-                    cmd = "nmcli con down id '" + ssid + "' 2>/dev/null || nmcli dev disconnect $(nmcli -t -f DEVICE,TYPE dev | grep wifi | head -1 | cut -d: -f1)"
+                    wifiService.disconnect(ssid)
+                    return
                 }
                 // Si réseau ouvert, connexion directe
                 else if (net && (net.security === "" || net.security === "--")) {
-                    cmd = "nmcli dev wifi connect '" + ssid.replace(/'/g, "'\\''") + "'"
+                    wifiService.connectOpen(ssid)
+                    return
                 }
                 // Si réseau sécurisé : ouvrir le prompt
                 else {
@@ -782,11 +748,8 @@ ShellRoot {
                     return
                 }
             } else if (actionKey === "submit-password") {
-                // Soumission du mot de passe via le prompt
-                cmd = "nmcli dev wifi connect '" + wifiPromptSSID.replace(/'/g, "'\\''") +
-                      "' password '" + wifiPasswordInput.replace(/'/g, "'\\''") + "' 2>&1"
-                wifiSubmitProc.command = ["sh","-c", cmd]
-                wifiSubmitProc.running = true
+                // Le service écrit le secret sur stdin après démarrage et l'efface aussitôt.
+                wifiService.connectWithPassword(wifiPromptSSID)
                 return
             } else if (actionKey === "cancel-prompt") {
                 wifiPromptSSID = ""
@@ -848,28 +811,7 @@ ShellRoot {
                 // 2) On lance yazi en background
                 // 3) On force le focus via hyprctl au cas où Hyprland ne l'a
                 //    pas donné automatiquement (race condition possible)
-                cmd =
-                    "rm -f /tmp/yzi-out; " +
-                    "( sleep 0.35; " +
-                    "  if command -v foot >/dev/null 2>&1; then " +
-                    "    foot --app-id qs-yazi-picker yazi --chooser-file=/tmp/yzi-out & " +
-                    "  elif command -v alacritty >/dev/null 2>&1; then " +
-                    "    alacritty --class qs-yazi-picker -e yazi --chooser-file=/tmp/yzi-out & " +
-                    "  elif command -v kitty >/dev/null 2>&1; then " +
-                    "    kitty --class qs-yazi-picker yazi --chooser-file=/tmp/yzi-out & " +
-                    "  elif command -v wezterm >/dev/null 2>&1; then " +
-                    "    wezterm start --class qs-yazi-picker -- yazi --chooser-file=/tmp/yzi-out & " +
-                    "  else " +
-                    "    notify-send 'qshare' 'No supported terminal found (foot/alacritty/kitty/wezterm)'; " +
-                    "    exit; " +
-                    "  fi; " +
-                    "  sleep 0.45; " +   // laisser le terminal apparaître
-                    "  hyprctl dispatch focuswindow '^(qs-yazi-picker)$' >/dev/null 2>&1; " +
-                    ") &"
-                actProc.command = ["sh","-c", cmd]
-                actProc.running = true
-                yaziCheckTimer.count = 0
-                yaziCheckTimer.running = true
+                yaziProc.running = true
                 // Ferme le ControlCenter pour libérer le focus à la fenêtre yazi
                 close()
                 return
@@ -942,7 +884,7 @@ ShellRoot {
     Timer {
         id: refreshTimer
         interval: 800; repeat: false
-        onTriggered: { pollWifi.running = true; pollBt.running = true }
+        onTriggered: { wifiService.refresh(); pollBt.running = true }
     }
     // Refresh BT répété après une action pair/connect (peut prendre 5-10s)
     Timer {
@@ -1345,7 +1287,7 @@ ShellRoot {
                         Text {
                             width: parent.width
                             text: root.qshareUrl
-                            font.family: "Iosevka, monospace"
+                            font.family: "Iosevka"
                             font.pixelSize: 9
                             color: root.colInk
                             opacity: 0.55
@@ -1437,14 +1379,36 @@ ShellRoot {
               axis === "bottom" ? 180 :
               axis === "left"   ? -90 : 90
 
-        Image {
+        Canvas {
+            id: arrowCanvas
             anchors.fill: parent
-            source: root.arrowPng
-            sourceSize.width: 256
-            sourceSize.height: 256
-            fillMode: Image.PreserveAspectFit
-            smooth: true
             rotation: ar.isFocused ? ar.focusRotation : ar.restRotation
+
+            // Code-native rendering of the directional silhouette.
+            onPaint: {
+                var ctx = getContext("2d")
+                ctx.clearRect(0, 0, width, height)
+                ctx.fillStyle = root.colCard
+                ctx.strokeStyle = Qt.rgba(232/255, 232/255, 232/255, 0.35)
+                ctx.lineWidth = 0.6
+                ctx.beginPath()
+                ctx.moveTo(width * 0.08, height * 0.32)
+                ctx.lineTo(width * 0.18, height * 0.22)
+                ctx.lineTo(width * 0.37, height * 0.39)
+                ctx.lineTo(width * 0.50, height * 0.27)
+                ctx.lineTo(width * 0.63, height * 0.39)
+                ctx.lineTo(width * 0.82, height * 0.22)
+                ctx.lineTo(width * 0.92, height * 0.32)
+                ctx.lineTo(width * 0.68, height * 0.51)
+                ctx.lineTo(width * 0.50, height * 0.94)
+                ctx.lineTo(width * 0.32, height * 0.51)
+                ctx.closePath()
+                ctx.fill()
+                ctx.stroke()
+            }
+            Component.onCompleted: requestPaint()
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
         }
 
         opacity: {
@@ -2145,6 +2109,9 @@ ShellRoot {
                                         if (root.wifiPromptSSID !== "") {
                                             pwFocusTimer.restart()
                                         }
+                                    }
+                                    function onWifiPasswordClearSerialChanged() {
+                                        pwInput.text = ""
                                     }
                                 }
                                 // Au cas où le widget devient visible avant que la propriété change

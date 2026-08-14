@@ -65,14 +65,14 @@
   },
 
   "custom/pomodoro": {
-    "exec": "~/.config/waybar/scripts/pomodoro.sh",
+    "exec": "${XDG_CONFIG_HOME:-$HOME/.config}/waybar/scripts/pomodoro.sh",
     "interval": 1,
     "format": "{}",
-    "on-click": "~/.config/waybar/scripts/pomodoro_toggle.sh"
+    "on-click": "${XDG_CONFIG_HOME:-$HOME/.config}/waybar/scripts/pomodoro_toggle.sh"
   },
 
   "custom/power": {
     "format": "⏻",
-    "on-click": "~/.config/quickshell/lock.sh"
+    "on-click": "${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/lock.sh"
   }
 }

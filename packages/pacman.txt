@@ -8,10 +8,15 @@ xdg-desktop-portal-hyprland
 waybar
 
 # ─── Quickshell runtime dependencies ───────────────────
+# The installer accepts any already-installed package that provides
+# `quickshell` (for example quickshell-git); otherwise it installs this target.
+quickshell
 qt5-wayland
 qt6-wayland
 qt6-multimedia-ffmpeg
 gtk4-layer-shell
+mpv
+ffmpeg
 
 # ─── Terminal ──────────────────────────────────────────
 figlet
@@ -24,14 +29,15 @@ pipewire-alsa
 pipewire-pulse
 wireplumber
 pavucontrol
-playerctl
 
 # ─── Notifications + polkit ────────────────────────────
+# Quickshell provides the notification daemon; libnotify provides notify-send.
+libnotify
 polkit-kde-agent
 
-# Bluetooth
-
-kdeconnect
+# ─── Bluetooth + device sharing ────────────────────────
+bluez
+bluez-utils
 
 # ─── Screenshots, brightness, clipboard ────────────────
 brightnessctl
@@ -50,6 +56,8 @@ networkmanager
 
 # ─── Fonts ─────────────────────────────────────────────
 ttf-jetbrains-mono
+inter-font
+ttc-iosevka
 noto-fonts
 noto-fonts-cjk
 noto-fonts-emoji
@@ -64,7 +72,6 @@ python-numpy
 python-pillow
 python-opencv
 python-qrcode
-python-pillow
 
 #   Quickshare
 qrencode

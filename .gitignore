@@ -5,12 +5,15 @@ hypr/lockbg.png
 # ─── Personal user override ────────────────────────────
 hypr/user.conf
 **/user.conf
+!config/hypr/user.conf
 
 # ─── Caches & logs ─────────────────────────────────────
 **/cache/
 **/Cache/
 **/*.cache
 **/*.log
+**/__pycache__/
+**/*.py[cod]
 
 # ─── Secrets (paranoid net) ────────────────────────────
 **/secrets/

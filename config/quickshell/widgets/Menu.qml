@@ -519,7 +519,7 @@ Item {
                             model:[
                                 {l:"TERMINAL", cmd:"kitty"},
                                 {l:"FILES",    cmd:"kitty -e yazi"},
-                                {l:"LOCK",     cmd:"$HOME/.config/quickshell/lock.sh"},
+                                {l:"LOCK",     cmd:"${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/lock.sh"},
                                 {l:"SHUTDOWN", cmd:"systemctl poweroff", danger:true},
 					{l:"RESTART",  cmd:"systemctl reboot", danger:true}
                             ]

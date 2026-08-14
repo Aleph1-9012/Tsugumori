@@ -36,7 +36,7 @@ QtObject {
     readonly property bool playerBackground: true
 
     // Couleur du fond (utilisée seulement si playerBackground = true)
-    readonly property color playerBgColor: Qt.rgba(11/255, 10/255, 9/255, 0.92)
+    readonly property color playerBgColor: "#000000"
 
     // Position verticale du player (0.0 = haut, 1.0 = bas de l'écran)
     readonly property real playerPositionY: 0.39
@@ -92,7 +92,7 @@ QtObject {
 
 
     // ── RACCOURCIS (à déclarer aussi dans hyprland.conf) ────────
-    //   SUPER+SHIFT+M  →  echo t >> /tmp/qs-toggle    (afficher/cacher player)
-    //   SUPER+SHIFT+F  →  echo t >> /tmp/qs-front     (premier plan / arrière)
+    //   SUPER+RETURN        →  qs ipc call tsugumoriShell togglePlayer  (afficher/cacher player)
+    //   SUPER+SHIFT+RETURN  →  qs ipc call tsugumoriShell toggleFront   (premier plan / arrière)
 
 }

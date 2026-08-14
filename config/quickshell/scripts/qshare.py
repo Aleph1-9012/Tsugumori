@@ -7,14 +7,17 @@ Usage CLI :
     qshare recv [-o DIR] [--tunnel] [-k]
 
 Usage interne (depuis Quickshell) :
-    qshare ... --qr-out /tmp/qshare-qr.png --event-file /tmp/qshare-events
+    qshare ... --qr-out "$XDG_RUNTIME_DIR/tsugumori/qshare-qr-RUN.png" \
+        --event-file "$XDG_RUNTIME_DIR/tsugumori/qshare-events-RUN"
 """
 from __future__ import annotations
 
 import argparse
+import atexit
 import os
 import re
 import secrets
+import signal
 import shutil
 import socket
 import subprocess
@@ -32,6 +35,25 @@ try:
     from qrcode.image.pil import PilImage
 except ImportError:
     sys.exit("Manque la dépendance : pacman -S python-qrcode  (ou pip install qrcode[pil])")
+
+
+_CHILD_PROCESSES: set[subprocess.Popen] = set()
+
+
+def _terminate_children() -> None:
+    for proc in tuple(_CHILD_PROCESSES):
+        if proc.poll() is None:
+            proc.terminate()
+
+
+def _handle_termination(_signum, _frame) -> None:
+    _terminate_children()
+    raise KeyboardInterrupt
+
+
+atexit.register(_terminate_children)
+signal.signal(signal.SIGTERM, _handle_termination)
+signal.signal(signal.SIGINT, _handle_termination)
 
 
 NIER_BG, NIER_FG, NIER_ACCENT, NIER_DIM = "#1c1a17", "#a89a7e", "#d4c8a8", "#6b6453"
@@ -81,6 +103,7 @@ def start_cloudflared(local_port: int) -> tuple[subprocess.Popen, str]:
         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, bufsize=1,
     )
+    _CHILD_PROCESSES.add(proc)
 
     url_pattern = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
     public_url: str | None = None
@@ -482,6 +505,7 @@ def cmd_send(args: argparse.Namespace) -> None:
             except OSError: pass
         if tunnel_proc:
             tunnel_proc.terminate()
+            _CHILD_PROCESSES.discard(tunnel_proc)
 
 
 def cmd_recv(args: argparse.Namespace) -> None:
@@ -528,6 +552,7 @@ def cmd_recv(args: argparse.Namespace) -> None:
     finally:
         if tunnel_proc:
             tunnel_proc.terminate()
+            _CHILD_PROCESSES.discard(tunnel_proc)
 
 
 def _print_banner(mode: str, target: str, url: str, *, tunneled: bool) -> None:
