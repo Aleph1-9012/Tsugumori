@@ -6,7 +6,7 @@
 #
 # Usage :
 #   - Lancer manuellement : ./wave-check.sh
-#   - Au démarrage : exec-once = ~/.config/quickshell/wave-check.sh
+#   - Au démarrage : appelé par le callback hyprland.start dans hyprland.lua
 # ═════════════════════════════════════════════════════════════════════
 
 set -e

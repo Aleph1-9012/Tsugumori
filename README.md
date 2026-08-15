@@ -1,26 +1,25 @@
-**Sidonia/Tsugumori** by Aleph1-9012 — Knights of Sidonia inspired palette.
-
-> [!WARNING]
-> **Hyprland configuration migration** — This branch still uses Hyprlang. Hyprland deprecated that format in 0.55 in favor of Lua, but 0.55.2 still parses this configuration. The installer validates the bundled config with the installed Hyprland binary before replacing user files; a Lua port is still required before legacy support is removed upstream.
-
 # Tsugumori
 
-Hyprland + Quickshell + Waybar rice for Arch Linux, with a Knights of Sidonia aesthetic.
+Knights of Sidonia-inspired Hyprland, Quickshell, and Waybar for Arch Linux.
 
+![Project status: beta](https://img.shields.io/badge/status-beta-c8b89a)
+![Hyprland: 0.55.2+](https://img.shields.io/badge/Hyprland-0.55.2%2B-58e1ff)
+![License: MIT](https://img.shields.io/badge/license-MIT-7a7358)
 
+<p align="center">
+  <a href="https://youtu.be/VwLABphh-E0">
+    <img src="https://i.ytimg.com/vi/VwLABphh-E0/maxresdefault.jpg" width="900" alt="Watch the Tsugumori desktop showcase">
+  </a>
+</p>
+<p align="center"><sub>Click the image to watch the full-quality showcase.</sub></p>
 
-# SHOW OFF
-
-
-
-https://github.com/user-attachments/assets/5b950538-f5c5-4334-abc7-b451dc3d63a0
-
-
-Better quality showcase :https://youtu.be/VwLABphh-E0?si=obrjjakcOhFq8bV5
+> [!NOTE]
+> Tsugumori is a credible beta, not a stable release. The installer validates its Hyprland Lua configuration before replacing your existing desktop config and keeps timestamped backups by default.
 
 ## Installation
 
-Requirements: Arch Linux and a non-root user with `sudo`. Review the installer before running it.
+Requirements: Arch Linux, Hyprland 0.55.2 or newer, and a non-root user with
+`sudo`. Review the installer before running it.
 
 ### Quick install
 
@@ -34,21 +33,34 @@ To inspect all options without installing:
 bash <(curl -fsSL https://raw.githubusercontent.com/Aleph1-9012/Tsugumori/main/install.sh) --help
 ```
 
-`--latest` is the default. After package installation, the installer asks Hyprland to parse the bundled configuration and stops before deploying it if validation fails. `--pinned` also fails closed unless the repository contains complete pinned manifests; this branch does not currently publish them.
+`--latest` is the default. After package installation, the installer asks
+Hyprland to parse both the bundled Lua configuration and the candidate config
+with preserved user overrides. It stops before deployment if either fails.
+`--pinned` also fails closed unless the repository contains complete pinned
+manifests; this branch does not currently publish them.
 
 Quickshell 0.3 is a required official package. On upgrades, an already-installed
 compatible provider such as `quickshell-git` is retained to avoid a package
 conflict; fresh installations use Arch's `quickshell` package.
- 
+
 ## What's included
 
-- **Window manager**: Hyprland with custom keybinds (QWERTY layout)
+- **Window manager**: Hyprland 0.55.2+ with a native Lua config and custom keybinds (QWERTY layout)
 - **Shell/widgets**: Quickshell with custom QML widgets (menu, wallpaper picker, notifications, player)
 - **Session lock**: Quickshell `ext-session-lock-v1` surfaces with PAM authentication and the original animated NieR reveal/hide design
 - **Idle/suspend safety**: Hypridle locks after five idle minutes, locks before sleep, and restores displays after resume
 - **Bar**: Waybar
 - **Terminal**: Kitty
 - **Theme**: Knights of Sidonia with custom video transitions
+
+## Release status
+
+`v0.1.0` is Tsugumori's first public beta, not a stable release. A clean Arch VM
+installation completed on 2026-08-15 with official Quickshell 0.3.0-2 and
+Hyprland 0.56.2-1; the feature-complete candidate passed all 48 tests and the
+required Hyprland/QML integration checks there. The release tree is also covered
+by the same required Arch checks in GitHub Actions. See the
+[`v0.1.0` release notes](RELEASE_NOTES.md) for known limitations.
 
 ## Control Center
 
@@ -71,6 +83,11 @@ A NieR:Automata-style radial menu with Knights of Sidonia theme accessible via `
   - Pick files via a floating Yazi instance and share them over the local network
   - Scan a tokenized QR code from a phone to send or receive files
   - Optionally expose a temporary HTTPS Cloudflare tunnel for remote transfers
+  - Receive mode defaults to a 1 GiB request limit, 4 GiB cumulative session
+    limit, 32 files per request, 128 files per session, at most 16 active
+    connections, a request-header deadline capped at 15 seconds, and a
+    five-minute overall upload deadline. The `qshare recv --help` flags adjust
+    the byte/file quotas and overall upload deadline.
 - **Notifications** — History & DND
   - Live history fed by the Quickshell notification daemon (no `mako`/`dunst` needed)
   - Click a notification once to expand (body, urgency, category, app, actions), click again to invoke the source app
@@ -79,7 +96,8 @@ A NieR:Automata-style radial menu with Knights of Sidonia theme accessible via `
 
 ### Navigation
 
-The menu uses three focus levels:
+The menu uses two interaction levels (the internal names retain their original
+L1/L3 numbering):
 
 - **L1 — Overview**: navigate between the four slots and the center node
 - **L3 — Settings**: focus inside a sub-menu (sub-item + first action are focused simultaneously)
@@ -100,13 +118,16 @@ When you focus a sub-menu, the whole cross slides ("pulls the tablecloth") to br
 
 ## Customization
 
-Personal overrides go in `~/.config/hypr/user.conf` — this file is **never** overwritten by updates.
+Personal overrides go in `~/.config/hypr/user.lua` — this file is **never**
+overwritten by updates. It loads after Tsugumori's defaults, so later calls
+override the base configuration. Unbind a bundled shortcut before replacing it.
 
 Example:
-```ini
-monitor = DP-1, 2560x1440@144, 0x0, 1
-input { kb_layout = us }
-bind = SUPER, B, exec, firefox
+```lua
+hl.monitor({ output = "DP-1", mode = "2560x1440@144", position = "0x0", scale = 1 })
+hl.config({ input = { kb_layout = "us" } })
+hl.unbind("SUPER + T")
+hl.bind("SUPER + T", hl.dsp.exec_cmd("foot"))
 ```
 
 ## Keybinds
@@ -129,34 +150,35 @@ bind = SUPER, B, exec, firefox
 ## Troubleshooting
 
 If installation stops because Hyprland cannot parse the bundled configuration,
-do not force the installer past that check. Use a compatible Tsugumori branch or
-wait for the Lua configuration port. Downgrading Hyprland by itself on a rolling
-Arch system may leave its companion libraries out of sync. Restore your previous
-configuration from the timestamped `~/.config-backup-*` directory if a later
-step is interrupted.
+do not force the installer past that check. Fix the reported Lua error in a
+preserved `user.lua`, or use a compatible Tsugumori revision. Downgrading
+Hyprland by itself on a rolling Arch system may leave its companion libraries
+out of sync. Restore your previous configuration from the timestamped
+`~/.config-backup-*` directory if a later step is interrupted.
+
+Upgrades preserve a legacy `~/.config/hypr/user.conf`, but Lua does not load
+that file. Translate active machine-specific overrides to `user.lua` before
+installing; the installer refuses to proceed when doing otherwise would
+silently discard them.
 
 Upgrades from the former Quickshell/pamtester lock may leave an unused
 `/etc/pam.d/qs-lock` file. The installer warns instead of deleting a system PAM
 file automatically; remove it only after confirming no local service uses it.
 
-The animated lock is a real compositor session lock: if its dedicated
-Quickshell process crashes while locked, Hyprland intentionally remains locked
-instead of exposing the desktop. Hyprlock remains installed as the PAM service
-provider and administrator fallback; its configuration is
-`~/.config/hypr/hyprlock.conf`. Recovering an abandoned compositor lock still
-requires an explicit TTY recovery procedure (or terminating the graphical
-session); another lock client cannot silently take it over. `SUPER + R` targets
-only the desktop-shell instance and never kills the independent lock process.
-If a missing runtime or asset is detected before Quickshell starts, the launcher
-uses Hyprlock immediately so a lock request does not fail open.
+The animated lock is a real compositor session lock. Its launcher supervises
+startup and requires an explicit readiness handshake; a QML/import failure,
+timeout, or early exit starts Hyprlock instead. Hyprland's session-lock restore
+option also lets that fallback replace a lock client which crashes after
+acquisition. `SUPER + R` targets only the desktop-shell instance and never kills
+the independent lock process.
 
 ## Credits
 
 Inspired by [caelestia-dots/shell](https://github.com/caelestia-dots/shell).
 
-Inspired by https://github.com/flickowoa/dotfiles.git 
+Inspired by [flickowoa/dotfiles](https://github.com/flickowoa/dotfiles).
 
-Inspired by https://github.com/samyns/Unit-3
+Inspired by [samyns/Unit-3](https://github.com/samyns/Unit-3).
 
 
 ## License

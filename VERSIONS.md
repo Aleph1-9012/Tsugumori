@@ -1,26 +1,36 @@
 # Tested versions
 
 This config was last tested with the following versions of its main
-dependencies on 2026-08-13. The tested set is a record, not a promise that
+dependencies on 2026-08-15. The tested set is a record, not a promise that
 the current Arch repositories still provide these versions.
 
 ## Main components
 
 | Component         | Version              |
 |-------------------|----------------------|
-| Hyprland          | 0.55.2-1             |
-| Hyprlock          | 0.9.5-4              |
-| Hypridle          | 0.1.7-9              |
+| Hyprland          | 0.56.2-1             |
+| Hyprlock          | 0.9.6-2              |
+| Hypridle          | 0.1.8-1              |
 | Waybar            | 0.15.0-2             |
-| Kitty             | 0.46.2-1             |
-| Quickshell (tested git build) | 0.3.0.r9.g68c2c85-1 |
-| awww (AUR)        | 0.12.0-1             |
-| Arch Linux        | rolling              |
+| Kitty             | 0.48.2-1             |
+| Quickshell (official) | 0.3.0-2          |
+| awww (official)   | 0.12.1-1             |
+| Linux kernel      | 7.1.8-arch1-3         |
+| Arch Linux        | clean rolling install |
 
-The secure animated lock, suspend/idle path, and legacy Hyprlang configuration
-were exercised with Hyprland 0.55.2 and Quickshell 0.3.0.r9 on 2026-08-13.
-Hyprlang is deprecated from 0.55 onward and the repository still needs a Lua
-migration before that compatibility layer is removed.
+On 2026-08-15, Tsugumori was installed from scratch in a fresh Arch VM with
+`install.sh --vm` and official repository packages. The installer validated both
+the bundled and effective candidate Lua configurations before deployment. After
+the final hardening changes, the feature-complete candidate was validated again
+in that same official-package VM: all 48 tests, ShellCheck, Hyprland config
+verification, and QML lint/import checks across all 17 QML files passed. The
+release tree is additionally covered by the same required Arch checks in GitHub
+Actions.
+
+The minimum supported Hyprland version, 0.55.2-1, was also checked separately
+with the native Lua parser and a Quickshell 0.3 development build. The VM run was
+headless validation of installation, configuration, and integration behavior;
+it did not replace an interactive GPU/PAM acceptance test on physical hardware.
 
 ## Updating this list
 
@@ -47,10 +57,11 @@ bash <(curl -fsSL https://raw.githubusercontent.com/Aleph1-9012/Tsugumori/main/i
 ```
 
 The installer verifies that a pinned manifest includes Hyprland, then asks the
-installed Hyprland binary to parse the bundled configuration before deploying
-it. AUR helpers install the package names recorded in `pinned-aur.txt` at their
-currently available AUR versions; the AUR cannot reliably reproduce historical
-build versions.
+installed Hyprland binary to parse both the bundled configuration and the
+candidate configuration containing preserved `user.lua` overrides before
+deploying it. AUR helpers install the package names recorded in `pinned-aur.txt`
+at their currently available AUR versions; the AUR cannot reliably reproduce
+historical build versions.
 
 ## Manually pinning a single package
 
@@ -68,7 +79,8 @@ versions at <https://archive.archlinux.org/packages/>.
 
 ## Known issues with newer versions
 
-- **Hyprland 0.55 and newer:** Hyprlang is deprecated in favor of Lua. Version
-  0.55.2 still parses this repository's legacy configuration, but future
-  releases may remove that compatibility. The installer validates the config
-  with the installed binary before replacing user files.
+- **Hyprland 0.55.2 and newer:** Tsugumori now uses Hyprland's native Lua
+  configuration and no longer ships a legacy `hyprland.conf`. The installer
+  validates the bundled Lua config and the candidate config containing preserved
+  `user.lua` overrides before replacing user files. Because the Lua interface is
+  newer than Hyprlang, future Hyprland releases may still require config updates.

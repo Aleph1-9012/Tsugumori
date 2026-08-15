@@ -91,7 +91,7 @@ QtObject {
     readonly property int waybarHeight: 28
 
 
-    // ── RACCOURCIS (à déclarer aussi dans hyprland.conf) ────────
+    // ── RACCOURCIS (à déclarer aussi dans hyprland.lua) ─────────
     //   SUPER+RETURN        →  qs ipc call tsugumoriShell togglePlayer  (afficher/cacher player)
     //   SUPER+SHIFT+RETURN  →  qs ipc call tsugumoriShell toggleFront   (premier plan / arrière)
 

@@ -40,7 +40,13 @@ ShellRoot {
     // ── Lister les wallpapers ──
     Process {
         id: listWallpapers
-        command: ["sh","-c","ls " + root.wallpaperDir + " | grep -iE '\\.(jpg|jpeg|png|webp)$'"]
+        command: [
+            "find", root.wallpaperDir,
+            "-maxdepth", "1", "-type", "f",
+            "(", "-iname", "*.jpg", "-o", "-iname", "*.jpeg",
+            "-o", "-iname", "*.png", "-o", "-iname", "*.webp", ")",
+            "-printf", "%f\\n"
+        ]
         running: true
         stdout: StdioCollector {
             onStreamFinished: {
@@ -54,26 +60,17 @@ ShellRoot {
     function applyWallpaper(idx, monitor) {
         if (root.wallpapers.length === 0) return
         var file = root.wallpaperDir + "/" + root.wallpapers[idx]
-        var cmd = monitor === "both"
-            ? "awww img --transition-type fade --transition-duration 0.6 --transition-fps 60 \"" + file + "\""
-            : "awww img --transition-type fade --transition-duration 0.6 --transition-fps 60 --outputs " + monitor + " \"" + file + "\""
-        applyProc.command = ["sh", "-c", cmd]
+        applyProc.command = [
+            root.xdgConfigHome + "/quickshell/setwallpaper.sh",
+            file,
+            monitor
+        ]
         applyProc.running = true
-
-        // — Persist selection so it survives reboot —
-        var saveCmd = "echo '" + file + "' > " + xdgConfigHome + "/quickshell/current_wallpaper.txt"
-        saveProc.command = ["sh", "-c", saveCmd]
-        saveProc.running = true
-    }
-
-    Process {
-        id: saveProc
-        running: false
     }
 
     Process {
         id: applyProc
-        command: ["sh","-c","echo noop"]
+        command: ["true"]
         running: false
     }
 

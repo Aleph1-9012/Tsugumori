@@ -17,9 +17,14 @@ ShellRoot {
     property bool done: false
     property bool releaseRequested: false
     property bool lockEverSecure: false
+    property bool secureSignalConfirmed: false
+    property bool releaseAuthorized: false
+    property bool releaseRequestRecorded: false
 
     property string home: Quickshell.env("HOME")
     property string xdgConfigHome: Quickshell.env("XDG_CONFIG_HOME") || (home + "/.config")
+    property string handshakeDir: Quickshell.env("TSUGUMORI_LOCK_HANDSHAKE_DIR") || ""
+    property string handshakeHelper: xdgConfigHome + "/quickshell/lock-handshake.sh"
     property string currentUser: Quickshell.env("USER") || "user"
 
     property string lockInput: ""
@@ -35,6 +40,63 @@ ShellRoot {
         command: []
         running: false
     }
+
+    // The launcher accepts readiness only after WlSessionLock.secure becomes
+    // true. Release authorization is committed before the hide animation can
+    // start, allowing the supervisor to distinguish a harmless duplicate from
+    // a new lock request that races an authenticated release.
+    Process {
+        id: secureSignalProc
+        command: [root.handshakeHelper, root.handshakeDir, "secure"]
+        onExited: function(exitCode) {
+            if (exitCode === 0) {
+                root.secureSignalConfirmed = true
+            } else {
+                console.error("Tsugumori lock: could not confirm secure startup")
+                Qt.exit(1)
+            }
+        }
+    }
+
+    Process {
+        id: releaseAuthorizeProc
+        command: [root.handshakeHelper, root.handshakeDir, "release-authorized"]
+        onExited: function(exitCode) {
+            if (exitCode === 0) {
+                root.releaseAuthorized = true
+                root.beginHide()
+            } else {
+                console.error("Tsugumori lock: could not authorize the session release")
+                Qt.exit(1)
+            }
+        }
+    }
+
+    Process {
+        id: releaseRequestProc
+        command: [root.handshakeHelper, root.handshakeDir, "release-requested"]
+        onExited: function(exitCode) {
+            if (exitCode === 0) {
+                root.releaseRequestRecorded = true
+                releaseQuitTimer.restart()
+            } else {
+                console.error("Tsugumori lock: could not record the authenticated release request")
+                Qt.exit(1)
+            }
+        }
+    }
+
+    function signalSecureAcquired() {
+        if (root.secureSignalConfirmed || secureSignalProc.running) return
+        secureSignalProc.running = true
+    }
+
+    function recordReleaseRequest() {
+        if (!root.releaseRequested || sessionLock.secure
+                || root.releaseRequestRecorded || releaseRequestProc.running) return
+        releaseRequestProc.running = true
+    }
+
     function powerAction(action) {
         if ((action !== "poweroff" && action !== "reboot") || powerProc.running) return
         powerProc.command = ["systemctl", action]
@@ -88,7 +150,9 @@ ShellRoot {
     Timer { id: errTimer; interval: 800; repeat: false; onTriggered: root.lockError = false }
 
     function doAuth() {
-        if (!sessionLock.secure || root.lockPending || root.lockInput === "") return
+        if (!sessionLock.secure || !root.secureSignalConfirmed
+                || root.lockPending || root.releaseAuthorized || root.hiding
+                || releaseAuthorizeProc.running || root.lockInput === "") return
         root.pamResponse = root.lockInput
         root.pamResponseSent = false
         root.lockInput = ""
@@ -104,7 +168,13 @@ ShellRoot {
     }
 
     function doHide() {
-        if (root.hiding || root.releaseRequested) return
+        if (root.hiding || root.releaseRequested || root.releaseAuthorized
+                || releaseAuthorizeProc.running) return
+        releaseAuthorizeProc.running = true
+    }
+
+    function beginHide() {
+        if (!root.releaseAuthorized || root.hiding || root.releaseRequested) return
         root.hiding = true
         unlockAnimationTimer.restart()
     }
@@ -151,6 +221,12 @@ ShellRoot {
     }
 
     Component.onCompleted: {
+        if (root.handshakeDir === "") {
+            console.error("Tsugumori lock: supervised handshake environment is missing")
+            Qt.exit(1)
+            return
+        }
+
         // Reloading the QML while it owns a compositor lock is an avoidable
         // failure mode. This applies only to the dedicated lock process.
         Quickshell.watchFiles = false
@@ -168,6 +244,9 @@ ShellRoot {
         onSecureStateChanged: {
             if (secure) {
                 root.lockEverSecure = true
+                root.signalSecureAcquired()
+            } else if (root.releaseRequested && root.lockEverSecure) {
+                root.recordReleaseRequest()
             } else if (!root.releaseRequested && root.lockEverSecure) {
                 // The compositor forcibly ended a previously secure lock.
                 Qt.quit()
@@ -180,9 +259,9 @@ ShellRoot {
             if (locked) return
 
             if (root.releaseRequested) {
-                // Give the Wayland client one event-loop turn to flush the
-                // unlock_and_destroy request before the process exits.
-                releaseQuitTimer.restart()
+                // `locked` is the requested state. Record a clean exit only
+                // after `secure` goes false when unlock_and_destroy is issued.
+                root.recordReleaseRequest()
             } else if (!root.lockEverSecure) {
                 root.failLockAcquisition()
             }
