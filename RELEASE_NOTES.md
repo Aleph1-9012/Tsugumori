@@ -61,10 +61,11 @@ the command above installs the immutable `v0.1.0` tree.
 An installation candidate was installed from scratch in an Arch VM on
 2026-08-15 with Hyprland 0.56.2-1, official Quickshell 0.3.0-2, and official
 `awww` 0.12.1-1. Both pre-deployment Lua checks passed and the installed
-configuration parsed. After final hardening, the exact release tree was
+configuration parsed. After final hardening, the feature-complete candidate was
 validated again in that same official-package VM: all 48 tests, ShellCheck,
-Hyprland parsing, and all 17 QML checks passed. Hyprland 0.55.2-1 was separately
-verified as the supported minimum.
+Hyprland parsing, and all 17 QML checks passed. The release tree passed those
+same required checks in Arch CI. Hyprland 0.55.2-1 was separately verified as
+the supported minimum.
 
 ## Known limitations
 

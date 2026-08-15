@@ -57,8 +57,9 @@ conflict; fresh installations use Arch's `quickshell` package.
 
 `v0.1.0` is Tsugumori's first public beta, not a stable release. A clean Arch VM
 installation completed on 2026-08-15 with official Quickshell 0.3.0-2 and
-Hyprland 0.56.2-1; the exact release tree passed all 48 tests and the required
-Hyprland/QML integration checks. See the
+Hyprland 0.56.2-1; the feature-complete candidate passed all 48 tests and the
+required Hyprland/QML integration checks there. The release tree is also covered
+by the same required Arch checks in GitHub Actions. See the
 [`v0.1.0` release notes](RELEASE_NOTES.md) for known limitations.
 
 ## Control Center

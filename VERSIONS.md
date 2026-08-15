@@ -21,9 +21,11 @@ the current Arch repositories still provide these versions.
 On 2026-08-15, Tsugumori was installed from scratch in a fresh Arch VM with
 `install.sh --vm` and official repository packages. The installer validated both
 the bundled and effective candidate Lua configurations before deployment. After
-the final hardening changes, the exact release tree was validated again in that
-same official-package VM: all 48 tests, ShellCheck, Hyprland config verification,
-and QML lint/import checks across all 17 QML files passed.
+the final hardening changes, the feature-complete candidate was validated again
+in that same official-package VM: all 48 tests, ShellCheck, Hyprland config
+verification, and QML lint/import checks across all 17 QML files passed. The
+release tree is additionally covered by the same required Arch checks in GitHub
+Actions.
 
 The minimum supported Hyprland version, 0.55.2-1, was also checked separately
 with the native Lua parser and a Quickshell 0.3 development build. The VM run was

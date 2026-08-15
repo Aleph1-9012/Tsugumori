@@ -175,7 +175,11 @@ PY
 if command -v Hyprland >/dev/null 2>&1; then
     VERIFY_RUNTIME=$(mktemp -d)
     chmod 700 "$VERIFY_RUNTIME"
-    if ! XDG_RUNTIME_DIR="$VERIFY_RUNTIME" Hyprland --verify-config --config config/hypr/hyprland.lua >/dev/null; then
+    HYPRLAND_VERIFY_ARGS=(--verify-config --config config/hypr/hyprland.lua)
+    if (( EUID == 0 )); then
+        HYPRLAND_VERIFY_ARGS+=(--i-am-really-stupid)
+    fi
+    if ! XDG_RUNTIME_DIR="$VERIFY_RUNTIME" Hyprland "${HYPRLAND_VERIFY_ARGS[@]}" >/dev/null; then
         rm -rf -- "$VERIFY_RUNTIME"
         exit 1
     fi
