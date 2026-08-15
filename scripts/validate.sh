@@ -4,6 +4,17 @@ set -euo pipefail
 REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$REPO_ROOT"
 
+REQUIRE_INTEGRATION=${TSUGUMORI_REQUIRE_INTEGRATION:-0}
+
+missing_optional_tool() {
+    local label="$1"
+    if [[ "$REQUIRE_INTEGRATION" == "1" ]]; then
+        printf '%s is required for integration validation.\n' "$label" >&2
+        exit 1
+    fi
+    printf '%s: skipped (not installed)\n' "$label"
+}
+
 mapfile -d '' SHELL_FILES < <(rg --files -0 -g '*.sh')
 for file in "${SHELL_FILES[@]}"; do
     bash -n "$file"
@@ -14,7 +25,17 @@ if command -v shellcheck >/dev/null 2>&1; then
     shellcheck --severity=error -- "${SHELL_FILES[@]}"
     printf 'ShellCheck errors: none\n'
 else
-    printf 'ShellCheck: skipped (not installed)\n'
+    missing_optional_tool "ShellCheck"
+fi
+
+mapfile -d '' LUA_FILES < <(rg --files -0 -g '*.lua')
+if command -v luac >/dev/null 2>&1; then
+    for file in "${LUA_FILES[@]}"; do
+        luac -p "$file"
+    done
+    printf 'Lua syntax: OK (%d files)\n' "${#LUA_FILES[@]}"
+else
+    missing_optional_tool "Lua syntax"
 fi
 
 python3 - <<'PY'
@@ -41,7 +62,7 @@ if rg -n 'curl[^[:cntrl:]]*\[[[:space:]]*https?://' README.md; then
     exit 1
 fi
 
-if rg -n 'playerctl|nier-arrow\.png|/tmp/(qs-menu|qs-toggle|qs-front|mpv-tsugumori\.sock|qshare-(events|qr\.png)|yzi-out)|LOCKPWD|pamtester[[:space:]]+qs-lock' config packages; then
+if rg -n 'playerctl|nier-arrow\.png|/tmp/(pomodoro_state|qs-menu|qs-toggle|qs-front|mpv-tsugumori\.sock|qshare-(events|qr\.png)|yzi-out)|LOCKPWD|pamtester[[:space:]]+qs-lock' config packages; then
     printf 'Deprecated runtime path, asset, or credential transport found.\n' >&2
     exit 1
 fi
@@ -64,16 +85,28 @@ if rg -n 'PanelWindow|WlrLayershell|WlrLayer|LOCKPWD|pamtester|environment[[:spa
     exit 1
 fi
 
-for launcher in config/quickshell/lock.sh config/quickshell/restart.sh; do
+for launcher in config/quickshell/lock.sh config/quickshell/lock-handshake.sh config/quickshell/restart.sh; do
     [[ -x "$launcher" ]] || { printf '%s must be executable.\n' "$launcher" >&2; exit 1; }
 done
 
-for token in 'fallback_lock' 'exec hyprlock' 'exec qs --no-duplicate'; do
+for token in 'fallback_lock' 'exec hyprlock' 'qs --no-duplicate --path "$lockscreen" &' 'marker_is_valid secure' 'marker_is_valid release-requested'; do
     if ! rg -Fq "$token" config/quickshell/lock.sh; then
         printf 'Lock launcher contract is missing token: %s\n' "$token" >&2
         exit 1
     fi
 done
+
+for token in 'allow_session_lock_restore = true' 'hl.exec_cmd("awww-daemon")'; do
+    if ! rg -Fq "$token" config/hypr/hyprland.lua; then
+        printf 'Hyprland Lua contract is missing token: %s\n' "$token" >&2
+        exit 1
+    fi
+done
+
+if [[ -e config/hypr/hyprland.conf ]]; then
+    printf 'The retired Hyprlang configuration must not ship beside hyprland.lua.\n' >&2
+    exit 1
+fi
 
 [[ ! -e config/system/pam.d/qs-lock ]] || {
     printf 'The obsolete custom qs-lock PAM service must remain removed.\n' >&2
@@ -126,22 +159,30 @@ for manifest in (Path("packages/pacman.txt"), Path("packages/aur.txt")):
     if duplicates:
         raise SystemExit(f"{manifest}: duplicate packages: {', '.join(duplicates)}")
 
-required_pacman = {"quickshell", "qt6-multimedia-ffmpeg", "hyprlock", "hypridle"}
+required_pacman = {"awww", "quickshell", "qt6-multimedia-ffmpeg", "hyprlock", "hypridle"}
 missing = sorted(required_pacman - manifest_packages["pacman.txt"])
 if missing:
-    raise SystemExit(f"packages/pacman.txt: missing secure-lock runtime: {', '.join(missing)}")
+    raise SystemExit(f"packages/pacman.txt: missing required runtime: {', '.join(missing)}")
 
 if "quickshell-git" in manifest_packages["aur.txt"]:
     raise SystemExit("packages/aur.txt: Quickshell must not be optional or conflict with the required official package")
+if "awww" in manifest_packages["aur.txt"]:
+    raise SystemExit("packages/aur.txt: awww is an official package and must not be optional")
 
 print("Package manifests: OK")
 PY
 
 if command -v Hyprland >/dev/null 2>&1; then
-    Hyprland --verify-config --config config/hypr/hyprland.conf >/dev/null
+    VERIFY_RUNTIME=$(mktemp -d)
+    chmod 700 "$VERIFY_RUNTIME"
+    if ! XDG_RUNTIME_DIR="$VERIFY_RUNTIME" Hyprland --verify-config --config config/hypr/hyprland.lua >/dev/null; then
+        rm -rf -- "$VERIFY_RUNTIME"
+        exit 1
+    fi
+    rm -rf -- "$VERIFY_RUNTIME"
     printf 'Hyprland configuration: OK\n'
 else
-    printf 'Hyprland configuration: skipped (Hyprland not installed)\n'
+    missing_optional_tool "Hyprland configuration"
 fi
 
 QMLLINT_BIN=""
@@ -152,15 +193,18 @@ elif command -v qmllint >/dev/null 2>&1 && qmllint --version 2>&1 | rg -q '^qmll
 fi
 
 if [[ -n "$QMLLINT_BIN" ]]; then
-    "$QMLLINT_BIN" -I config/quickshell \
-        config/quickshell/shell.qml \
-        config/quickshell/services/ShellIpc.qml \
-        config/quickshell/services/WifiService.qml \
-        config/quickshell/widgets/Player.qml \
-        config/quickshell/widgets/lockscreen.qml
-    printf 'QML entry points: OK\n'
+    mapfile -d '' QML_FILES < <(rg --files -0 -g '*.qml' config/quickshell)
+    (( ${#QML_FILES[@]} >= 17 )) || { printf 'Expected at least 17 QML files, found %d.\n' "${#QML_FILES[@]}" >&2; exit 1; }
+    QMLLINT_LOG=$(mktemp)
+    if ! "$QMLLINT_BIN" -I config/quickshell "${QML_FILES[@]}" >"$QMLLINT_LOG" 2>&1; then
+        sed -n '1,500p' "$QMLLINT_LOG" >&2
+        rm -f -- "$QMLLINT_LOG"
+        exit 1
+    fi
+    rm -f -- "$QMLLINT_LOG"
+    printf 'QML syntax and imports: OK (%d files)\n' "${#QML_FILES[@]}"
 else
-    printf 'QML entry points: skipped (Qt 6 qmllint not installed)\n'
+    missing_optional_tool "QML syntax and imports"
 fi
 
 printf 'Repository validation: OK\n'

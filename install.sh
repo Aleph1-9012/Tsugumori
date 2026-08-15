@@ -6,9 +6,10 @@
 set -euo pipefail
 
 # ─── Configuration ──────────────────────────────────────────────────
-readonly REPO_URL="https://github.com/Aleph1-9012/Tsugumori.git"
+readonly REPO_URL="${TSUGUMORI_REPO_URL:-https://github.com/Aleph1-9012/Tsugumori.git}"
 readonly REPO_BRANCH="${TSUGUMORI_BRANCH:-main}"
 readonly CLONE_DIR="${TMPDIR:-/tmp}/Tsugumori-install-$$"
+readonly MIN_HYPRLAND_VERSION="0.55.2"
 BACKUP_DIR="$HOME/.config-backup-$(date +%Y%m%d-%H%M%S)"
 readonly BACKUP_DIR
 readonly CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -16,6 +17,9 @@ readonly CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 # Files that must NEVER be overwritten by re-running the installer.
 # Relative to $CONFIG_HOME.
 readonly PRESERVED_FILES=(
+    "hypr/user.lua"
+    # Retained only as migration input. Native Lua does not load this file, but
+    # an upgrade must never destroy a user's legacy machine-specific settings.
     "hypr/user.conf"
     "quickshell/settings/Settings.qml"
 )
@@ -23,7 +27,7 @@ readonly PRESERVED_FILES=(
 # Add support for flags
 PINNED_MODE=false
 VM_GL_TWEAKS=false          # Mesa llvmpipe + libgl software for Quickshell/Kitty (VirtualBox et al.)
-BOOT_WALLPAPER_VM=false     # exec-once awww img → first wallpaper in ~/Pictures/wallpapers
+BOOT_WALLPAPER_VM=false     # Lua start callback applies the first wallpaper in VM mode
 
 [[ "${TSUGUMORI_VM:-}" == "1" || "${TSUGUMORI_VM:-}" == "yes" ]] && VM_GL_TWEAKS=true
 
@@ -40,7 +44,7 @@ Usage: install.sh [options]
   --pinned   Install exact versions tested by the maintainer.
              Requires packages/pinned-pacman.txt (and pinned-aur.txt
              when AUR installation is enabled).
-  --vm       VirtualBox / weak GPU: patch Quickshell + Kitty to use software OpenGL
+  --vm       VirtualBox / weak GPU: configure Quickshell + Kitty to use software OpenGL
              (llvmpipe), optional boot wallpaper. Or set env TSUGUMORI_VM=1.
 
   Also: TSUGUMORI_VM=1 same effect as --vm for non-interactive installs.
@@ -59,6 +63,7 @@ readonly MANAGED_DIRS=(hypr quickshell waybar kitty)
 
 # Temp dir used to stash preserved user files during install
 PRESERVED_STASH=""
+LEGACY_USER_CONF_ACTIVE=false
 
 # ─── Colors & logging ───────────────────────────────────────────────
 if [[ -t 1 ]]; then
@@ -91,6 +96,7 @@ ask_yn() {
 cleanup() {
     [[ -d "$CLONE_DIR" ]] && rm -rf "$CLONE_DIR"
     [[ -n "$PRESERVED_STASH" && -d "$PRESERVED_STASH" ]] && rm -rf "$PRESERVED_STASH"
+    return 0
 }
 trap cleanup EXIT
 
@@ -119,7 +125,7 @@ collect_choices() {
     log "I'll ask a few questions before starting."
     echo
     BACKUP_OLD=true;          ask_yn "Backup existing configs to $BACKUP_DIR?" y || BACKUP_OLD=false
-    INSTALL_AUR=true;         ask_yn "Install optional AUR packages (awww, Share Tech Mono)?" y || INSTALL_AUR=false
+    INSTALL_AUR=true;         ask_yn "Install optional AUR package (Share Tech Mono)?" y || INSTALL_AUR=false
     INSTALL_WALLPAPERS=true;  ask_yn "Install default wallpapers to ~/Pictures/wallpapers?" y || INSTALL_WALLPAPERS=false
     INSTALL_BASHRC=true;      ask_yn "Install Tsugumori .bashrc (welcome banner + NieR prompt)?" y || INSTALL_BASHRC=false
     ENABLE_SERVICES=true;     ask_yn "Enable system services (NetworkManager, pipewire)?" y || ENABLE_SERVICES=false
@@ -134,6 +140,44 @@ collect_choices() {
         ask_yn "Apply the first bundled wallpaper automatically at each Hyprland login (awww)?" y && BOOT_WALLPAPER_VM=true || true
     fi
     echo
+}
+
+# ─── Hyprland user-config migration check ──────────────────────────
+inspect_legacy_user_config() {
+    local legacy="$CONFIG_HOME/hypr/user.conf"
+
+    [[ -f "$legacy" ]] || return 0
+
+    # Comments-only templates need no translation. Any other line may contain
+    # a monitor, binding, or machine setting which the Lua entry point cannot
+    # source, so fail closed unless a user.lua is already present.
+    if awk '
+        {
+            line = $0
+            sub(/^[[:space:]]*/, "", line)
+            if (line != "" && line !~ /^#/) {
+                found = 1
+                exit
+            }
+        }
+        END { exit(found ? 0 : 1) }
+    ' "$legacy"; then
+        LEGACY_USER_CONF_ACTIVE=true
+        warn "Legacy Hyprland overrides detected in $legacy."
+        warn "Native Hyprland Lua does not load user.conf; translate those settings to $CONFIG_HOME/hypr/user.lua."
+        if [[ ! -f "$CONFIG_HOME/hypr/user.lua" ]]; then
+            warn "No user.lua exists, so continuing would silently disable these overrides."
+            warn "Installation stopped before package or configuration changes; user.conf is untouched."
+            fatal "Migrate active hypr/user.conf overrides to user.lua before installing the Lua configuration."
+        fi
+
+        warn "The existing user.lua and dormant user.conf will both be preserved without modification."
+        if [[ "${BACKUP_OLD:-false}" == "true" ]]; then
+            warn "A second copy of user.conf will be kept under $BACKUP_DIR/hypr/."
+        else
+            warn "Backups are disabled; keep a manual copy until migration is complete."
+        fi
+    fi
 }
 
 # ─── Base setup ─────────────────────────────────────────────────────
@@ -247,15 +291,65 @@ install_packages() {
 }
 
 validate_hyprland_config() {
-    local config="$CLONE_DIR/config/hypr/hyprland.conf"
-    command -v Hyprland >/dev/null || fatal "Hyprland was not installed; cannot validate the bundled configuration."
-    [[ -f "$config" ]] || fatal "Bundled Hyprland configuration is missing."
+    local config="$CLONE_DIR/config/hypr/hyprland.lua"
+    local installed_version candidate_root candidate_config runtime_dir runtime_tmp=""
 
-    log "Validating bundled configuration with the installed Hyprland…"
-    if ! Hyprland --verify-config --config "$config"; then
+    command -v Hyprland >/dev/null || fatal "Hyprland was not installed; cannot validate the bundled configuration."
+    command -v vercmp >/dev/null || fatal "vercmp was not installed; cannot enforce the Hyprland compatibility floor."
+    [[ -f "$config" ]] || fatal "Bundled Hyprland Lua configuration is missing."
+    [[ -f "$CLONE_DIR/config/hypr/user.lua" ]] || fatal "Bundled Hyprland user.lua template is missing."
+    [[ -f "$CLONE_DIR/config/hypr/tsugumori_options.lua" ]] || fatal "Bundled installer options module is missing."
+
+    installed_version=$(pacman -Q hyprland 2>/dev/null | awk 'NR == 1 { print $2 }')
+    [[ -n "$installed_version" ]] || fatal "Could not determine the installed Hyprland package version."
+    if [[ "$(vercmp "$installed_version" "$MIN_HYPRLAND_VERSION")" == -* ]]; then
+        fatal "Hyprland $MIN_HYPRLAND_VERSION or newer is required for native Lua; found $installed_version."
+    fi
+
+    runtime_dir="${XDG_RUNTIME_DIR:-}"
+    if [[ -z "$runtime_dir" || ! -d "$runtime_dir" ]]; then
+        runtime_tmp=$(mktemp -d)
+        chmod 700 "$runtime_tmp"
+        runtime_dir="$runtime_tmp"
+    fi
+
+    log "Validating bundled Lua configuration with Hyprland $installed_version…"
+    if ! XDG_RUNTIME_DIR="$runtime_dir" Hyprland --verify-config --config "$config"; then
+        [[ -z "$runtime_tmp" ]] || rm -rf "$runtime_tmp"
         fatal "The installed Hyprland cannot parse this Tsugumori configuration. No user configuration has been replaced."
     fi
-    ok "Hyprland configuration parsed successfully."
+
+    # Validate the exact effective configuration before deployment. A preserved
+    # user.lua is executable Lua and can fail even when the bundled template is
+    # valid, so place it and the selected installer options in a private copy.
+    candidate_root=$(mktemp -d)
+    mkdir -p "$candidate_root/hypr"
+    cp -a "$CLONE_DIR/config/hypr/." "$candidate_root/hypr/"
+    if [[ -f "$CONFIG_HOME/hypr/user.lua" ]]; then
+        # Dereference only this validation copy. A relative user.lua symlink is
+        # valid at ~/.config/hypr but would point somewhere else from the
+        # private candidate directory. Stash/restore deliberately keeps `cp -a`
+        # so the deployed user-owned symlink itself is preserved.
+        cp -L "$CONFIG_HOME/hypr/user.lua" "$candidate_root/hypr/user.lua"
+    fi
+    write_tsugumori_options "$candidate_root/hypr/tsugumori_options.lua" false
+    candidate_config="$candidate_root/hypr/hyprland.lua"
+
+    if ! XDG_RUNTIME_DIR="$runtime_dir" Hyprland --verify-config --config "$candidate_config"; then
+        rm -rf "$candidate_root"
+        [[ -z "$runtime_tmp" ]] || rm -rf "$runtime_tmp"
+        fatal "Hyprland cannot parse the candidate Lua configuration, including preserved user overrides. No user configuration has been replaced."
+    fi
+
+    rm -rf "$candidate_root"
+    [[ -z "$runtime_tmp" ]] || rm -rf "$runtime_tmp"
+    ok "Bundled and candidate Hyprland Lua configurations parsed successfully."
+}
+
+validate_wallpaper_runtime() {
+    command -v awww >/dev/null || fatal "awww was not installed; the wallpaper picker requires the official awww package."
+    command -v awww-daemon >/dev/null || fatal "awww-daemon was not installed; the wallpaper picker cannot operate without it."
+    ok "Wallpaper client and daemon are installed."
 }
 
 validate_lock_runtime() {
@@ -368,26 +462,29 @@ deploy_configs() {
     find "$CONFIG_HOME/hypr" "$CONFIG_HOME/quickshell" "$CONFIG_HOME/waybar" \
         -type f \( -name '*.sh' -o -name '*.py' \) -exec chmod +x {} + 2>/dev/null || true
 
-    # 5. Create the user override file if it still doesn't exist
+    # 5. Create the Lua user override file if it still doesn't exist
     #    (first-time install, nothing to restore).
-    local user_conf="$CONFIG_HOME/hypr/user.conf"
-    if [[ ! -f "$user_conf" ]]; then
-        cat > "$user_conf" <<'EOF'
-# ═══════════════════════════════════════════════════════════════════
-# Personal Hyprland overrides
-# This file is created empty by the installer and is NEVER overwritten
-# by future updates. Put your monitor configs, custom binds, env vars,
-# theme tweaks, etc. here.
-#
-# Examples:
-#   monitor = DP-1, 2560x1440@144, 0x0, 1
-#   bind    = SUPER, B, exec, firefox
-#   env     = GTK_THEME, Adwaita-dark
-# ═══════════════════════════════════════════════════════════════════
+    local user_lua="$CONFIG_HOME/hypr/user.lua"
+    if [[ ! -f "$user_lua" ]]; then
+        cat > "$user_lua" <<'EOF'
+-- Personal Hyprland Lua overrides.
+--
+-- The installer preserves this file across upgrades. It loads after the
+-- Tsugumori defaults, so later hl.config calls override matching base values.
+-- Replace an existing bind with hl.unbind("KEYS") followed by hl.bind(...).
+--
+-- Examples:
+-- hl.monitor({ output = "DP-1", mode = "2560x1440@144", position = "0x0", scale = 1 })
+-- hl.config({ input = { kb_layout = "us" } })
+-- hl.bind("SUPER + B", hl.dsp.exec_cmd("firefox"))
 EOF
-        ok "Created empty user.conf for your personal overrides."
+        ok "Created user.lua for personal Hyprland overrides."
     else
-        ok "Existing user.conf preserved."
+        ok "Hyprland user.lua is ready; an existing file was preserved when present."
+    fi
+
+    if [[ -f "$CONFIG_HOME/hypr/user.conf" ]]; then
+        warn "Preserved legacy hypr/user.conf; native Lua does not load it."
     fi
 }
 
@@ -426,48 +523,32 @@ warn_legacy_pam() {
     fi
 }
 
-# Patches after copying configs and having wallpapers if applicable (--vm): Quickshell/Kitty + awww first optional background
-apply_vm_software_gl_tweaks_deployed() {
-    $VM_GL_TWEAKS || return 0
-    local h="$CONFIG_HOME/hypr/hyprland.conf"
-    local ucs="$CONFIG_HOME/hypr/user.conf"
+# Render the installer-owned options module atomically, without ever modifying
+# preserved user.lua. Re-rendering false values also removes stale --vm state.
+write_tsugumori_options() {
+    local target="$1"
+    local report_changes="${2:-true}"
+    local vm_software_gl=false boot_wallpaper=false target_dir tmp
 
-    if [[ -f "$h" ]] && grep -qE '^exec-once = env QT_MEDIA_BACKEND=ffmpeg QT_QPA_PLATFORM=wayland QT_WAYLAND_DISABLE_WINDOWDECORATION=1 /usr/bin/qs[[:space:]]*$' "$h" 2>/dev/null; then
-        cp -a "$h" "${h}.bak-vmgl-$(date +%Y%m%d%H%M%S)"
-        sed -i 's|^exec-once = env QT_MEDIA_BACKEND=ffmpeg QT_QPA_PLATFORM=wayland QT_WAYLAND_DISABLE_WINDOWDECORATION=1 /usr/bin/qs$|exec-once = env LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe QT_MEDIA_BACKEND=ffmpeg QT_QPA_PLATFORM=wayland QT_WAYLAND_DISABLE_WINDOWDECORATION=1 /usr/bin/qs|' "$h"
-        ok "Patched hyprland.conf: Quickshell exec-once uses software OpenGL (llvmpipe)."
-    else
-        warn "Could not find default Quickshell exec-once line in hyprland.conf — skip auto-patch (edit manually if needed)."
+    $VM_GL_TWEAKS && vm_software_gl=true
+    $BOOT_WALLPAPER_VM && boot_wallpaper=true
+
+    target_dir=$(dirname -- "$target")
+    mkdir -p "$target_dir"
+    tmp=$(mktemp "$target_dir/.tsugumori_options.lua.XXXXXX")
+    {
+        printf '%s\n' '-- Managed by the Tsugumori installer. Personal settings belong in user.lua.'
+        printf '%s\n' 'return {'
+        printf '    vm_software_gl = %s,\n' "$vm_software_gl"
+        printf '    boot_wallpaper = %s,\n' "$boot_wallpaper"
+        printf '%s\n' '}'
+    } >"$tmp"
+    chmod 644 "$tmp"
+    mv -f "$tmp" "$target"
+
+    if [[ "$report_changes" == "true" ]]; then
+        ok "Prepared installer options: vm_software_gl=$vm_software_gl, boot_wallpaper=$boot_wallpaper."
     fi
-
-    local mark="# tsugumori-install-vm-gl"
-    if [[ -f "$ucs" ]] && ! grep -qF "$mark" "$ucs" 2>/dev/null; then
-        cat >>"$ucs" <<'VMGL'
-
-# tsugumori-install-vm-gl — Kitty + software GL (VirtualBox / limited GPU; Quickshell already patched in hyprland.conf)
-unbind = SUPER, T
-bind = SUPER, T, exec, env LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe KITTY_GPU_DISABLED=1 /usr/bin/kitty
-VMGL
-        ok "Appended Kitty software-GL binds to user.conf."
-    fi
-
-    $BOOT_WALLPAPER_VM || return 0
-    local first
-    first="$(find "$HOME/Pictures/wallpapers" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) 2>/dev/null | sort | head -n1)"
-    if [[ -z "$first" ]]; then
-        warn "No images in ~/Pictures/wallpapers — skipping boot wallpaper exec-once."
-        return 0
-    fi
-    local wb="# tsugumori-install-boot-wallpaper"
-    if [[ -f "$ucs" ]] && grep -qF "$wb" "$ucs" 2>/dev/null; then
-        return 0
-    fi
-    cat >>"$ucs" <<EOF
-
-${wb}
-exec-once = sleep 4 && awww img ${first}
-EOF
-    ok "Added exec-once to apply wallpaper at login: ${first}"
 }
 
 # ─── Shell config (.bashrc with welcome banner) ────────────────────
@@ -565,9 +646,19 @@ finalize() {
         echo "    - VirtualBox/software-GL: from TTY login, prefer: exec start-hyprland"
         echo "      (bare Hyprland prints a warning; start-hyprland sets session properly)."
     fi
-    echo "    2. Customise via ~/.config/hypr/user.conf — never edit hyprland.conf directly unless you know why."
+    echo "    2. Customise via ~/.config/hypr/user.lua — keep personal changes out of hyprland.lua."
     echo "    3. Bashrc personal overrides go in ~/.bashrc.local"
     echo "    4. Wallpapers go in ~/Pictures/wallpapers/ (use SUPER+P to pick one)."
+    if $LEGACY_USER_CONF_ACTIVE; then
+        echo
+        echo "  ${C_BOLD}Legacy Hyprland override reminder:${C_RESET}"
+        echo "    $CONFIG_HOME/hypr/user.conf was preserved but remains dormant under Lua."
+        echo "    Your existing $CONFIG_HOME/hypr/user.lua remains active and was not rewritten."
+        echo "    Translate any remaining settings into user.lua, then archive user.conf."
+        if $BACKUP_OLD; then
+            echo "    Backup copy: $BACKUP_DIR/hypr/user.conf"
+        fi
+    fi
     if [[ -d "$BACKUP_DIR" ]]; then
         echo
         echo "  ${C_BOLD}Backup of your old configs:${C_RESET}"
@@ -582,10 +673,13 @@ finalize() {
 main() {
     preflight
     collect_choices
+    inspect_legacy_user_config
     install_base
     $INSTALL_AUR && bootstrap_aur_helper
     clone_repo
     install_packages
+    validate_wallpaper_runtime
+    write_tsugumori_options "$CLONE_DIR/config/hypr/tsugumori_options.lua"
     validate_lock_runtime
     validate_hyprland_config
     deploy_configs
@@ -593,10 +687,11 @@ main() {
     warn_legacy_pam
     deploy_shell_config
     setup_user_dirs
-    apply_vm_software_gl_tweaks_deployed
     deploy_qshare_symlink
     enable_services
     finalize
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    main "$@"
+fi
