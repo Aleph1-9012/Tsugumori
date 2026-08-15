@@ -13,6 +13,15 @@ Knights of Sidonia-inspired Hyprland, Quickshell, and Waybar for Arch Linux.
 </p>
 <p align="center"><sub>Click the image to watch the full-quality showcase.</sub></p>
 
+
+<img width="2563" height="1598" alt="2026-08-15-122553_hyprshot" src="https://github.com/user-attachments/assets/ae03e598-540b-41f6-8d92-43b77bc7bd2d" />
+<img width="2560" height="1612" alt="2026-08-15-122143_hyprshot" src="https://github.com/user-attachments/assets/6e290d5f-8628-471e-99d9-90cb58182626" />
+<img width="2560" height="1618" alt="2026-08-15-122252_hyprshot" src="https://github.com/user-attachments/assets/b63348dc-3717-4faa-b303-193b1c46cb0a" />
+<img width="2560" height="1602" alt="2026-08-15-122232_hyprshot" src="https://github.com/user-attachments/assets/93c8a56c-46c9-4371-bdd5-331aff5ace7d" />
+
+
+
+
 > [!NOTE]
 > Tsugumori is a credible beta, not a stable release. The installer validates its Hyprland Lua configuration before replacing your existing desktop config and keeps timestamped backups by default.
 
