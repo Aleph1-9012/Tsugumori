@@ -18,6 +18,7 @@ from email.message import Message
 from http import HTTPStatus
 import math
 import os
+import queue
 import re
 import secrets
 import signal
@@ -72,8 +73,11 @@ DEFAULT_MAX_FILES_PER_SESSION = 128
 DEFAULT_UPLOAD_TIMEOUT = 300.0
 DEFAULT_HEADER_TIMEOUT = 15.0
 MAX_UPLOAD_TIMEOUT = min(24 * 60 * 60.0, threading.TIMEOUT_MAX)
+DEFAULT_TRANSFER_TIMEOUT = 300.0
+CLOUDFLARED_STARTUP_TIMEOUT = 30.0
 DEFAULT_MAX_CONNECTIONS = 16
 _UPLOAD_CHUNK_SIZE = 64 * 1024
+_DOWNLOAD_CHUNK_SIZE = 64 * 1024
 _MAX_MULTIPART_HEADER_LINE = 64 * 1024
 
 
@@ -240,32 +244,53 @@ def start_cloudflared(local_port: int) -> tuple[subprocess.Popen, str]:
     url_pattern = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
     public_url: str | None = None
     registered = False
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + CLOUDFLARED_STARTUP_TIMEOUT
+    startup_lines: queue.Queue[str | None] = queue.Queue()
+    startup_complete = threading.Event()
+
+    def _read_output() -> None:
+        # This remains the process's sole stdout reader after startup, when it
+        # switches from forwarding lines to simply draining the pipe.
+        for line in iter(proc.stdout.readline, ""):
+            if not startup_complete.is_set():
+                startup_lines.put(line)
+        if not startup_complete.is_set():
+            startup_lines.put(None)
+
+    threading.Thread(target=_read_output, daemon=True).start()
 
     print(f"{ANSI_DIM}Démarrage du tunnel Cloudflare…{ANSI_RESET}")
-    while time.monotonic() < deadline:
-        line = proc.stdout.readline()
-        if not line:
-            if proc.poll() is not None:
-                sys.exit("cloudflared s'est arrêté avant d'établir le tunnel.")
-            continue
+    failure = "Impossible d'établir le tunnel Cloudflare (timeout)."
+    while not (public_url and registered):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        try:
+            line = startup_lines.get(timeout=remaining)
+        except queue.Empty:
+            break
+        if line is None:
+            failure = "cloudflared s'est arrêté avant d'établir le tunnel."
+            break
         if not public_url:
             m = url_pattern.search(line)
             if m:
                 public_url = m.group(0)
         if "Registered tunnel connection" in line:
             registered = True
-        if public_url and registered:
-            break
 
-    if not public_url:
+    if not (public_url and registered):
+        startup_complete.set()
         proc.terminate()
-        sys.exit("Impossible de récupérer l'URL du tunnel (timeout).")
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        _CHILD_PROCESSES.discard(proc)
+        sys.exit(failure)
 
-    def _drain():
-        for _ in iter(proc.stdout.readline, ""):
-            pass
-    threading.Thread(target=_drain, daemon=True).start()
+    startup_complete.set()
     return proc, public_url
 
 
@@ -430,6 +455,60 @@ class SendHandler(BaseHTTPRequestHandler):
     keep_alive: bool = False
     done_event: threading.Event = None  # type: ignore[assignment]
     events: EventLog = None  # type: ignore[assignment]
+    transfer_timeout: float = DEFAULT_TRANSFER_TIMEOUT
+    header_timeout: float = DEFAULT_HEADER_TIMEOUT
+
+    def setup(self) -> None:
+        # Bound both the HTTP header phase and the complete download from the
+        # instant this request starts.
+        self.timeout = min(self.header_timeout, self.transfer_timeout)
+        self._header_timer_lock = threading.Lock()
+        self._header_timer: threading.Timer | None = None
+        self._reading_headers = False
+        self._request_deadline = time.monotonic() + self.transfer_timeout
+        super().setup()
+
+    def handle_one_request(self) -> None:
+        self._start_header_deadline()
+        try:
+            super().handle_one_request()
+        finally:
+            self._finish_header_deadline()
+
+    def parse_request(self) -> bool:
+        try:
+            return super().parse_request()
+        finally:
+            self._finish_header_deadline()
+
+    def _start_header_deadline(self) -> None:
+        header_timeout = min(self.header_timeout, self.transfer_timeout)
+        self.connection.settimeout(header_timeout)
+        self._request_deadline = time.monotonic() + self.transfer_timeout
+        timer = threading.Timer(header_timeout, self._expire_header_read)
+        timer.daemon = True
+        with self._header_timer_lock:
+            self._reading_headers = True
+            self._header_timer = timer
+        timer.start()
+
+    def _finish_header_deadline(self) -> None:
+        with self._header_timer_lock:
+            self._reading_headers = False
+            timer = self._header_timer
+            self._header_timer = None
+        if timer is not None:
+            timer.cancel()
+
+    def _expire_header_read(self) -> None:
+        with self._header_timer_lock:
+            if not self._reading_headers:
+                return
+            self._reading_headers = False
+        try:
+            self.connection.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
 
     def log_message(self, fmt, *args):
         print(f"{ANSI_DIM}[{self.address_string()}] {fmt % args}{ANSI_RESET}")
@@ -437,14 +516,27 @@ class SendHandler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         if f"/{self.token}/" not in self.path:
             self.send_error(404); return
-        size = self.file_path.stat().st_size
-        self.send_response(200)
-        self.send_header("Content-Type", "application/octet-stream")
-        self.send_header("Content-Length", str(size))
-        self.send_header("Content-Disposition", f'attachment; filename="{quote(self.file_name)}"')
-        self.end_headers()
-        with open(self.file_path, "rb") as f:
-            shutil.copyfileobj(f, self.wfile)
+        try:
+            size = self.file_path.stat().st_size
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(size))
+            self.send_header("Content-Disposition", f'attachment; filename="{quote(self.file_name)}"')
+            self.end_headers()
+            with open(self.file_path, "rb") as f:
+                while chunk := f.read(_DOWNLOAD_CHUNK_SIZE):
+                    remaining = self._request_deadline - time.monotonic()
+                    if remaining <= 0:
+                        raise TimeoutError("download deadline exceeded")
+                    self.connection.settimeout(remaining)
+                    self.wfile.write(chunk)
+                    if time.monotonic() > self._request_deadline:
+                        raise TimeoutError("download deadline exceeded")
+        except OSError:
+            # A failed client must not complete a one-shot session. Closing
+            # only this connection leaves the server available for a retry.
+            self.close_connection = True
+            return
         print(f"{ANSI_FG}{ANSI_BOLD}✓ {self.file_name} envoyé{ANSI_RESET}")
         if self.events:
             self.events.emit(f"TICK {self.file_name}")
@@ -914,6 +1006,7 @@ def cmd_send(args: argparse.Namespace) -> None:
     SendHandler.keep_alive = args.keep_alive
     SendHandler.done_event = threading.Event()
     SendHandler.events = events
+    SendHandler.transfer_timeout = args.transfer_timeout
 
     preferred = args.port or (8080 if args.tunnel else 0)
     server, port = _start_server_with_port(SendHandler, preferred)
@@ -1057,6 +1150,15 @@ def main() -> None:
 
     sp_send = sub.add_parser("send", parents=[common])
     sp_send.add_argument("paths", nargs="+")
+    sp_send.add_argument(
+        "--transfer-timeout",
+        type=_positive_float,
+        default=DEFAULT_TRANSFER_TIMEOUT,
+        help=(
+            "Délai maximal d'un téléchargement en secondes "
+            f"(défaut : {DEFAULT_TRANSFER_TIMEOUT:g}, maximum : {MAX_UPLOAD_TIMEOUT:g})"
+        ),
+    )
     sp_send.set_defaults(func=cmd_send)
 
     sp_recv = sub.add_parser("recv", parents=[common])
