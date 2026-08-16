@@ -398,15 +398,27 @@ install_pinned_from_archive() {
 # wipes the managed dirs. They will be restored AFTER the copy.
 stash_preserved_files() {
     PRESERVED_STASH=$(mktemp -d)
-    local count=0
+    local count=0 rel
     for rel in "${PRESERVED_FILES[@]}"; do
         local src="$CONFIG_HOME/$rel"
-        if [[ -f "$src" ]]; then
-            local stash="$PRESERVED_STASH/$rel"
-            mkdir -p "$(dirname "$stash")"
-            cp -a "$src" "$stash"
-            count=$((count + 1))
+        local stash="$PRESERVED_STASH/$rel"
+
+        # Test symlinks lexically before testing their target. A relative link
+        # copied into the private stash is normally dangling there, but `cp -a`
+        # still preserves the exact link text for restoration. Reject links
+        # that are already dangling, or resolve to anything except a regular
+        # file, before deploy_configs replaces any managed directory.
+        if [[ -L "$src" ]]; then
+            [[ -f "$src" ]] || fatal "Preserved path is a dangling symlink or does not resolve to a regular file: $src"
+        elif [[ ! -e "$src" ]]; then
+            continue
+        elif [[ ! -f "$src" ]]; then
+            fatal "Preserved path is not a regular file: $src"
         fi
+
+        mkdir -p "$(dirname "$stash")"
+        cp -a -- "$src" "$stash"
+        count=$((count + 1))
     done
     if (( count > 0 )); then
         ok "Preserved $count user file(s) for restoration after install."
@@ -416,12 +428,18 @@ stash_preserved_files() {
 # Restore preserved files (overwrites whatever the repo copy put in their place).
 restore_preserved_files() {
     [[ -z "$PRESERVED_STASH" || ! -d "$PRESERVED_STASH" ]] && return 0
+    local rel
     for rel in "${PRESERVED_FILES[@]}"; do
         local stash="$PRESERVED_STASH/$rel"
         local dest="$CONFIG_HOME/$rel"
-        if [[ -f "$stash" ]]; then
+        # A stashed relative symlink can be dangling until it returns to its
+        # original directory, so recognize the link object with -L. Remove the
+        # freshly installed template first to avoid destination-dependent cp
+        # behavior and then restore the preserved entry verbatim.
+        if [[ -L "$stash" || -f "$stash" ]]; then
             mkdir -p "$(dirname "$dest")"
-            cp -a "$stash" "$dest"
+            rm -f -- "$dest"
+            cp -a -- "$stash" "$dest"
             ok "Restored user file: $rel"
         fi
     done

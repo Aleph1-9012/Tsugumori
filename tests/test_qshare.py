@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
 import io
 from pathlib import Path
@@ -10,6 +10,7 @@ import threading
 import time
 import types
 import unittest
+from unittest import mock
 
 
 QSHARE_PATH = (
@@ -129,6 +130,33 @@ class MemoryConnection:
         released = getattr(self.input, "released", None)
         if released is not None:
             released.set()
+
+
+class DownloadConnection(MemoryConnection):
+    """Record bounded response-body writes and optionally time them out."""
+
+    def __init__(self, request: bytes, *, stall_body: bool = False):
+        super().__init__(request)
+        self.stall_body = stall_body
+        self.headers_sent = False
+        self.body_write_sizes: list[int] = []
+
+    def sendall(self, data: bytes) -> None:
+        if self.headers_sent:
+            self.body_write_sizes.append(len(data))
+            if self.stall_body:
+                raise socket.timeout("simulated stalled download")
+        super().sendall(data)
+        if b"\r\n\r\n" in self.output:
+            self.headers_sent = True
+
+
+class RecordingEvents:
+    def __init__(self):
+        self.lines: list[str] = []
+
+    def emit(self, line: str) -> None:
+        self.lines.append(line)
 
 
 def run_handler(
@@ -360,6 +388,90 @@ class QuickshareReceiveTests(unittest.TestCase):
         self.assertEqual((self.output / "saved.bin").read_bytes(), b"saved")
 
 
+class QuickshareSendTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tempdir = tempfile.TemporaryDirectory(prefix="tsugumori-qshare-send-")
+        self.root = Path(self.tempdir.name)
+        self.payload = self.root / "payload.bin"
+        self.payload.write_bytes(b"x" * (qshare._DOWNLOAD_CHUNK_SIZE + 17))
+
+    def tearDown(self) -> None:
+        self.tempdir.cleanup()
+
+    def handler(
+        self,
+        *,
+        transfer_timeout: float = 0.5,
+        header_timeout: float = qshare.DEFAULT_HEADER_TIMEOUT,
+        events=None,
+    ):
+        payload = self.payload
+
+        class Handler(qshare.SendHandler):
+            file_path = payload
+            file_name = payload.name
+            token = "test-token"
+            keep_alive = False
+            done_event = threading.Event()
+
+            def log_message(self, _fmt, *_args):
+                pass
+
+        Handler.transfer_timeout = transfer_timeout
+        Handler.header_timeout = header_timeout
+        Handler.events = events
+        return Handler
+
+    @staticmethod
+    def request() -> bytes:
+        return (
+            b"GET /test-token/payload.bin HTTP/1.1\r\n"
+            b"Host: qshare.test\r\nConnection: close\r\n\r\n"
+        )
+
+    def test_partial_headers_hit_absolute_deadline_without_completing(self) -> None:
+        events = RecordingEvents()
+        handler = self.handler(
+            transfer_timeout=5, header_timeout=0.05, events=events
+        )
+        blocked = BlockingInput()
+        connection = MemoryConnection(input_stream=blocked)
+
+        started = time.monotonic()
+        handler(connection, ("memory", 0), types.SimpleNamespace())
+        elapsed = time.monotonic() - started
+
+        self.assertLess(elapsed, 0.5)
+        self.assertEqual(connection.shutdown_calls, 1)
+        self.assertFalse(handler.done_event.is_set())
+        self.assertEqual(events.lines, [])
+
+    def test_stalled_download_can_retry_and_uses_bounded_chunks(self) -> None:
+        events = RecordingEvents()
+        handler = self.handler(events=events)
+        stalled = DownloadConnection(self.request(), stall_body=True)
+
+        handler(stalled, ("memory", 0), types.SimpleNamespace())
+
+        self.assertFalse(handler.done_event.is_set())
+        self.assertEqual(events.lines, [])
+        self.assertEqual(stalled.body_write_sizes, [qshare._DOWNLOAD_CHUNK_SIZE])
+
+        retry = DownloadConnection(self.request())
+        handler(retry, ("memory", 0), types.SimpleNamespace())
+
+        self.assertTrue(handler.done_event.is_set())
+        self.assertEqual(
+            events.lines,
+            [f"TICK {self.payload.name}", "DONE"],
+        )
+        self.assertEqual(
+            retry.body_write_sizes,
+            [qshare._DOWNLOAD_CHUNK_SIZE, 17],
+        )
+        self.assertTrue(bytes(retry.output).endswith(self.payload.read_bytes()))
+
+
 class QuickshareCliTests(unittest.TestCase):
     def test_upload_timeout_must_be_positive_and_finite(self) -> None:
         self.assertEqual(qshare._positive_float("0.5"), 0.5)
@@ -377,6 +489,107 @@ class QuickshareCliTests(unittest.TestCase):
             with self.subTest(value=value):
                 with self.assertRaises(qshare.argparse.ArgumentTypeError):
                     qshare._positive_float(value)
+
+
+class QuickshareCloudflareTests(unittest.TestCase):
+    def test_silent_startup_obeys_deadline_and_reaps_process(self) -> None:
+        class SilentStdout:
+            def __init__(self):
+                self.released = threading.Event()
+
+            def readline(self) -> str:
+                self.released.wait(1)
+                return ""
+
+        class SilentProcess:
+            def __init__(self):
+                self.stdout = SilentStdout()
+                self.terminated = False
+                self.reaped = False
+
+            def terminate(self) -> None:
+                self.terminated = True
+                self.stdout.released.set()
+
+            def wait(self, timeout=None) -> int:
+                self.reaped = True
+                return -15
+
+            def kill(self) -> None:
+                self.stdout.released.set()
+
+            def poll(self):
+                return -15 if self.terminated else None
+
+        proc = SilentProcess()
+        started = time.monotonic()
+        with (
+            mock.patch.object(qshare.shutil, "which", return_value="/usr/bin/cloudflared"),
+            mock.patch.object(qshare.subprocess, "Popen", return_value=proc),
+            mock.patch.object(qshare, "CLOUDFLARED_STARTUP_TIMEOUT", 0.05),
+            redirect_stdout(io.StringIO()),
+            self.assertRaises(SystemExit),
+        ):
+            qshare.start_cloudflared(8080)
+        elapsed = time.monotonic() - started
+
+        self.assertLess(elapsed, 0.5)
+        self.assertTrue(proc.terminated)
+        self.assertTrue(proc.reaped)
+        self.assertNotIn(proc, qshare._CHILD_PROCESSES)
+
+    def test_success_uses_one_reader_that_continues_draining(self) -> None:
+        class SequenceStdout:
+            def __init__(self):
+                self.lines = iter(
+                    [
+                        "https://example.trycloudflare.com\n",
+                        "Registered tunnel connection\n",
+                        "post-startup diagnostic\n",
+                        "",
+                    ]
+                )
+                self.calls = 0
+
+            def readline(self) -> str:
+                self.calls += 1
+                return next(self.lines)
+
+        class RunningProcess:
+            def __init__(self):
+                self.stdout = SequenceStdout()
+
+            def poll(self):
+                return None
+
+            def terminate(self) -> None:
+                pass
+
+        proc = RunningProcess()
+        created_threads = []
+        real_thread = threading.Thread
+
+        def recording_thread(*args, **kwargs):
+            thread = real_thread(*args, **kwargs)
+            created_threads.append(thread)
+            return thread
+
+        try:
+            with (
+                mock.patch.object(qshare.shutil, "which", return_value="/usr/bin/cloudflared"),
+                mock.patch.object(qshare.subprocess, "Popen", return_value=proc),
+                mock.patch.object(qshare.threading, "Thread", side_effect=recording_thread),
+                redirect_stdout(io.StringIO()),
+            ):
+                returned, url = qshare.start_cloudflared(8080)
+
+            created_threads[0].join(0.5)
+            self.assertIs(returned, proc)
+            self.assertEqual(url, "https://example.trycloudflare.com")
+            self.assertEqual(len(created_threads), 1)
+            self.assertEqual(proc.stdout.calls, 4)
+        finally:
+            qshare._CHILD_PROCESSES.discard(proc)
 
 
 class QuickshareServerTests(unittest.TestCase):

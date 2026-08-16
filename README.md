@@ -64,12 +64,12 @@ conflict; fresh installations use Arch's `quickshell` package.
 
 ## Release status
 
-`v0.1.0` is Tsugumori's first public beta, not a stable release. A clean Arch VM
-installation completed on 2026-08-15 with official Quickshell 0.3.0-2 and
-Hyprland 0.56.2-1; the feature-complete candidate passed all 48 tests and the
-required Hyprland/QML integration checks there. The release tree is also covered
-by the same required Arch checks in GitHub Actions. See the
-[`v0.1.0` release notes](RELEASE_NOTES.md) for known limitations.
+`v0.1.1` is a targeted safety hotfix for Tsugumori's public beta, not a stable
+release. It hardens installer override preservation and adds bounded Quickshare
+send and Cloudflare-tunnel startup deadlines. The focused installer and
+Quickshare test suites cover the hotfix locally, while the complete release tree
+remains gated by the required Arch checks in GitHub Actions. See the
+[`v0.1.1` release notes](RELEASE_NOTES.md) for known limitations.
 
 ## Control Center
 
@@ -92,6 +92,9 @@ A NieR:Automata-style radial menu with Knights of Sidonia theme accessible via `
   - Pick files via a floating Yazi instance and share them over the local network
   - Scan a tokenized QR code from a phone to send or receive files
   - Optionally expose a temporary HTTPS Cloudflare tunnel for remote transfers
+  - Send mode uses a fixed 15-second absolute request-header deadline and a
+    five-minute absolute download deadline by default. Use
+    `qshare send --transfer-timeout SECONDS` to adjust the download deadline.
   - Receive mode defaults to a 1 GiB request limit, 4 GiB cumulative session
     limit, 32 files per request, 128 files per session, at most 16 active
     connections, a request-header deadline capped at 15 seconds, and a

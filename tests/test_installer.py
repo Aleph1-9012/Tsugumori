@@ -261,6 +261,90 @@ class InstallerLuaMigrationTests(unittest.TestCase):
         self.assertIn("settings=preserved-settings\n", result.stdout)
         self.assertIn("managed=managed-config\n", result.stdout)
 
+    def test_deploy_preserves_exact_relative_symlinks_for_all_user_files(self) -> None:
+        custom_dir = self.config_home / "custom"
+        custom_dir.mkdir()
+        targets = {
+            "hypr/user.lua": ("../custom/user.lua", "preserved-lua\n"),
+            "hypr/user.conf": ("../custom/user.conf", "preserved-legacy\n"),
+            "quickshell/settings/Settings.qml": (
+                "../../custom/Settings.qml",
+                "preserved-settings\n",
+            ),
+        }
+        for _, (link_text, contents) in targets.items():
+            target = (custom_dir / Path(link_text).name)
+            target.write_text(contents, encoding="utf-8")
+
+        hypr_dir = self.config_home / "hypr"
+        settings_dir = self.config_home / "quickshell/settings"
+        hypr_dir.mkdir()
+        settings_dir.mkdir(parents=True)
+        for rel, (link_text, _) in targets.items():
+            (self.config_home / rel).symlink_to(link_text)
+
+        result = self.run_installer_shell(
+            """
+            mkdir -p "$CLONE_DIR/config/hypr" "$CLONE_DIR/config/quickshell/settings"
+            printf '%s\n' 'managed-config' >"$CLONE_DIR/config/hypr/hyprland.lua"
+            printf '%s\n' 'bundled-user' >"$CLONE_DIR/config/hypr/user.lua"
+            printf '%s\n' 'return {}' >"$CLONE_DIR/config/hypr/tsugumori_options.lua"
+            printf '%s\n' 'bundled-settings' >"$CLONE_DIR/config/quickshell/settings/Settings.qml"
+            BACKUP_OLD=false
+            deploy_configs
+            """
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for rel, (link_text, contents) in targets.items():
+            with self.subTest(rel=rel):
+                restored = self.config_home / rel
+                self.assertTrue(restored.is_symlink())
+                self.assertEqual(os.readlink(restored), link_text)
+                self.assertEqual(restored.read_text(encoding="utf-8"), contents)
+
+    def assert_unsafe_preserved_symlink_fails_before_replacement(
+        self, link_text: str
+    ) -> subprocess.CompletedProcess[str]:
+        hypr_dir = self.config_home / "hypr"
+        hypr_dir.mkdir(parents=True)
+        managed = hypr_dir / "hyprland.lua"
+        managed.write_text("original-config\n", encoding="utf-8")
+        (hypr_dir / "user.lua").symlink_to(link_text)
+
+        result = self.run_installer_shell(
+            """
+            mkdir -p "$CLONE_DIR/config/hypr"
+            printf '%s\n' 'replacement-config' >"$CLONE_DIR/config/hypr/hyprland.lua"
+            printf '%s\n' 'bundled-user' >"$CLONE_DIR/config/hypr/user.lua"
+            printf '%s\n' 'return {}' >"$CLONE_DIR/config/hypr/tsugumori_options.lua"
+            BACKUP_OLD=false
+            deploy_configs
+            """
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(managed.read_text(encoding="utf-8"), "original-config\n")
+        self.assertTrue((hypr_dir / "user.lua").is_symlink())
+        self.assertEqual(os.readlink(hypr_dir / "user.lua"), link_text)
+        return result
+
+    def test_dangling_preserved_symlink_fails_before_config_replacement(self) -> None:
+        result = self.assert_unsafe_preserved_symlink_fails_before_replacement(
+            "../missing-user.lua"
+        )
+
+        self.assertIn("dangling symlink", result.stderr)
+
+    def test_preserved_symlink_to_directory_fails_before_config_replacement(self) -> None:
+        directory_target = self.config_home / "custom-directory"
+        directory_target.mkdir()
+        result = self.assert_unsafe_preserved_symlink_fails_before_replacement(
+            "../custom-directory"
+        )
+
+        self.assertIn("does not resolve to a regular file", result.stderr)
+
     def run_fake_validation(
         self,
         user_source: str,
