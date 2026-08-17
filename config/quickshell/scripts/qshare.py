@@ -517,19 +517,24 @@ class SendHandler(BaseHTTPRequestHandler):
         if f"/{self.token}/" not in self.path:
             self.send_error(404); return
         try:
-            size = self.file_path.stat().st_size
-            self.send_response(200)
-            self.send_header("Content-Type", "application/octet-stream")
-            self.send_header("Content-Length", str(size))
-            self.send_header("Content-Disposition", f'attachment; filename="{quote(self.file_name)}"')
-            self.end_headers()
-            with open(self.file_path, "rb") as f:
-                while chunk := f.read(_DOWNLOAD_CHUNK_SIZE):
-                    remaining = self._request_deadline - time.monotonic()
-                    if remaining <= 0:
+            with open(self.file_path, "rb", buffering=0) as source:
+                size = os.fstat(source.fileno()).st_size
+                remaining = size
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Content-Length", str(size))
+                self.send_header("Content-Disposition", f'attachment; filename="{quote(self.file_name)}"')
+                self.end_headers()
+                while remaining > 0:
+                    chunk = source.read(min(_DOWNLOAD_CHUNK_SIZE, remaining))
+                    if not chunk:
+                        raise OSError("source ended before advertised length")
+                    timeout = self._request_deadline - time.monotonic()
+                    if timeout <= 0:
                         raise TimeoutError("download deadline exceeded")
-                    self.connection.settimeout(remaining)
+                    self.connection.settimeout(timeout)
                     self.wfile.write(chunk)
+                    remaining -= len(chunk)
                     if time.monotonic() > self._request_deadline:
                         raise TimeoutError("download deadline exceeded")
         except OSError:

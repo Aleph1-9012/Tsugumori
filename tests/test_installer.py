@@ -303,6 +303,188 @@ class InstallerLuaMigrationTests(unittest.TestCase):
                 self.assertEqual(os.readlink(restored), link_text)
                 self.assertEqual(restored.read_text(encoding="utf-8"), contents)
 
+    def test_external_target_shared_with_managed_alias_survives(self) -> None:
+        external_kitty = self.root / "external-kitty"
+        external_kitty.mkdir()
+        target = external_kitty / "user.lua"
+        target.write_text("external-user\n", encoding="utf-8")
+
+        hypr_dir = self.config_home / "hypr"
+        hypr_dir.mkdir()
+        preserved = hypr_dir / "user.lua"
+        preserved.symlink_to(target)
+        kitty_alias = self.config_home / "kitty"
+        kitty_alias.symlink_to("../external-kitty", target_is_directory=True)
+
+        result = self.run_installer_shell(
+            """
+            mkdir -p "$CLONE_DIR/config/hypr" "$CLONE_DIR/config/kitty"
+            printf '%s\n' 'managed-config' >"$CLONE_DIR/config/hypr/hyprland.lua"
+            printf '%s\n' 'bundled-user' >"$CLONE_DIR/config/hypr/user.lua"
+            printf '%s\n' 'return {}' >"$CLONE_DIR/config/hypr/tsugumori_options.lua"
+            printf '%s\n' 'managed-kitty' >"$CLONE_DIR/config/kitty/kitty.conf"
+            BACKUP_OLD=false
+            deploy_configs
+            """
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(preserved.is_symlink())
+        self.assertEqual(os.readlink(preserved), str(target))
+        self.assertEqual(preserved.read_text(encoding="utf-8"), "external-user\n")
+        self.assertEqual(target.read_text(encoding="utf-8"), "external-user\n")
+        self.assertFalse(kitty_alias.is_symlink())
+        self.assertEqual(
+            (kitty_alias / "kitty.conf").read_text(encoding="utf-8"),
+            "managed-kitty\n",
+        )
+
+    def test_path_is_within_requires_a_path_component_boundary(self) -> None:
+        result = self.run_installer_shell(
+            """
+            root="$CONFIG_HOME/hypr"
+            path_is_within "$root" "$root"
+            path_is_within "$root/user.lua" "$root"
+            ! path_is_within "$CONFIG_HOME/hypr-old/user.lua" "$root"
+            path_is_within "/" "/"
+            path_is_within "/etc/file" "/"
+            """
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_managed_path_symlink_dependencies_fail_before_deployment(self) -> None:
+        cases = (
+            (
+                "same-managed-directory",
+                "hypr/user.lua",
+                "local-user.lua",
+                "direct",
+            ),
+            (
+                "cross-managed-directory",
+                "hypr/user.conf",
+                "../quickshell/local-user.conf",
+                "direct",
+            ),
+            (
+                "managed-intermediate-link",
+                "quickshell/settings/Settings.qml",
+                "../settings-source.qml",
+                "intermediate",
+            ),
+            (
+                "outside-alias-into-managed-directory",
+                "hypr/user.lua",
+                "../outside-alias/aliased-user.lua",
+                "outside-alias",
+            ),
+            (
+                "outside-through-managed-link-to-external-target",
+                "hypr/user.lua",
+                "../outside-chain/user.lua",
+                "outside-managed-outside",
+            ),
+            (
+                "managed-root-alias-changes-relative-link-anchor",
+                "hypr/user.lua",
+                "../external-user.lua",
+                "managed-root-alias",
+            ),
+        )
+
+        for name, preserved_rel, link_text, setup_kind in cases:
+            with self.subTest(case=name):
+                case_root = self.root / name
+                config_home = case_root / "config"
+                hypr_dir = config_home / "hypr"
+                settings_dir = config_home / "quickshell/settings"
+                if setup_kind == "managed-root-alias":
+                    external_hypr = case_root / "external-hypr"
+                    external_hypr.mkdir(parents=True)
+                    config_home.mkdir()
+                    hypr_dir.symlink_to("../external-hypr", target_is_directory=True)
+                else:
+                    hypr_dir.mkdir(parents=True)
+                settings_dir.mkdir(parents=True)
+
+                sentinel = hypr_dir / "managed-sentinel"
+                sentinel.write_bytes(b"original-managed-state\n")
+                if setup_kind == "intermediate":
+                    target = config_home / "external/Settings.qml"
+                    target.parent.mkdir()
+                    intermediate = config_home / "quickshell/settings-source.qml"
+                    intermediate.symlink_to("../external/Settings.qml")
+                elif setup_kind == "outside-alias":
+                    target = hypr_dir / "aliased-user.lua"
+                    alias = config_home / "outside-alias"
+                    alias.symlink_to("hypr", target_is_directory=True)
+                elif setup_kind == "outside-managed-outside":
+                    target = case_root / "external/user.lua"
+                    target.parent.mkdir()
+                    managed_bridge = hypr_dir / "bridge"
+                    managed_bridge.symlink_to(
+                        "../../external", target_is_directory=True
+                    )
+                    alias = config_home / "outside-chain"
+                    alias.symlink_to("hypr/bridge", target_is_directory=True)
+                elif setup_kind == "managed-root-alias":
+                    target = case_root / "external-user.lua"
+                else:
+                    target = (config_home / preserved_rel).parent / link_text
+                    target = target.resolve(strict=False)
+
+                target.write_bytes(f"target-for-{name}\n".encode())
+                preserved = config_home / preserved_rel
+                preserved.parent.mkdir(parents=True, exist_ok=True)
+                preserved.symlink_to(link_text)
+
+                original_sentinel = sentinel.read_bytes()
+                original_target = target.read_bytes()
+                original_link_text = os.readlink(preserved)
+                result = self.run_installer_shell(
+                    """
+                    mkdir -p "$CLONE_DIR/config/hypr" "$CLONE_DIR/config/quickshell/settings"
+                    printf '%s\n' 'replacement-config' >"$CLONE_DIR/config/hypr/hyprland.lua"
+                    printf '%s\n' 'bundled-user' >"$CLONE_DIR/config/hypr/user.lua"
+                    printf '%s\n' 'return {}' >"$CLONE_DIR/config/hypr/tsugumori_options.lua"
+                    printf '%s\n' 'bundled-settings' >"$CLONE_DIR/config/quickshell/settings/Settings.qml"
+                    BACKUP_OLD=false
+                    deploy_configs
+                    """,
+                    extra_env={"XDG_CONFIG_HOME": str(config_home)},
+                )
+
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(str(preserved), result.stderr)
+                self.assertIn(link_text, result.stderr)
+                self.assertIn("deployment would remove", result.stderr)
+                self.assertIn("Move the target outside", result.stderr)
+                self.assertEqual(sentinel.read_bytes(), original_sentinel)
+                self.assertTrue(preserved.is_symlink())
+                self.assertEqual(os.readlink(preserved), original_link_text)
+                self.assertEqual(target.read_bytes(), original_target)
+                if setup_kind == "intermediate":
+                    self.assertTrue(intermediate.is_symlink())
+                    self.assertEqual(
+                        os.readlink(intermediate), "../external/Settings.qml"
+                    )
+                elif setup_kind == "outside-alias":
+                    self.assertTrue(alias.is_symlink())
+                    self.assertEqual(os.readlink(alias), "hypr")
+                elif setup_kind == "outside-managed-outside":
+                    self.assertTrue(alias.is_symlink())
+                    self.assertEqual(os.readlink(alias), "hypr/bridge")
+                    self.assertTrue(managed_bridge.is_symlink())
+                    self.assertEqual(os.readlink(managed_bridge), "../../external")
+                elif setup_kind == "managed-root-alias":
+                    self.assertTrue(hypr_dir.is_symlink())
+                    self.assertEqual(os.readlink(hypr_dir), "../external-hypr")
+                if preserved_rel != "hypr/user.lua":
+                    user_lua = hypr_dir / "user.lua"
+                    self.assertFalse(user_lua.exists())
+                    self.assertFalse(user_lua.is_symlink())
+
     def assert_unsafe_preserved_symlink_fails_before_replacement(
         self, link_text: str
     ) -> subprocess.CompletedProcess[str]:
@@ -344,6 +526,29 @@ class InstallerLuaMigrationTests(unittest.TestCase):
         )
 
         self.assertIn("does not resolve to a regular file", result.stderr)
+
+    def test_preflight_rejects_incompatible_realpath_before_sudo(self) -> None:
+        sudo_log = self.root / "sudo.log"
+        self.write_executable("pacman", "#!/bin/sh\nexit 0\n")
+        self.write_executable("curl", "#!/bin/sh\nexit 0\n")
+        self.write_executable(
+            "sudo",
+            """
+            #!/bin/sh
+            printf 'called\n' >"$FAKE_SUDO_LOG"
+            exit 99
+            """,
+        )
+        self.write_executable("realpath", "#!/bin/sh\nexit 64\n")
+
+        result = self.run_installer_shell(
+            f'PATH="{self.fake_bin}"\npreflight\n',
+            extra_env={"FAKE_SUDO_LOG": str(sudo_log)},
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("GNU realpath with --canonicalize-missing", result.stderr)
+        self.assertFalse(sudo_log.exists())
 
     def run_fake_validation(
         self,

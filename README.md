@@ -64,12 +64,14 @@ conflict; fresh installations use Arch's `quickshell` package.
 
 ## Release status
 
-`v0.1.1` is a targeted safety hotfix for Tsugumori's public beta, not a stable
-release. It hardens installer override preservation and adds bounded Quickshare
-send and Cloudflare-tunnel startup deadlines. The focused installer and
-Quickshare test suites cover the hotfix locally, while the complete release tree
-remains gated by the required Arch checks in GitHub Actions. See the
-[`v0.1.1` release notes](RELEASE_NOTES.md) for known limitations.
+`v0.1.2` is a narrow safety hotfix for Tsugumori's public beta, not a stable
+release. It makes the installer reject preserved symlinks that depend on paths
+deployment will replace, and makes Quickshare sends deliver exactly the bytes
+advertised from the opened source file before reporting success. The focused
+installer and Quickshare test suites cover the blocker regressions locally,
+while the complete release tree remains gated by the required Arch checks in
+GitHub Actions. See the [`v0.1.2` release notes](RELEASE_NOTES.md) for known
+limitations.
 
 ## Control Center
 
