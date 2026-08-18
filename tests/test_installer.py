@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -44,11 +45,22 @@ class InstallerLuaMigrationTests(unittest.TestCase):
         body: str,
         *,
         extra_env: dict[str, str] | None = None,
+        drop_root_privileges: bool = False,
     ) -> subprocess.CompletedProcess[str]:
         env = self.env.copy()
         if extra_env:
             env.update(extra_env)
         script = 'source "$INSTALLER_UNDER_TEST"\n' + textwrap.dedent(body)
+        identity: dict[str, object] = {}
+        if drop_root_privileges and os.geteuid() == 0:
+            # GitHub's Arch container runs as root, while the installer requires
+            # a normal user. Let this preflight test exercise the next guard.
+            self.root.chmod(0o755)
+            installer_copy = self.root / "install.sh"
+            shutil.copyfile(INSTALLER, installer_copy)
+            installer_copy.chmod(0o644)
+            env["INSTALLER_UNDER_TEST"] = str(installer_copy)
+            identity = {"user": 65534, "group": 65534, "extra_groups": []}
         return subprocess.run(
             ["/usr/bin/bash", "-c", script],
             env=env,
@@ -56,6 +68,7 @@ class InstallerLuaMigrationTests(unittest.TestCase):
             text=True,
             capture_output=True,
             check=False,
+            **identity,
         )
 
     def write_executable(self, name: str, source: str) -> None:
@@ -528,7 +541,10 @@ class InstallerLuaMigrationTests(unittest.TestCase):
         self.assertIn("does not resolve to a regular file", result.stderr)
 
     def test_preflight_rejects_incompatible_realpath_before_sudo(self) -> None:
-        sudo_log = self.root / "sudo.log"
+        sudo_log_dir = self.root / "sudo-log"
+        sudo_log_dir.mkdir()
+        sudo_log_dir.chmod(0o777)
+        sudo_log = sudo_log_dir / "calls"
         self.write_executable("pacman", "#!/bin/sh\nexit 0\n")
         self.write_executable("curl", "#!/bin/sh\nexit 0\n")
         self.write_executable(
@@ -544,6 +560,7 @@ class InstallerLuaMigrationTests(unittest.TestCase):
         result = self.run_installer_shell(
             f'PATH="{self.fake_bin}"\npreflight\n',
             extra_env={"FAKE_SUDO_LOG": str(sudo_log)},
+            drop_root_privileges=True,
         )
 
         self.assertNotEqual(result.returncode, 0)
