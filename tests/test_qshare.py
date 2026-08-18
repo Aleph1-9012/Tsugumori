@@ -65,9 +65,19 @@ def request_bytes(
     return b"\r\n".join(headers) + b"\r\n\r\n" + body
 
 
+def parse_response(response: bytes) -> tuple[int, dict[str, str], bytes]:
+    head, body = response.split(b"\r\n\r\n", 1)
+    lines = head.split(b"\r\n")
+    status = int(lines[0].split(b" ", 2)[1])
+    headers = {}
+    for line in lines[1:]:
+        name, value = line.split(b":", 1)
+        headers[name.decode("ascii").lower()] = value.decode("latin-1").strip()
+    return status, headers, body
+
+
 def response_status(response: bytes) -> int:
-    first_line = response.split(b"\r\n", 1)[0]
-    return int(first_line.split(b" ", 2)[1])
+    return parse_response(response)[0]
 
 
 class TimeoutInput(io.BytesIO):
@@ -135,18 +145,30 @@ class MemoryConnection:
 class DownloadConnection(MemoryConnection):
     """Record bounded response-body writes and optionally time them out."""
 
-    def __init__(self, request: bytes, *, stall_body: bool = False):
+    def __init__(
+        self,
+        request: bytes,
+        *,
+        stall_body: bool = False,
+        first_body_write=None,
+    ):
         super().__init__(request)
         self.stall_body = stall_body
+        self.first_body_write = first_body_write
         self.headers_sent = False
         self.body_write_sizes: list[int] = []
 
     def sendall(self, data: bytes) -> None:
-        if self.headers_sent:
+        is_body = self.headers_sent
+        if is_body:
             self.body_write_sizes.append(len(data))
             if self.stall_body:
                 raise socket.timeout("simulated stalled download")
         super().sendall(data)
+        if is_body and self.first_body_write is not None:
+            callback = self.first_body_write
+            self.first_body_write = None
+            callback()
         if b"\r\n\r\n" in self.output:
             self.headers_sent = True
 
@@ -423,10 +445,11 @@ class QuickshareSendTests(unittest.TestCase):
         return Handler
 
     @staticmethod
-    def request() -> bytes:
+    def request(*, keep_alive: bool = False) -> bytes:
+        connection = b"keep-alive" if keep_alive else b"close"
         return (
             b"GET /test-token/payload.bin HTTP/1.1\r\n"
-            b"Host: qshare.test\r\nConnection: close\r\n\r\n"
+            b"Host: qshare.test\r\nConnection: " + connection + b"\r\n\r\n"
         )
 
     def test_partial_headers_hit_absolute_deadline_without_completing(self) -> None:
@@ -470,6 +493,110 @@ class QuickshareSendTests(unittest.TestCase):
             [qshare._DOWNLOAD_CHUNK_SIZE, 17],
         )
         self.assertTrue(bytes(retry.output).endswith(self.payload.read_bytes()))
+
+    def test_truncated_source_does_not_complete_and_retry_succeeds(self) -> None:
+        original = b"x" * (129 * qshare._DOWNLOAD_CHUNK_SIZE + 17)
+        self.payload.write_bytes(original)
+        events = RecordingEvents()
+        base_handler = self.handler(events=events)
+
+        class Handler(base_handler):
+            protocol_version = "HTTP/1.1"
+            close_states: list[bool] = []
+
+            def do_GET(self):  # noqa: N802
+                self.close_states.append(self.close_connection)
+                super().do_GET()
+                self.close_states.append(self.close_connection)
+
+        handler = Handler
+
+        def truncate_source() -> None:
+            with self.payload.open("r+b") as source:
+                source.truncate(qshare._DOWNLOAD_CHUNK_SIZE)
+
+        truncated = DownloadConnection(
+            self.request(keep_alive=True), first_body_write=truncate_source
+        )
+        attempt = handler(truncated, ("memory", 0), types.SimpleNamespace())
+        status, headers, body = parse_response(bytes(truncated.output))
+
+        self.assertEqual(status, 200)
+        self.assertEqual(int(headers["content-length"]), len(original))
+        self.assertEqual(body, original[:len(body)])
+        self.assertLess(len(body), int(headers["content-length"]))
+        self.assertEqual(self.payload.stat().st_size, qshare._DOWNLOAD_CHUNK_SIZE)
+        self.assertEqual(attempt.close_states, [False, True])
+        self.assertTrue(attempt.close_connection)
+        self.assertFalse(handler.done_event.is_set())
+        self.assertEqual(events.lines, [])
+
+        self.payload.write_bytes(original)
+        retry = DownloadConnection(self.request())
+        handler(retry, ("memory", 0), types.SimpleNamespace())
+        retry_status, retry_headers, retry_body = parse_response(bytes(retry.output))
+
+        self.assertEqual(retry_status, 200)
+        self.assertEqual(int(retry_headers["content-length"]), len(original))
+        self.assertEqual(retry_body, original)
+        self.assertTrue(handler.done_event.is_set())
+        self.assertEqual(events.lines, [f"TICK {self.payload.name}", "DONE"])
+
+    def test_path_replacement_keeps_streaming_opened_inode(self) -> None:
+        chunk_size = qshare._DOWNLOAD_CHUNK_SIZE
+        original = b"a" * chunk_size + b"b" * chunk_size + b"old-tail"
+        replacement = b"new-path-bytes"
+        self.payload.write_bytes(original)
+        replacement_path = self.root / "replacement.bin"
+        replacement_path.write_bytes(replacement)
+        events = RecordingEvents()
+        handler = self.handler(events=events)
+        real_fstat = qshare.os.fstat
+
+        def replace_during_fstat(fd: int):
+            replacement_path.replace(self.payload)
+            return real_fstat(fd)
+
+        connection = DownloadConnection(self.request())
+        with mock.patch.object(
+            qshare.os, "fstat", side_effect=replace_during_fstat
+        ) as fstat:
+            handler(connection, ("memory", 0), types.SimpleNamespace())
+        status, headers, body = parse_response(bytes(connection.output))
+
+        fstat.assert_called_once()
+        self.assertEqual(status, 200)
+        self.assertEqual(int(headers["content-length"]), len(original))
+        self.assertEqual(body, original)
+        self.assertEqual(len(body), int(headers["content-length"]))
+        self.assertEqual(self.payload.read_bytes(), replacement)
+        self.assertTrue(handler.done_event.is_set())
+        self.assertEqual(events.lines, [f"TICK {self.payload.name}", "DONE"])
+
+    def test_growth_never_exceeds_advertised_length(self) -> None:
+        original = self.payload.read_bytes()
+        appended = b"appended-after-first-body-write"
+        events = RecordingEvents()
+        handler = self.handler(events=events)
+
+        def grow_source() -> None:
+            with self.payload.open("ab") as source:
+                source.write(appended)
+
+        connection = DownloadConnection(
+            self.request(), first_body_write=grow_source
+        )
+        handler(connection, ("memory", 0), types.SimpleNamespace())
+        status, headers, body = parse_response(bytes(connection.output))
+
+        self.assertEqual(status, 200)
+        self.assertEqual(int(headers["content-length"]), len(original))
+        self.assertEqual(body, original)
+        self.assertEqual(len(body), int(headers["content-length"]))
+        self.assertNotIn(appended, body)
+        self.assertEqual(self.payload.read_bytes(), original + appended)
+        self.assertTrue(handler.done_event.is_set())
+        self.assertEqual(events.lines, [f"TICK {self.payload.name}", "DONE"])
 
 
 class QuickshareCliTests(unittest.TestCase):

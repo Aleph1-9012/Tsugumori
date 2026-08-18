@@ -107,6 +107,11 @@ preflight() {
     command -v pacman >/dev/null || fatal "pacman not found — this script is for Arch Linux only."
     command -v sudo   >/dev/null || fatal "sudo is required."
     command -v curl   >/dev/null || fatal "curl is required for connectivity checks and remote installation."
+    command -v realpath >/dev/null || fatal "GNU realpath is required for safe symlink preservation."
+    if ! realpath --canonicalize-missing --no-symlinks -- / >/dev/null 2>&1 \
+        || ! realpath --canonicalize-existing -- / >/dev/null 2>&1; then
+        fatal "GNU realpath with --canonicalize-missing, --no-symlinks, and --canonicalize-existing support is required for safe symlink preservation."
+    fi
     log "Asking for sudo password upfront…"
     sudo -v || fatal "sudo authentication failed."
     # Keep sudo alive in background
@@ -394,6 +399,167 @@ install_pinned_from_archive() {
 }
 
 # ─── Preserve user files across re-installs ─────────────────────────
+path_is_within() {
+    local candidate="$1" root="$2"
+    if [[ "$root" == "/" ]]; then
+        [[ "$candidate" == /* ]]
+    else
+        [[ "$candidate" == "$root" || "$candidate" == "$root/"* ]]
+    fi
+}
+
+fatal_preserved_symlink_dependency() {
+    local src="$1" link_target="$2" name="$3"
+    fatal "Preserved symlink $src -> $link_target depends on $CONFIG_HOME/$name, and deployment would remove that dependency. Move the target outside installer-managed directories or replace the link with a regular file."
+}
+
+assert_relative_symlink_parent_is_stable() {
+    local src="$1" link_target="$2"
+    local source_parent lexical_parent canonical_parent canonical_config_home
+    local name lexical_root managed_entry parent_suffix future_parent
+
+    [[ "$link_target" != /* ]] || return 0
+
+    source_parent=$(dirname -- "$src")
+    lexical_parent=$(realpath --canonicalize-missing --no-symlinks -- "$source_parent")
+    canonical_parent=$(realpath --canonicalize-existing -- "$source_parent")
+    canonical_config_home=$(realpath --canonicalize-missing -- "$CONFIG_HOME")
+
+    for name in "${MANAGED_DIRS[@]}"; do
+        lexical_root=$(realpath --canonicalize-missing --no-symlinks -- "$CONFIG_HOME/$name")
+        path_is_within "$lexical_parent" "$lexical_root" || continue
+
+        # Deployment replaces the managed entry with a fresh tree. Build the
+        # physical parent path that the restored relative link will use without
+        # following any current symlink at or below that entry. If it differs
+        # from today's parent, the link's anchor would change during deploy.
+        managed_entry=$(realpath --canonicalize-missing --no-symlinks -- "$canonical_config_home/$name")
+        parent_suffix="${lexical_parent#"$lexical_root"}"
+        future_parent=$(realpath --canonicalize-missing --no-symlinks -- "$managed_entry$parent_suffix")
+        if [[ "$canonical_parent" != "$future_parent" ]]; then
+            fatal_preserved_symlink_dependency "$src" "$link_target" "$name"
+        fi
+        return 0
+    done
+}
+
+assert_symlink_resolution_avoids_managed_dirs() {
+    local src="$1" link_target="$2"
+    local resolved pending component probe hop_target name
+    local lexical_root canonical_root managed_entry canonical_config_home
+    local symlink_hops=0
+
+    # Follow the target one path component at a time. GNU realpath gives us the
+    # two endpoint views checked by the caller, but a fully resolved endpoint
+    # does not reveal an outside -> managed -> outside symlink chain. Start
+    # relative targets at the link's existing parent; that parent is deliberately
+    # not treated as a dependency because deployment recreates it before restore.
+    canonical_config_home=$(realpath --canonicalize-missing -- "$CONFIG_HOME")
+    if [[ "$link_target" == /* ]]; then
+        resolved="/"
+        pending="${link_target#/}"
+    else
+        resolved=$(realpath --canonicalize-existing -- "$(dirname -- "$src")")
+        pending="$link_target"
+    fi
+
+    while [[ -n "$pending" ]]; do
+        if [[ "$pending" == */* ]]; then
+            component="${pending%%/*}"
+            pending="${pending#*/}"
+        else
+            component="$pending"
+            pending=""
+        fi
+
+        case "$component" in
+            ""|.) continue ;;
+            ..)
+                if [[ "$resolved" != "/" ]]; then
+                    resolved="${resolved%/*}"
+                    [[ -n "$resolved" ]] || resolved="/"
+                fi
+                continue
+                ;;
+        esac
+
+        if [[ "$resolved" == "/" ]]; then
+            probe="/$component"
+        else
+            probe="$resolved/$component"
+        fi
+
+        for name in "${MANAGED_DIRS[@]}"; do
+            lexical_root=$(realpath --canonicalize-missing --no-symlinks -- "$CONFIG_HOME/$name")
+            canonical_root=$(realpath --canonicalize-missing -- "$CONFIG_HOME/$name")
+            # If CONFIG_HOME is itself a symlink, this is the physical path of
+            # the managed entry without following that entry's final symlink.
+            managed_entry=$(realpath --canonicalize-missing --no-symlinks -- "$canonical_config_home/$name")
+            if path_is_within "$probe" "$lexical_root" \
+                || path_is_within "$probe" "$managed_entry"; then
+                fatal_preserved_symlink_dependency "$src" "$link_target" "$name"
+            fi
+            # Replacing a managed-root symlink removes only the alias, not its
+            # external target tree. Traversal through the alias was caught by
+            # managed_entry above; a direct path to that external tree is safe.
+            if [[ ! -L "$CONFIG_HOME/$name" ]] \
+                && path_is_within "$probe" "$canonical_root"; then
+                fatal_preserved_symlink_dependency "$src" "$link_target" "$name"
+            fi
+        done
+
+        if [[ -L "$probe" ]]; then
+            symlink_hops=$((symlink_hops + 1))
+            (( symlink_hops <= 64 )) \
+                || fatal "Could not safely resolve preserved symlink target after 64 symlink hops: $src"
+            hop_target=$(readlink -- "$probe") \
+                || fatal "Could not inspect preserved symlink dependency: $probe"
+            if [[ "$hop_target" == /* ]]; then
+                resolved="/"
+                hop_target="${hop_target#/}"
+            fi
+            if [[ -n "$pending" ]]; then
+                pending="$hop_target/$pending"
+            else
+                pending="$hop_target"
+            fi
+        else
+            resolved="$probe"
+        fi
+    done
+}
+
+assert_preserved_symlink_survives_deploy() {
+    local src="$1"
+    local link_target lexical_destination canonical_target name
+    local lexical_root canonical_root
+
+    link_target=$(readlink -- "$src") || fatal "Could not read preserved symlink target: $src"
+    if [[ "$link_target" == /* ]]; then
+        lexical_destination="$link_target"
+    else
+        lexical_destination="$(dirname -- "$src")/$link_target"
+    fi
+
+    # Check both the written path and its resolved target: either can depend on
+    # a managed directory even when the other points outside one.
+    lexical_destination=$(realpath --canonicalize-missing --no-symlinks -- "$lexical_destination")
+    canonical_target=$(realpath --canonicalize-existing -- "$src")
+    for name in "${MANAGED_DIRS[@]}"; do
+        lexical_root=$(realpath --canonicalize-missing --no-symlinks -- "$CONFIG_HOME/$name")
+        canonical_root=$(realpath --canonicalize-missing -- "$CONFIG_HOME/$name")
+        if path_is_within "$lexical_destination" "$lexical_root"; then
+            fatal_preserved_symlink_dependency "$src" "$link_target" "$name"
+        fi
+        if [[ ! -L "$CONFIG_HOME/$name" ]] \
+            && path_is_within "$canonical_target" "$canonical_root"; then
+            fatal_preserved_symlink_dependency "$src" "$link_target" "$name"
+        fi
+    done
+    assert_relative_symlink_parent_is_stable "$src" "$link_target"
+    assert_symlink_resolution_avoids_managed_dirs "$src" "$link_target"
+}
+
 # Stash all files listed in PRESERVED_FILES to a temp dir BEFORE deploy_configs
 # wipes the managed dirs. They will be restored AFTER the copy.
 stash_preserved_files() {
@@ -410,6 +576,7 @@ stash_preserved_files() {
         # file, before deploy_configs replaces any managed directory.
         if [[ -L "$src" ]]; then
             [[ -f "$src" ]] || fatal "Preserved path is a dangling symlink or does not resolve to a regular file: $src"
+            assert_preserved_symlink_survives_deploy "$src"
         elif [[ ! -e "$src" ]]; then
             continue
         elif [[ ! -f "$src" ]]; then

@@ -1,40 +1,38 @@
-# Tsugumori v0.1.1
+# Tsugumori v0.1.2
 
-Tsugumori `v0.1.1` is a focused safety hotfix for the public beta. It preserves
-the `v0.1.0` feature set while hardening upgrades and Quickshare connections.
+Tsugumori `v0.1.2` is a narrow safety hotfix for the public beta. It preserves
+the `v0.1.1` feature set while closing two remaining release blockers.
 
 ## Changes
 
-- Installer preservation now handles `user.lua`, dormant `user.conf`, and
-  `Settings.qml` symlinks lexically. Relative link text survives an upgrade
-  unchanged; dangling or non-file preserved links fail closed before the
-  installed configuration is replaced.
-- `qshare send` now applies a fixed 15-second absolute request-header deadline
-  and a five-minute absolute download deadline by default. The new
-  `--transfer-timeout SECONDS` option adjusts the latter, up to the existing
-  24-hour safety maximum. A stalled or disconnected client no longer completes
-  a one-shot send, so another client can retry.
-- Cloudflare tunnel startup now reads output in the background instead of
-  blocking on `readline()`. Its existing 30-second startup limit remains in
-  force, and failed tunnel processes are terminated and reaped.
+- Installer preservation now rejects a preserved symlink when either its
+  lexical destination or resolved target depends on an installer-managed
+  directory. The check runs before deployment mutates configuration; regular
+  preserved files and symlinks whose complete dependency path is external
+  continue to behave as before.
+- `qshare send` now derives `Content-Length` from the opened source file and
+  sends exactly that many bytes. Early EOF fails the attempt without reporting
+  completion or ending the one-shot session, while file growth cannot append
+  bytes beyond the advertised length; a failed attempt remains retryable.
 
 ## Installing this release
 
 Pin both the downloaded installer and the revision it clones:
 
 ```bash
-TSUGUMORI_BRANCH=v0.1.1 bash <(curl -fsSL https://raw.githubusercontent.com/Aleph1-9012/Tsugumori/v0.1.1/install.sh)
+TSUGUMORI_BRANCH=v0.1.2 bash <(curl -fsSL https://raw.githubusercontent.com/Aleph1-9012/Tsugumori/v0.1.2/install.sh)
 ```
 
 The quick-install command in the README intentionally follows rolling `main`;
-the command above installs the immutable `v0.1.1` tree. The historical
-`v0.1.0` notes remain available from that tag and its GitHub release.
+the command above installs the immutable `v0.1.2` tree. The historical
+`v0.1.1` notes remain available from that tag and its GitHub release.
 
 ## Validation
 
-This hotfix uses focused local installer and Quickshare unit suites, followed by
-the protected Arch `Validate` workflow as the full release gate. No additional
-VM, PAM, GPU, or multi-monitor acceptance cycle was run for this patch release.
+This hotfix requires focused local installer and Quickshare unit suites,
+followed by the protected Arch `Validate` workflow on the pull request, the
+exact merged `main` commit, and the exact `v0.1.2` tag. No additional VM, PAM,
+GPU, or multi-monitor acceptance cycle was run for this patch release.
 
 ## Known limitations
 
