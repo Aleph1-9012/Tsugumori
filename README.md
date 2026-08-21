@@ -108,6 +108,14 @@ A NieR:Automata-style radial menu with Knights of Sidonia theme accessible via `
   - Do Not Disturb toggle silences popups while preserving history
   - Pinned "Clear All" button
 
+> [!NOTE]
+> Tsugumori never stops dunst, mako, swaync, or any other third-party
+> notification daemon. Only one process can own `org.freedesktop.Notifications`
+> at a time, so if such a daemon is running it will keep receiving your
+> notifications and Tsugumori's popups and history will stay empty. To use
+> Tsugumori notifications, disable the competing daemon in its own user service
+> or autostart configuration — see that daemon's documentation for how.
+
 ### Navigation
 
 The menu uses two interaction levels (the internal names retain their original

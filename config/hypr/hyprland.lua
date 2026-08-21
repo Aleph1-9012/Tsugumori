@@ -123,9 +123,6 @@ quickshell_command = quickshell_command
 
 hl.on("hyprland.start", function()
     hl.exec_cmd(quickshell_command)
-    hl.exec_cmd("pkill dunst")
-    hl.exec_cmd("pkill mako")
-    hl.exec_cmd("pkill swaync")
     hl.exec_cmd(quickshell_script("lock.sh"))
     hl.exec_cmd("hypridle")
     hl.exec_cmd("udiskie")
