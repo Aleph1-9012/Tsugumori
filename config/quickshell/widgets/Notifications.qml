@@ -2,7 +2,8 @@
 // Daemon de notifications style NieR / YoRHa
 //
 // Installation :
-//   1. Tuer tout autre daemon : pkill dunst; pkill mako; pkill swaync
+//   1. Disable any other notification daemon (dunst, mako, swaync) via its own
+//      service or autostart configuration; Tsugumori never terminates them.
 //   2. qs -p notifications.qml
 //
 // Tests :

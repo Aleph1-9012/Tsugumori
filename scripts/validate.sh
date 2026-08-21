@@ -72,6 +72,11 @@ if rg -n 'pkill[[:space:]]+(-[^[:space:]]+[[:space:]]+)*qs([[:space:]]|$)' confi
     exit 1
 fi
 
+if rg -n '\b(pkill|killall)\b.*\b(dunst|mako|swaync)\b' config; then
+    printf 'Tsugumori must not terminate user-managed notification daemons.\n' >&2
+    exit 1
+fi
+
 LOCK_QML=config/quickshell/widgets/lockscreen.qml
 for token in 'WlSessionLock {' 'locked: true' 'WlSessionLockSurface {' 'PamContext {' 'config: "hyprlock"' '!sessionLock.secure' 'Quickshell.watchFiles = false'; do
     if ! rg -Fq "$token" "$LOCK_QML"; then
