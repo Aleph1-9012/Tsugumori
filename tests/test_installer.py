@@ -280,7 +280,6 @@ class InstallerLuaMigrationTests(unittest.TestCase):
             mkdir -p "$CLONE_DIR/assets/wallpapers" "$CONFIG_HOME/hypr"
             printf '%s\n' 'bundled-tsugumori-lock' >"$CLONE_DIR/assets/wallpapers/Aleph1.png"
             install_lock_background
-            cmp "$CLONE_DIR/assets/wallpapers/Aleph1.png" "$CONFIG_HOME/hypr/lockbg.png"
             printf 'mode=%s\n' "$(stat -c '%a' "$CONFIG_HOME/hypr/lockbg.png")"
             """
         )
@@ -288,6 +287,10 @@ class InstallerLuaMigrationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Installed Hyprlock background", result.stdout)
         self.assertIn("mode=644\n", result.stdout)
+        self.assertEqual(
+            (self.config_home / "hypr/lockbg.png").read_bytes(),
+            b"bundled-tsugumori-lock\n",
+        )
 
     def test_deploy_preserves_exact_relative_symlinks_for_all_user_files(self) -> None:
         custom_dir = self.config_home / "custom"
