@@ -101,6 +101,12 @@ for token in 'fallback_lock' 'exec hyprlock' 'qs --no-duplicate --path "$lockscr
     fi
 done
 
+if rg -ni 'nier|mot de passe|authentification|tentative|Noto Sans JP' \
+    config/hypr/hyprlock.conf; then
+    printf 'The Hyprlock fallback still contains legacy NieR or French presentation text.\n' >&2
+    exit 1
+fi
+
 for token in 'allow_session_lock_restore = true' 'hl.exec_cmd("awww-daemon")'; do
     if ! rg -Fq "$token" config/hypr/hyprland.lua; then
         printf 'Hyprland Lua contract is missing token: %s\n' "$token" >&2
@@ -124,12 +130,25 @@ import struct
 from pathlib import Path
 
 expected = {
-    Path("config/quickshell/videos/wave_reveal.mp4"): "27aa916ecf517f9ae8fd81b01cd2d98540bd871f0157ea8638401ce6f3ed2ac0",
-    Path("config/quickshell/videos/wave_hide.mp4"): "2de71962d6617f1610e1da422a97b31316826cc76d56f2246b013130dc089f09",
-    Path("config/quickshell/videos/wave_last_frame.png"): "b2da90aa03b3600887732977cab6b918ede7e3af58b24bc3e91150f6a9fea3f1",
+    Path("config/quickshell/videos/wave_reveal.mp4"): (
+        "27aa916ecf517f9ae8fd81b01cd2d98540bd871f0157ea8638401ce6f3ed2ac0",
+        None,
+    ),
+    Path("config/quickshell/videos/wave_hide.mp4"): (
+        "2de71962d6617f1610e1da422a97b31316826cc76d56f2246b013130dc089f09",
+        None,
+    ),
+    Path("config/quickshell/videos/wave_last_frame.png"): (
+        "b2da90aa03b3600887732977cab6b918ede7e3af58b24bc3e91150f6a9fea3f1",
+        (2560, 1600),
+    ),
+    Path("assets/wallpapers/Aleph1.png"): (
+        "c4219b4d669751aa3ab7f8d621dc7a40d82b5e1daebf52ca2aaa575bc9bace87",
+        (8000, 4500),
+    ),
 }
 
-for path, wanted_hash in expected.items():
+for path, (wanted_hash, wanted_dimensions) in expected.items():
     data = path.read_bytes()
     if not data:
         raise SystemExit(f"{path}: lock asset is empty")
@@ -139,11 +158,11 @@ for path, wanted_hash in expected.items():
 
     if path.suffix == ".mp4" and (len(data) < 12 or data[4:8] != b"ftyp"):
         raise SystemExit(f"{path}: invalid ISO BMFF/MP4 signature")
-    if path.suffix == ".png":
+    if wanted_dimensions is not None:
         if data[:8] != b"\x89PNG\r\n\x1a\n":
             raise SystemExit(f"{path}: invalid PNG signature")
         width, height = struct.unpack(">II", data[16:24])
-        if (width, height) != (2560, 1600):
+        if (width, height) != wanted_dimensions:
             raise SystemExit(f"{path}: unexpected dimensions {width}x{height}")
 
 print("Secure lock assets: OK")

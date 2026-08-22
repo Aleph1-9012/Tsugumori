@@ -56,7 +56,7 @@ conflict; fresh installations use Arch's `quickshell` package.
 
 - **Window manager**: Hyprland 0.55.2+ with a native Lua config and custom keybinds (QWERTY layout)
 - **Shell/widgets**: Quickshell with custom QML widgets (menu, wallpaper picker, notifications, player)
-- **Session lock**: Quickshell `ext-session-lock-v1` surfaces with PAM authentication and the original animated NieR reveal/hide design
+- **Session lock**: Quickshell `ext-session-lock-v1` surfaces with PAM authentication, animated transitions, and a dedicated Tsugumori Hyprlock fallback
 - **Idle/suspend safety**: Hypridle locks after five idle minutes, locks before sleep, and restores displays after resume
 - **Bar**: Waybar
 - **Terminal**: Kitty
@@ -189,10 +189,12 @@ file automatically; remove it only after confirming no local service uses it.
 
 The animated lock is a real compositor session lock. Its launcher supervises
 startup and requires an explicit readiness handshake; a QML/import failure,
-timeout, or early exit starts Hyprlock instead. Hyprland's session-lock restore
-option also lets that fallback replace a lock client which crashes after
-acquisition. `SUPER + R` targets only the desktop-shell instance and never kills
-the independent lock process.
+timeout, or early exit starts Hyprlock instead. The installer deploys the same
+English-language Tsugumori emergency screen for every user, using the bundled
+`Aleph1.png` wallpaper rather than an image inherited from a pre-existing rice.
+Hyprland's session-lock restore option also lets that fallback replace a lock
+client which crashes after acquisition. `SUPER + R` targets only the
+desktop-shell instance and never kills the independent lock process.
 
 ## Credits
 

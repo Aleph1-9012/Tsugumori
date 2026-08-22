@@ -274,6 +274,21 @@ class InstallerLuaMigrationTests(unittest.TestCase):
         self.assertIn("settings=preserved-settings\n", result.stdout)
         self.assertIn("managed=managed-config\n", result.stdout)
 
+    def test_install_lock_background_prefers_the_bundled_tsugumori_asset(self) -> None:
+        result = self.run_installer_shell(
+            """
+            mkdir -p "$CLONE_DIR/assets/wallpapers" "$CONFIG_HOME/hypr"
+            printf '%s\n' 'bundled-tsugumori-lock' >"$CLONE_DIR/assets/wallpapers/Aleph1.png"
+            install_lock_background
+            cmp "$CLONE_DIR/assets/wallpapers/Aleph1.png" "$CONFIG_HOME/hypr/lockbg.png"
+            printf 'mode=%s\n' "$(stat -c '%a' "$CONFIG_HOME/hypr/lockbg.png")"
+            """
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Installed Hyprlock background", result.stdout)
+        self.assertIn("mode=644\n", result.stdout)
+
     def test_deploy_preserves_exact_relative_symlinks_for_all_user_files(self) -> None:
         custom_dir = self.config_home / "custom"
         custom_dir.mkdir()

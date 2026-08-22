@@ -673,33 +673,17 @@ EOF
     fi
 }
 
-generate_lock_background() {
-    local generator="$CONFIG_HOME/hypr/gen-lockbg.py"
+install_lock_background() {
+    local bundled="$CLONE_DIR/assets/wallpapers/Aleph1.png"
     local output="$CONFIG_HOME/hypr/lockbg.png"
 
-    if [[ ! -f "$generator" ]]; then
-        warn "Fallback background generator not found; Hyprlock will use its configured solid color."
-        return 0
-    fi
-    if ! command -v python3 >/dev/null; then
-        warn "python3 is unavailable; fallback Hyprlock will use its configured solid color."
+    log "Installing the bundled Tsugumori wallpaper for Hyprlock…"
+    if [[ -s "$bundled" ]] && install -m 644 "$bundled" "$output"; then
+        ok "Installed Hyprlock background: $output"
         return 0
     fi
 
-    log "Generating the Hyprlock fallback background…"
-    if python3 "$generator" "$output" && [[ -s "$output" ]]; then
-        ok "Generated Hyprlock background: $output"
-        return 0
-    fi
-
-    local bundled_fallback="$CLONE_DIR/assets/wallpapers/Aleph1.png"
-    if [[ -s "$bundled_fallback" ]]; then
-        install -m 644 "$bundled_fallback" "$output"
-        warn "Could not generate the patterned lock background; installed the bundled PNG fallback instead."
-    else
-        rm -f "$output"
-        warn "Could not create lockbg.png; Hyprlock will use its configured solid-color fallback."
-    fi
+    warn "Aleph1.png is unavailable; Hyprlock will use its configured solid-color fallback."
 }
 
 warn_legacy_pam() {
@@ -868,7 +852,7 @@ main() {
     validate_lock_runtime
     validate_hyprland_config
     deploy_configs
-    generate_lock_background
+    install_lock_background
     warn_legacy_pam
     deploy_shell_config
     setup_user_dirs
