@@ -26,7 +26,7 @@ readonly PRESERVED_FILES=(
 
 # Add support for flags
 PINNED_MODE=false
-VM_GL_TWEAKS=false          # Mesa llvmpipe + libgl software for Quickshell/Kitty (VirtualBox et al.)
+VM_GL_TWEAKS=false          # Mesa llvmpipe + software libgl for Quickshell/Kitty (VirtualBox and similar).
 BOOT_WALLPAPER_VM=false     # Lua start callback applies the first wallpaper in VM mode
 
 [[ "${TSUGUMORI_VM:-}" == "1" || "${TSUGUMORI_VM:-}" == "yes" ]] && VM_GL_TWEAKS=true
@@ -42,8 +42,7 @@ Usage: install.sh [options]
 
   --latest   Install latest versions of all packages (default).
   --pinned   Install exact versions tested by the maintainer.
-             Requires packages/pinned-pacman.txt (and pinned-aur.txt
-             when AUR installation is enabled).
+             Requires packages/pinned-pacman.txt.
   --vm       VirtualBox / weak GPU: configure Quickshell + Kitty to use software OpenGL
              (llvmpipe), optional boot wallpaper. Or set env TSUGUMORI_VM=1.
 
@@ -130,9 +129,8 @@ collect_choices() {
     log "I'll ask a few questions before starting."
     echo
     BACKUP_OLD=true;          ask_yn "Backup existing configs to $BACKUP_DIR?" y || BACKUP_OLD=false
-    INSTALL_AUR=true;         ask_yn "Install optional AUR package (Share Tech Mono)?" y || INSTALL_AUR=false
     INSTALL_WALLPAPERS=true;  ask_yn "Install default wallpapers to ~/Pictures/wallpapers?" y || INSTALL_WALLPAPERS=false
-    INSTALL_BASHRC=true;      ask_yn "Install Tsugumori .bashrc (welcome banner + NieR prompt)?" y || INSTALL_BASHRC=false
+    INSTALL_BASHRC=true;      ask_yn "Install Tsugumori .bashrc (welcome banner + Tsugumori prompt)?" y || INSTALL_BASHRC=false
     ENABLE_SERVICES=true;     ask_yn "Enable system services (NetworkManager, pipewire)?" y || ENABLE_SERVICES=false
 
     if $VM_GL_TWEAKS; then
@@ -187,19 +185,8 @@ inspect_legacy_user_config() {
 
 # ─── Base setup ─────────────────────────────────────────────────────
 install_base() {
-    log "Installing base-devel + git…"
-    sudo pacman -S --needed --noconfirm base-devel git
-}
-
-bootstrap_aur_helper() {
-    if command -v yay  >/dev/null; then ok "yay is already installed."; return; fi
-    if command -v paru >/dev/null; then ok "paru is already installed."; return; fi
-    log "Bootstrapping yay (AUR helper)…"
-    local d; d=$(mktemp -d)
-    git clone --depth=1 https://aur.archlinux.org/yay-bin.git "$d/yay-bin"
-    (cd "$d/yay-bin" && makepkg -si --noconfirm)
-    rm -rf "$d"
-    ok "yay installed."
+    log "Installing git…"
+    sudo pacman -S --needed --noconfirm git
 }
 
 # ─── Clone ──────────────────────────────────────────────────────────
@@ -228,36 +215,24 @@ validate_pinned_manifest() {
 
 install_packages() {
     local pacman_list="$CLONE_DIR/packages/pacman.txt"
-    local aur_list="$CLONE_DIR/packages/aur.txt"
 
     require_manifest "$pacman_list"
-    $INSTALL_AUR && require_manifest "$aur_list"
 
     if $PINNED_MODE; then
         local pinned_pacman="$CLONE_DIR/packages/pinned-pacman.txt"
-        local pinned_aur="$CLONE_DIR/packages/pinned-aur.txt"
         log "Pinned mode: installing exact tested versions from Arch Archive."
 
         require_manifest "$pinned_pacman"
-        $INSTALL_AUR && require_manifest "$pinned_aur"
         validate_pinned_manifest "$pacman_list" "$pinned_pacman" "Pacman"
-        $INSTALL_AUR && validate_pinned_manifest "$aur_list" "$pinned_aur" "AUR"
 
         local pinned_hyprland=""
         pinned_hyprland=$(awk -F= '$1 == "hyprland" {print $2; exit}' "$pinned_pacman")
         [[ -n "$pinned_hyprland" ]] || fatal "packages/pinned-pacman.txt does not pin Hyprland; refusing an unverifiable pinned install."
         log "Installing pinned pacman packages…"
         install_pinned_from_archive "$pinned_pacman"
-        if $INSTALL_AUR; then
-            warn "AUR packages cannot be reliably pinned — falling back to latest."
-            mapfile -t aur_pkgs < <(awk -F= '!/^[[:space:]]*(#|$)/ {print $1}' "$pinned_aur")
-            local helper; helper=$(command -v yay || command -v paru)
-            (( ${#aur_pkgs[@]} > 0 )) || fatal "packages/pinned-aur.txt contains no installable package entries."
-            "$helper" -S --needed --noconfirm "${aur_pkgs[@]}"
-        fi
     else
         # Latest mode (default)
-        local pacman_pkgs aur_pkgs
+        local pacman_pkgs
         mapfile -t pacman_pkgs < <(grep -vE '^\s*(#|$)' "$pacman_list")
 
         # Older Tsugumori releases installed quickshell-git from the AUR. It
@@ -284,15 +259,50 @@ install_packages() {
             log "Installing ${#pacman_pkgs[@]} pacman packages (latest)…"
             sudo pacman -S --needed --noconfirm "${pacman_pkgs[@]}"
         fi
-        if $INSTALL_AUR && [[ -f "$aur_list" ]]; then
-            mapfile -t aur_pkgs < <(grep -vE '^\s*(#|$)' "$aur_list")
-            if (( ${#aur_pkgs[@]} > 0 )); then
-                log "Installing ${#aur_pkgs[@]} AUR packages (latest)…"
-                local helper; helper=$(command -v yay || command -v paru)
-                "$helper" -S --needed --noconfirm "${aur_pkgs[@]}"
-            fi
-        fi
     fi
+}
+
+validate_font_assets() {
+    local source_dir="$CLONE_DIR/assets/fonts/share-tech-mono"
+    [[ -s "$source_dir/ShareTechMono-Regular.ttf" ]] \
+        || fatal "Bundled Share Tech Mono font is missing or empty."
+    [[ -s "$source_dir/OFL.txt" ]] \
+        || fatal "Bundled Share Tech Mono OFL license is missing or empty."
+    ok "Bundled Share Tech Mono font and license are present."
+}
+
+install_font_assets() {
+    local source_dir="$CLONE_DIR/assets/fonts/share-tech-mono"
+    local font_source="$source_dir/ShareTechMono-Regular.ttf"
+    local license_source="$source_dir/OFL.txt"
+    local data_home="${XDG_DATA_HOME:-$HOME/.local/share}"
+    local font_dir="$data_home/fonts/Tsugumori"
+    local font_tmp license_tmp
+
+    [[ -s "$font_source" ]] || fatal "Bundled Share Tech Mono font is missing or empty."
+    [[ -s "$license_source" ]] || fatal "Bundled Share Tech Mono OFL license is missing or empty."
+
+    install -d -m 0755 -- "$font_dir"
+    font_tmp=$(mktemp "$font_dir/.ShareTechMono-Regular.ttf.XXXXXX")
+    license_tmp=$(mktemp "$font_dir/.OFL.txt.XXXXXX")
+    if ! install -m 0644 -- "$font_source" "$font_tmp" \
+        || ! install -m 0644 -- "$license_source" "$license_tmp"; then
+        rm -f -- "$font_tmp" "$license_tmp"
+        fatal "Could not prepare bundled Share Tech Mono assets."
+    fi
+    if ! mv -f -- "$font_tmp" "$font_dir/ShareTechMono-Regular.ttf" \
+        || ! mv -f -- "$license_tmp" "$font_dir/OFL.txt"; then
+        rm -f -- "$font_tmp" "$license_tmp"
+        fatal "Could not install bundled Share Tech Mono assets."
+    fi
+
+    if command -v fc-cache >/dev/null 2>&1; then
+        fc-cache -f "$font_dir" >/dev/null 2>&1 \
+            || warn "Font cache refresh failed; log out and back in before using Share Tech Mono."
+    else
+        warn "fc-cache is unavailable; log out and back in before using Share Tech Mono."
+    fi
+    ok "Installed bundled Share Tech Mono font: $font_dir"
 }
 
 validate_hyprland_config() {
@@ -844,14 +854,15 @@ main() {
     collect_choices
     inspect_legacy_user_config
     install_base
-    $INSTALL_AUR && bootstrap_aur_helper
     clone_repo
     install_packages
+    validate_font_assets
     validate_wallpaper_runtime
     write_tsugumori_options "$CLONE_DIR/config/hypr/tsugumori_options.lua"
     validate_lock_runtime
     validate_hyprland_config
     deploy_configs
+    install_font_assets
     install_lock_background
     warn_legacy_pam
     deploy_shell_config

@@ -6,7 +6,7 @@ import "../settings"
 Item {
     id: root
 
-    // ── Shorthand Settings (scale global) ──
+    // ── Settings shorthand (global scale) ──
     readonly property int  pw:      Settings.playerWidth
     readonly property real sc:      Settings.scale
     readonly property color surfaceColor: Settings.playerBackground
@@ -185,7 +185,7 @@ Item {
     implicitHeight: maxContentHeight > 0 ? maxContentHeight : currentContentHeight
 
     // ──────────────────────────────────────────────────────────────
-    // WIPE HOST — Item clipé contenant rideau + contenu comme frères
+    // WIPE HOST — clipped item containing curtain and content as siblings.
     // ──────────────────────────────────────────────────────────────
     Item {
         id:      wipeHost
@@ -196,9 +196,9 @@ Item {
              ? (pw + 2) * (1 - root.revealProgress / 0.58)
              : 0
         opacity: 1
-        visible: false         // invisible au démarrage
+        visible: false         // Hidden at startup.
 
-        // ── CONTENU (player réel) ──
+        // ── CONTENT (actual player) ──
         Item {
             id:      content
             width:   pw
@@ -208,7 +208,7 @@ Item {
                 id:    playerCol
                 width: pw
 
-                // ── TOP STRIP — bordure noire, ticks +, ticker défilant ──
+                // ── TOP STRIP — black border, plus ticks, scrolling ticker ──
                 Item {
                     id: topStrip
                     width: pw; height: s(16)
@@ -235,7 +235,7 @@ Item {
                         anchors.right: parent.right; anchors.rightMargin: -2; y: -6
                     }
 
-                    // Ticker défilant
+                    // Scrolling ticker.
                     Item {
                         anchors.fill: parent; clip: true
                         Text {
@@ -259,7 +259,7 @@ Item {
                     }
                 }
 
-                // ── MAIN ROW — glyph carré + panel large ──
+                // ── MAIN ROW — square glyph + wide panel ──
                 Row {
                     id: mainRow
                     width: pw
@@ -619,7 +619,7 @@ Item {
                         }
                     }
 
-                    // ── PANEL (large, contient tout le reste) ──
+                    // ── PANEL (wide, contains everything else) ──
                     Item {
                         id: panel
                         width: pw - coverSz
@@ -686,7 +686,7 @@ Item {
 
                             Item { width: 1; height: s(8) }
 
-                            // Titre
+                            // Title.
                             Row {
                                 width:   parent.width
                                 spacing: 0
@@ -735,7 +735,7 @@ Item {
 
                             Item { width: 1; height: 4 }
 
-                            // Artiste
+                            // Artist.
                             Text {
                                 id:    ciArtist
                                 width: parent.width
@@ -782,7 +782,7 @@ Item {
 
                             Item { width: 1; height: 12 }
 
-                            // ── CONTRÔLES (MOCKUP PILL BUTTONS) ──
+                            // ── CONTROLS (MOCKUP PILL BUTTONS) ──
                             Row {
                                 width: parent.width
                                 spacing: s(8)
@@ -1121,7 +1121,7 @@ Item {
             }
         }
 
-        // ── RIDEAU ──
+        // ── CURTAIN ──
         Rectangle {
             id:    curtain
             anchors { top: parent.top; bottom: parent.bottom }
@@ -1218,7 +1218,7 @@ Item {
         animateVisibility()
     }
 
-    // ── COMPOSANT BOUTON CONTRÔLE (PILL ROUNDED) ──
+    // ── CONTROL BUTTON COMPONENT (PILL ROUNDED) ──
     component CBtn: Item {
         id:            btnRoot
         property bool isPlay:  false

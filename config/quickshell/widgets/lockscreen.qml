@@ -523,7 +523,7 @@ ShellRoot {
                                         Keys.onReturnPressed: root.doAuth()
                                         Keys.onEscapePressed: root.lockInput = ""
                                         Text { visible: parent.text === ""; anchors.verticalCenter: parent.verticalCenter
-                                            text: root.lockPending ? "authentification..." : "mot de passe..."; font.family: "Share Tech Mono"; font.pixelSize: 11; font.italic: true; color: "#7a7358"; opacity: 0.5
+                                            text: root.lockPending ? "authenticating..." : "password..."; font.family: "Share Tech Mono"; font.pixelSize: 11; font.italic: true; color: "#7a7358"; opacity: 0.5
                                         }
                                     }
                                 }
@@ -537,7 +537,7 @@ ShellRoot {
                             }
                             Item { width: 1; height: 6 }
 
-                            Text { text: "AUTHENTIFICATION ÉCHOUÉE"; font.family: "Share Tech Mono"; font.pixelSize: 8; font.letterSpacing: 2; color: "#e8e8e8"
+                            Text { text: "AUTHENTICATION FAILED"; font.family: "Share Tech Mono"; font.pixelSize: 8; font.letterSpacing: 2; color: "#e8e8e8"
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 opacity: root.lockError ? 1 : 0; height: 14
                                 Behavior on opacity { NumberAnimation { duration: 200 } }

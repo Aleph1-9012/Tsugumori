@@ -13,23 +13,23 @@
 alias ls='ls --color=auto'
 alias grep='grep --color=auto'
 
-# ─── NieR-themed prompt ────────────────────────────────────────────
+# ─── Tsugumori-themed prompt ──────────────────────────────────────
 PS1='\[\033[38;2;110;42;42m\]▸\[\033[0m\] \[\033[38;2;70;63;46m\]\w\[\033[0m\] \[\033[38;2;50;45;36m\]·\[\033[0m\] '
 
-# Animated cursor color (NieR aesthetic)
-_nier_prompt_cmd() {
+# Animated cursor color (Tsugumori aesthetic)
+_tsugumori_prompt_cmd() {
     printf '\033]12;#6e2a2a\007'
     sleep 0.06
     printf '\033]12;#c8b89a\007'
 }
-PROMPT_COMMAND='_nier_prompt_cmd'
+PROMPT_COMMAND='_tsugumori_prompt_cmd'
 
 # ─── Welcome banner (only on first interactive shell) ──────────────
-if [[ -x ~/.config/quickshell/tsugumori-welcome.sh ]] && command -v figlet >/dev/null; then
+if [[ -x ~/.config/quickshell/tsugumori-welcome.sh ]]; then
     ~/.config/quickshell/tsugumori-welcome.sh
 fi
 # ─── User-specific overrides ───────────────────────────────────────
 [ -f ~/.bashrc.local ] && . ~/.bashrc.local
 
-# Hermes Agent — ensure ~/.local/bin is on PATH
+# Add user-local executables to PATH
 export PATH="$HOME/.local/bin:$PATH"

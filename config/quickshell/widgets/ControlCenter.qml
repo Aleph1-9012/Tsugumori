@@ -6,8 +6,8 @@ import Quickshell.Wayland
 import "../services"
 
 // ═════════════════════════════════════════════════════════════════════
-//   NieR Control Center — Quickshell module
-//   Portage 1:1 du mockup HTML v4
+//   Knights of Sidonia Control Center — Quickshell module
+//   1:1 port of the HTML v4 mockup
 //   IPC : qs ipc call ctrl toggle
 // ═════════════════════════════════════════════════════════════════════
 
@@ -25,7 +25,7 @@ ShellRoot {
         running: true
     }
 
-    // ── Palette NieR ──
+    // ── Sidonia palette ──
     readonly property color colCard:     "#111111"
     readonly property color colCardSoft: Qt.rgba(17/255, 17/255, 17/255, 0.4)
     readonly property color colInk:      "#e8e8e8"
@@ -36,18 +36,18 @@ ShellRoot {
     // ── Layout ──
     readonly property int  slotGapV: 150
     readonly property int  slotGapH: 350
-    readonly property int  panShiftV: 320   // vertical (top/bottom) : centre l'ensemble sub+settings
-    readonly property int  panShiftH: 700   // horizontal (left/right) : sub-menu traverse l'écran
+    readonly property int  panShiftV: 320   // vertical (top/bottom): centers the sub-menu and settings
+    readonly property int  panShiftH: 700   // horizontal (left/right): sub-menu crosses the screen
 
-    // ── État ──
+    // ── State ──
     property bool   open:    false
-    property bool   closing: false   // état intermédiaire : slots reviennent au centre, puis fade
+    property bool   closing: false   // intermediate state: slots return to center, then fade
     property int    level:   1
     property string slot:    "center"
     property string sub:     ""
     property string action:  ""
 
-    // ── Données ──
+    // ── Data ──
     readonly property var subs: ({
         top:    [ {key:"wifi",      label:"Wi-Fi"},
                   {key:"bluetooth", label:"Bluetooth"} ],
@@ -81,10 +81,10 @@ ShellRoot {
     function detailKey() { return slot + "." + sub }
     function subList(s)  { return root.subs[s] || [] }
 
-    // ── Construit la liste d'actions dynamique selon le sub focus ──
+    // ── Build the action list dynamically for the focused sub-menu ──
     function actList() {
         var key = detailKey()
-        // Wi-Fi : toggle + un bouton par réseau scanné
+        // Wi-Fi: toggle plus one button per scanned network.
         if (key === "top.wifi") {
             var acts = [{key:"toggle", label: wifiEnabled ? "Disable Wi-Fi" : "Enable Wi-Fi"}]
             if (wifiEnabled) {
@@ -122,7 +122,7 @@ ShellRoot {
             }
             return acts2
         }
-        // Audio Output : liste des sinks
+        // Audio output: list of sinks.
         if (key === "bottom.output") {
             var acts3 = []
             for (var k = 0; k < audioSinks.length; k++) {
@@ -133,7 +133,7 @@ ShellRoot {
             if (acts3.length === 0) acts3.push({key:"none", label:"No outputs found"})
             return acts3
         }
-        // Audio Volume : pas de liste, juste le slider (rendu séparément)
+        // Audio volume: no list, only the separately rendered slider.
         if (key === "bottom.volume") {
             return [{key:"mute-toggle", label: audioMuted ? "Unmute" : "Mute"}]
         }
@@ -192,7 +192,7 @@ ShellRoot {
         if (key === "right.dnd") {
             return [{key:"toggle-dnd", label: dndEnabled ? "Disable DND" : "Enable DND"}]
         }
-        // Autres : actions statiques du dictionnaire details
+        // Other slots: static actions from the details dictionary.
         var dd = root.details[key]
         return dd ? dd.actions : []
     }
@@ -224,7 +224,7 @@ ShellRoot {
             return "Enabled · " + btDevices.length + " device" + (btDevices.length !== 1 ? "s" : "")
         }
         if (key === "bottom.output") {
-            // Trouver la description du default sink
+            // Find the default sink description.
             for (var i = 0; i < audioSinks.length; i++) {
                 if (audioSinks[i].isDefault) return audioSinks[i].description
             }
@@ -264,15 +264,15 @@ ShellRoot {
         var d3 = root.details[key]
         return d3 ? d3.on : false
     }
-    // ── Données système : Wi-Fi ──
+    // ── System data: Wi-Fi ──
     // Public names stay on root so the presentation and keyboard flow are unchanged.
     property alias wifiEnabled: wifiService.enabled
     property alias wifiCurrentSSID: wifiService.currentSsid
     property alias wifiNetworks: wifiService.networks
     property alias wifiPasswordInput: wifiService.passwordInput
     property int wifiPasswordClearSerial: 0
-    property string wifiPromptSSID: ""   // SSID en cours de saisie de mot de passe (vide = pas de prompt)
-    property string wifiError: ""        // message d'erreur après échec connexion
+    property string wifiPromptSSID: ""   // SSID whose password is being entered (empty = no prompt)
+    property string wifiError: ""        // error message after a failed connection
 
     WifiService {
         id: wifiService
@@ -290,12 +290,12 @@ ShellRoot {
         onPasswordConsumed: root.wifiPasswordClearSerial += 1
     }
 
-    // ── Données système : Bluetooth ──
+    // ── System data: Bluetooth ──
     property bool   btEnabled: false
     property var    btDevices: []   // [{name, mac, connected, paired}]
     property bool   btScanning: false
 
-    // ── Données système : Audio ──
+    // ── System data: Audio ──
     property var    audioSinks: []        // [{name, description, default}]
     property string audioDefaultSink: ""
     property real   audioVolume: 0.5      // 0.0 - 1.0
@@ -340,7 +340,7 @@ ShellRoot {
                         })
                     }
                 }
-                // Marquer le default sink en re-passant (au cas où il a été lu après les sinks)
+                // Mark the default sink on a second pass in case it was read after the sinks.
                 for (var j = 0; j < sinks.length; j++) {
                     sinks[j].isDefault = sinks[j].name === root.audioDefaultSink
                 }
@@ -349,12 +349,12 @@ ShellRoot {
         }
     }
 
-    // ── Notifications via IPC vers Notifications.qml (qui possède le bus DBus) ──
+    // ── Notifications via IPC to Notifications.qml (which owns the D-Bus bus) ──
     property bool dndEnabled: false
     property var notifications: []     // [{id, summary, body, app, ts}]
-    property int expandedNotifIdx: -1  // index de la notif expanded (-1 = aucune)
+    property int expandedNotifIdx: -1  // expanded notification index (-1 = none)
 
-    // Poll l'historique des notifs depuis le daemon Notifications.qml via IPC
+    // Poll notification history from the Notifications.qml daemon via IPC.
     Timer {
         interval: 1500
         running: root.open && root.slot === "right"
@@ -390,18 +390,18 @@ ShellRoot {
             }
         }
     }
-    // Process pour les actions vers le daemon notifs
+    // Process for actions sent to the notification daemon.
     Process {
         id: notifActProc
         command: ["sh","-c","true"]
         running: false
     }
 
-    // Helpers : appellent l'IPC du daemon
+    // Helpers: call the daemon IPC.
     function dismissNotif(idx) {
         notifActProc.command = ["sh","-c","qs ipc call notifs dismissAt " + idx]
         notifActProc.running = true
-        // Refresh local immédiat (optimiste)
+        // Refresh local state immediately (optimistic update).
         var list = root.notifications.slice()
         list.splice(idx, 1)
         root.notifications = list
@@ -412,7 +412,7 @@ ShellRoot {
         root.notifications = []
     }
     function invokeNotif(idx) {
-        // Le daemon fait invoke + dismiss en un appel
+        // The daemon invokes and dismisses in one call.
         dismissNotif(idx)
     }
     function setDnd(state) {
@@ -421,17 +421,17 @@ ShellRoot {
         dndEnabled = state
     }
 
-    // ── Données système : Quickshare (qshare.py) ──
-    property string pendingFilePath: ""   // chemin de fichier sélectionné, en attente d'envoi
+    // ── System data: Quickshare (qshare.py) ──
+    property string pendingFilePath: ""   // selected file path waiting to be sent
 
-    // ── État qshare ──
+    // ── qshare state ──
     property bool   qshareTunnel:    false
     property bool   qshareKeepAlive: false
     property string qshareOutputDir: home + "/Downloads"
-    property string qshareUrl:       ""     // URL active (modal visible si non vide)
-    property string qshareQrPath:    ""     // chemin du PNG QR
-    property string qshareLabel:     ""     // ex. "envoi : photo.jpg" ou "réception → ~/Downloads"
-    property string qshareLastTick:  ""     // dernier fichier transféré (pour feedback)
+    property string qshareUrl:       ""     // active URL (modal visible when non-empty)
+    property string qshareQrPath:    ""     // QR PNG path
+    property string qshareLabel:     ""     // e.g. "sending: photo.jpg" or "receiving → ~/Downloads"
+    property string qshareLastTick:  ""     // last file transferred (for feedback)
     property bool   qshareCancelled: false
     property string qshareRunId:     "idle"
     readonly property string qshareScriptPath: xdgConfigHome + "/quickshell/scripts/qshare.py"
@@ -447,12 +447,12 @@ ShellRoot {
         "/tmp"
     ]
 
-    // Process qui lance Yazi pour picker un fichier
+    // Process that launches Yazi to pick a file.
     Process {
         id: yaziProc
         running: false
         command: ["python3", root.yaziScriptPath]
-        // Le résultat est écrit par yazi dans le répertoire runtime privé.
+        // Yazi writes the result to the private runtime directory.
         onExited: (exitCode, exitStatus) => {
             if (exitCode === 0) {
                 yaziCheckTimer.count = 0
@@ -460,7 +460,7 @@ ShellRoot {
             }
         }
     }
-    // Timer qui vérifie l'existence du fichier choisi par yazi
+    // Timer that checks for the file selected by Yazi.
     Timer {
         id: yaziCheckTimer
         interval: 500
@@ -483,7 +483,7 @@ ShellRoot {
                     root.pendingFilePath = path
                     yaziCheckTimer.running = false
                     yaziCheckTimer.count = 0
-                    // Rouvre le ControlCenter sur left.send avec le fichier sélectionné
+                    // Reopen the Control Center on left.send with the selected file.
                     if (!root.open) {
                         root.open = true
                         root.closing = false
@@ -498,7 +498,7 @@ ShellRoot {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    //   qshare.py — process + event polling + lancement/arrêt
+    //   qshare.py — process, event polling, start/stop
     // ═══════════════════════════════════════════════════════════════════
 
     function startQshare(mode, filePath) {
@@ -513,14 +513,14 @@ ShellRoot {
         root.qshareLastTick = ""
         root.qshareCancelled = false
 
-        // Construit la commande
+        // Build the command.
         var args = ["python3", qshareScriptPath, mode]
         if (mode === "send") {
             args.push(filePath)
-            qshareLabel = "envoi : " + filePath.split("/").pop()
+            qshareLabel = "sending: " + filePath.split("/").pop()
         } else {
             args.push("-o"); args.push(qshareOutputDir)
-            qshareLabel = "réception → " + qshareOutputDir.replace(home, "~")
+            qshareLabel = "receiving → " + qshareOutputDir.replace(home, "~")
         }
         if (qshareTunnel)    args.push("--tunnel")
         if (qshareKeepAlive) args.push("--keep-alive")
@@ -538,7 +538,7 @@ ShellRoot {
         qshareEventPoll.running = false
         qshareUrl = ""
         qshareQrPath = ""
-        // Reset pendingFilePath après un envoi
+        // Reset pendingFilePath after a send.
         pendingFilePath = ""
     }
 
@@ -546,11 +546,11 @@ ShellRoot {
         id: qshareProc
         running: false
         command: ["sh","-c","true"]
-        // stdout/stderr ignorés — on s'en remet à l'event-file
+        // stdout/stderr ignored — rely on the event file.
         onRunningChanged: {
             if (!running) {
-                // Process terminé → ferme le modal après un petit délai pour
-                // laisser le temps de voir le tick final
+                // Process finished → close the modal after a short delay to
+                // Give the final tick time to appear.
                 qshareEventPoll.running = false
                 qshareCloseTimer.restart()
             }
@@ -567,7 +567,7 @@ ShellRoot {
             qshareLastTick = ""
             qshareCleanupProc.command = ["rm", "-f", root.qshareEventFile, root.qshareQrFile]
             qshareCleanupProc.running = true
-            // Reset pendingFilePath après un transfert send réussi
+            // Reset pendingFilePath after a successful send transfer.
             if (!qshareCancelled && root.sub === "send") {
                 pendingFilePath = ""
             }
@@ -579,7 +579,7 @@ ShellRoot {
         running: false
     }
 
-    // Poll l'event-file pour récupérer URL/QR/TICK/DONE
+    // Poll the event file for URL/QR/TICK/DONE.
     Timer {
         id: qshareEventPoll
         interval: 500
@@ -605,7 +605,7 @@ ShellRoot {
                     } else if (line.indexOf("TICK ") === 0) {
                         root.qshareLastTick = line.substring(5)
                     } else if (line === "DONE") {
-                        // Le process va s'arrêter tout seul, le onRunningChanged gère
+                        // The process stops on its own; onRunningChanged handles it.
                     } else if (line === "CANCELLED") {
                         root.qshareCancelled = true
                     }
@@ -620,8 +620,8 @@ ShellRoot {
     }
     Process {
         id: pollBt
-        // Récupère powered + liste de TOUS les devices (paired et découverts)
-        // avec leur état connected et paired pour différencier
+        // Fetch powered state and all devices (paired and discovered),
+        // including connected and paired state for differentiation.
         command: ["sh","-c",
             "echo \"$(bluetoothctl show 2>/dev/null | grep -i 'powered:' | awk '{print $2}')\"; " +
             "bluetoothctl devices 2>/dev/null | while read line; do " +
@@ -654,7 +654,7 @@ ShellRoot {
                 }
                 var devices = []
                 for (var k in seen) devices.push(seen[k])
-                // Trier : connectés > paired > non-paired (découverts), puis nom
+                // Sort: connected > paired > non-paired (discovered), then name.
                 devices.sort(function(a,b){
                     if (a.connected !== b.connected) return a.connected ? -1 : 1
                     if (a.paired    !== b.paired)    return a.paired ? -1 : 1
@@ -665,20 +665,20 @@ ShellRoot {
         }
     }
 
-    // Process pour scan BT
+    // Process for Bluetooth scanning.
     Process {
         id: btScanProc
         command: ["sh","-c","bluetoothctl --timeout 30 scan on"]
         running: false
     }
-    // Stop scan automatique après 30s
+    // Stop the automatic scan after 30s.
     Timer {
         id: btScanStopTimer
         interval: 30000
         repeat: false
         onTriggered: { root.btScanning = false }
     }
-    // Re-poll plus fréquent quand on scan
+    // Poll more frequently while scanning.
     Timer {
         interval: 1500
         running: root.btScanning && root.open
@@ -686,10 +686,10 @@ ShellRoot {
         onTriggered: pollBt.running = true
     }
 
-    // ── Process pour exécuter les actions ──
+    // ── Process for executing actions ──
     Process { id: actProc; command: ["sh","-c","true"]; running: false }
 
-    // Refresh state quand on change de slot
+    // Refresh state when changing slots.
     onSlotChanged: {
         cancelWifiPrompt()
         if (slot === "top")    { wifiService.refresh(); pollBt.running = true }
@@ -703,7 +703,7 @@ ShellRoot {
     onLevelChanged: { if (level !== 3) cancelWifiPrompt() }
     onOpenChanged:  { if (!open) cancelWifiPrompt() }
 
-    // Cancel le prompt Wi-Fi proprement (fermeture du TextInput, reset focus au keyHandler)
+    // Cancel the Wi-Fi prompt cleanly (close TextInput and reset key-handler focus).
     function cancelWifiPrompt() {
         if (wifiPromptSSID === "") return
         wifiPromptSSID = ""
@@ -714,7 +714,7 @@ ShellRoot {
     function firstSub(s) { var l = subList(s); return l.length ? l[0].key : "" }
     function firstAction() { var l = actList(); return l.length ? l[0].key : "" }
 
-    // ── Dispatcher des actions de boutons ──
+    // ── Button action dispatcher ──
     function dispatchAction(slotKey, subKey, actionKey) {
         console.log("[ControlCenter] action:", slotKey + "." + subKey + "." + actionKey)
         var cmd = ""
@@ -726,29 +726,29 @@ ShellRoot {
                 return
             } else if (actionKey.indexOf("connect:") === 0) {
                 var ssid = actionKey.substring(8)
-                // Trouver le réseau dans la liste pour vérifier la sécurité
+                // Find the network in the list to check its security.
                 var net = null
                 for (var i = 0; i < wifiNetworks.length; i++) {
                     if (wifiNetworks[i].ssid === ssid) { net = wifiNetworks[i]; break }
                 }
-                // Si déjà actif, déconnexion
+                // Disconnect if already active.
                 if (net && net.active) {
                     wifiService.disconnect(ssid)
                     return
                 }
-                // Si réseau ouvert, connexion directe
+                // Connect directly if the network is open.
                 else if (net && (net.security === "" || net.security === "--")) {
                     wifiService.connectOpen(ssid)
                     return
                 }
-                // Si réseau sécurisé : ouvrir le prompt
+                // Open the prompt for a secured network.
                 else {
                     wifiPromptSSID = ssid
                     wifiError = ""
                     return
                 }
             } else if (actionKey === "submit-password") {
-                // Le service écrit le secret sur stdin après démarrage et l'efface aussitôt.
+                // The service writes the secret to stdin after startup, then clears it.
                 wifiService.connectWithPassword(wifiPromptSSID)
                 return
             } else if (actionKey === "cancel-prompt") {
@@ -805,14 +805,14 @@ ShellRoot {
         // ── Quickshare Send (qshare.py) ──
         else if (slotKey === "left" && subKey === "send") {
             if (actionKey === "pick-file") {
-                // Lance le terminal flottant avec yazi.
-                // 1) On attend ~350ms le temps que le ControlCenter relâche
-                //    son focus exclusif (l'animation de close dure 290ms)
-                // 2) On lance yazi en background
-                // 3) On force le focus via hyprctl au cas où Hyprland ne l'a
-                //    pas donné automatiquement (race condition possible)
+                // Launch the floating terminal with Yazi.
+                // 1) Wait ~350ms for the Control Center to release exclusive focus
+                //    (the close animation lasts 290ms).
+                // 2) Launch Yazi in the background.
+                // 3) Force focus with hyprctl if Hyprland did not assign it
+                //    automatically (a race condition is possible).
                 yaziProc.running = true
-                // Ferme le ControlCenter pour libérer le focus à la fenêtre yazi
+                // Close the Control Center so the Yazi window can receive focus.
                 close()
                 return
             } else if (actionKey === "clear-file") {
@@ -872,9 +872,9 @@ ShellRoot {
         if (cmd) {
             actProc.command = ["sh","-c", cmd]
             actProc.running = true
-            // refresh state après une seconde
+            // Refresh state after one second.
             refreshTimer.restart()
-            // Pour les actions BT pair/connect/disconnect/remove, refresh répété
+            // Repeat refreshes for BT pair/connect/disconnect/remove actions.
             if (slotKey === "top" && subKey === "bluetooth" && actionKey !== "toggle" && actionKey !== "scan") {
                 btRepeatRefresh.count = 0
                 btRepeatRefresh.running = true
@@ -886,7 +886,7 @@ ShellRoot {
         interval: 800; repeat: false
         onTriggered: { wifiService.refresh(); pollBt.running = true }
     }
-    // Refresh BT répété après une action pair/connect (peut prendre 5-10s)
+    // Repeat BT refreshes after pair/connect actions (may take 5–10s).
     Timer {
         id: btRepeatRefresh
         interval: 1500
@@ -901,7 +901,7 @@ ShellRoot {
 
     function activateCurrent() {
         if (level === 3 && action) {
-            // Cas spécial notifs : 1er Enter = expand, 2e Enter = invoke
+            // Notification special case: first Enter expands, second invokes.
             if (slot === "right" && sub === "history" && action.indexOf("notif:") === 0) {
                 var idx = parseInt(action.substring(6))
                 if (expandedNotifIdx === idx) {
@@ -925,8 +925,8 @@ ShellRoot {
     }
     function close() {
         if (!open) return
-        // Phase 1 : on remet level à 1 (slot=center) et on déclenche closing.
-        // Les slots reviennent au centre, le centre reste visible.
+        // Phase 1: reset level to 1 (slot=center) and start closing.
+        // Slots return to center while the center remains visible.
         level = 1; slot = "center"; sub = ""; action = ""
         closing = true
         closeTimer.start()
@@ -936,13 +936,13 @@ ShellRoot {
         else close()
     }
 
-    // Timer qui finalise la fermeture après que les slots soient revenus au centre
+    // Timer that finalizes closing after the slots return to center.
     Timer {
         id: closeTimer
-        interval: 290  // attendre la fin de l'animation des slots (250ms + marge)
+        interval: 290  // Wait for the slot animation to finish (250ms + margin).
         repeat: false
         onTriggered: {
-            // Phase 2 : on cache vraiment (fade out via opacity 0 dans le panel)
+            // Phase 2: hide completely (fade the panel opacity to 0).
             open = false
             closing = false
         }
@@ -1004,7 +1004,7 @@ ShellRoot {
         }
     }
 
-    // ── Détection écran actif ──
+    // ── Active screen detection ──
     property string activeMonitor: ""
     Process {
         id: getMonitorProc
@@ -1037,7 +1037,7 @@ ShellRoot {
             visible: root.open || root.closing
             readonly property bool isActive: modelData.name === root.activeMonitor
 
-            // Fond dim
+            // Dim background.
             Rectangle {
                 anchors.fill: parent
                 color: "#0a0a0a"
@@ -1046,17 +1046,17 @@ ShellRoot {
                 MouseArea { anchors.fill: parent; onClicked: root.close() }
             }
 
-            // ── Conteneur clavier + croix ──
+            // ── Keyboard container and cross ──
             Item {
                 id: keyHandler
                 anchors.fill: parent
                 visible: isActive
                 opacity: (root.open && !root.closing) ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 220 } }
-                // Cède le focus au TextInput Wi-Fi quand le prompt est ouvert
+                // Give focus to the Wi-Fi TextInput when the prompt opens.
                 focus: root.open && !root.closing && isActive && root.wifiPromptSSID === ""
 
-                // Reprendre le focus clavier quand le prompt Wi-Fi se ferme
+                // Restore keyboard focus when the Wi-Fi prompt closes.
                 Connections {
                     target: root
                     function onWifiPromptSSIDChanged() {
@@ -1078,13 +1078,13 @@ ShellRoot {
                     else if (k === Qt.Key_D || k === Qt.Key_Right)    { root.navigate("right"); e.accepted = true }
                 }
 
-                // ── Croix avec pan ──
+                // ── Cross with pan ──
                 Item {
                     id: cross
                     anchors.centerIn: parent
                     width: 1; height: 1
 
-                    // Pan global : le cross glisse pour amener le slot focusé vers le centre
+                // Global pan: slide the cross to bring the focused slot to center.
                     anchors.horizontalCenterOffset: {
                         if (root.level !== 3) return 0
                         if (root.slot === "left")  return  root.panShiftH
@@ -1104,10 +1104,10 @@ ShellRoot {
                         NumberAnimation { duration: 480; easing.type: Easing.OutCubic }
                     }
 
-                    NierArrow { axis: "top" }
-                    NierArrow { axis: "bottom" }
-                    NierArrow { axis: "left" }
-                    NierArrow { axis: "right" }
+                    TsugumoriArrow { axis: "top" }
+                    TsugumoriArrow { axis: "bottom" }
+                    TsugumoriArrow { axis: "left" }
+                    TsugumoriArrow { axis: "right" }
 
                     Slot {
                         slotKey: "center"
@@ -1118,7 +1118,7 @@ ShellRoot {
                     }
                     Slot {
                         slotKey: "top"
-                        title: "Connexion"
+                        title: "Connection"
                         subtitle: "Wi-Fi · Bluetooth"
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.verticalCenter: parent.verticalCenter
@@ -1163,7 +1163,7 @@ ShellRoot {
                 }
 
                 // ═══════════════════════════════════════════════════════
-                //   QR Modal qshare (visible quand qshareUrl !== "")
+                //   qshare QR modal (visible when qshareUrl !== "")
                 // ═══════════════════════════════════════════════════════
                 Rectangle {
                     id: qrBackdrop
@@ -1191,14 +1191,14 @@ ShellRoot {
                     Behavior on opacity { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
                     Behavior on scale   { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
 
-                    // Fond carte
+                    // Card background.
                     Rectangle {
                         anchors.fill: parent
                         color: root.colCard
                         border.color: root.colInk
                         border.width: 1
                     }
-                    // Bordure interne décalée
+                    // Offset inner border.
                     Rectangle {
                         anchors.fill: parent
                         anchors.margins: 4
@@ -1207,7 +1207,7 @@ ShellRoot {
                         border.width: 1
                         opacity: 0.35
                     }
-                    // Coins en L
+                            // L-shaped corner markers.
                     Repeater {
                         model: 4
                         Item {
@@ -1239,7 +1239,7 @@ ShellRoot {
 
                         Item { width: 1; height: 4 }
 
-                        // Label (envoi/réception)
+                        // Label (sending/receiving).
                         Text {
                             width: parent.width
                             text: root.qshareLabel
@@ -1283,7 +1283,7 @@ ShellRoot {
                             }
                         }
 
-                        // URL en petit
+                        // Small URL text.
                         Text {
                             width: parent.width
                             text: root.qshareUrl
@@ -1310,7 +1310,7 @@ ShellRoot {
                         }
                     }
 
-                    // Bouton Cancel/Stop en bas-droite
+                    // Cancel/Stop button at the bottom right.
                     Rectangle {
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
@@ -1345,11 +1345,11 @@ ShellRoot {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    //   COMPOSANTS
+    //   COMPONENTS
     // ═══════════════════════════════════════════════════════════════════
 
-    // ── Flèche NieR ──
-    component NierArrow: Item {
+    // ── Sidonia arrow ──
+    component TsugumoriArrow: Item {
         id: ar
         property string axis: "top"
         width: 36; height: 36
@@ -1413,7 +1413,7 @@ ShellRoot {
 
         opacity: {
             if (!root.open && !root.closing) return 0
-            if (root.closing) return 0.55  // toutes au repos pendant la fermeture
+            if (root.closing) return 0.55  // All slots rest during closing.
             if (isFocused)  return 1.0
             if (root.level >= 2) return 0.18
             return 0.55
@@ -1447,12 +1447,12 @@ ShellRoot {
                 if (isCenter) return 0.4
                 return 0.28
             }
-            // L1 (et closing) : tous les slots clairs
+            // L1 (and closing): all slots are bright.
             return 1.0
         }
         Behavior on opacity { NumberAnimation { duration: 320 } }
 
-        // Marqueur focus à gauche
+        // Focus marker on the left.
         Item {
             id: focusMark
             width: 18; height: 18
@@ -1504,7 +1504,7 @@ ShellRoot {
                 border.color: root.colInk
                 border.width: 1
 
-                // Onglet asymétrique
+        // Asymmetric tab.
                 Rectangle {
                     visible: !sl.isCenter
                     anchors.left: parent.left
@@ -1516,7 +1516,7 @@ ShellRoot {
                     z: 2
                 }
 
-                // Bordure interne
+                // Inner border.
                 Rectangle {
                     anchors.fill: parent
                     anchors.margins: 4
@@ -1528,7 +1528,7 @@ ShellRoot {
                     z: 2
                 }
 
-                // Coins en L
+                // L-shaped corner markers.
                 Repeater {
                     model: sl.isCenter ? 0 : 4
                     Item {
@@ -1566,7 +1566,7 @@ ShellRoot {
                     visible: !sl.isCenter
                 }
 
-                // Indicateur (carré sombre à gauche)
+        // Indicator (dark square on the left).
                 Rectangle {
                     visible: !sl.isCenter
                     width: 14; height: 14
@@ -1618,7 +1618,7 @@ ShellRoot {
             }
         }
 
-        // Losanges aux coins du center
+        // Diamonds at the center corners.
         Repeater {
             model: sl.isCenter ? 4 : 0
             Rectangle {
@@ -1658,7 +1658,7 @@ ShellRoot {
             }
         }
 
-        // Détails
+        // Details.
         Item {
             id: detailsItem
             visible: sl.isInL3 && (root.detailKey() in root.details)
@@ -1678,14 +1678,14 @@ ShellRoot {
             width: 300
             height: detailsCol.implicitHeight + 36
 
-            // Box stylisée style NieR (fond opaque + bordure + onglet)
+            // Sidonia cassette-futurist box (opaque fill + border + tab).
             Rectangle {
                 anchors.fill: parent
                 color: root.colCard
                 border.color: root.colInk
                 border.width: 1
             }
-            // Bordure interne décalée
+            // Offset inner border.
             Rectangle {
                 anchors.fill: parent
                 anchors.margins: 4
@@ -1694,7 +1694,7 @@ ShellRoot {
                 border.width: 1
                 opacity: 0.35
             }
-            // Coins en L
+            // L-shaped corner markers.
             Repeater {
                 model: 4
                 Item {
@@ -1769,7 +1769,7 @@ ShellRoot {
                         font.pixelSize: 12
                         color: root.colInk
                         anchors.verticalCenter: parent.verticalCenter
-                        // largeur max : panneau total - dot - margin
+                        // Maximum width: total panel minus dot and margin.
                         width: detailsCol.width - 26
                         elide: Text.ElideRight
                         wrapMode: Text.NoWrap
@@ -1784,21 +1784,21 @@ ShellRoot {
 
                 Item { width: 1; height: 14 }
 
-                // Liste scrollable des actions
-                // Pour les notifs (right.history) : composant NotifBtn avec expand
-                // Pour le reste : ActionBtn standard
+                // Scrollable action list.
+                // For notifications (right.history): expandable NotifBtn.
+                // For everything else: standard ActionBtn.
                 Item {
                     id: actListContainer
                     width: parent.width
                     property bool isNotifList: sl.slotKey === "right" && root.sub === "history"
                     property int actCount: root.actList().length
-                    // Hauteur adaptative max 8 visibles, mais hauteur d'item plus grande pour notifs expanded
+                    // Adaptive height with up to 8 visible items; expanded notifications need more space.
                     height: isNotifList
                         ? Math.min(actCount === 0 ? 1 : Math.max(actCount, 1), 5) * 56 + (root.expandedNotifIdx >= 0 ? 90 : 0)
                         : Math.min(actCount, 8) * 40
-                    visible: actCount > 0 || isNotifList   // toujours visible pour notifs (pour msg vide)
+                    visible: actCount > 0 || isNotifList   // Always visible for notifications, including empty messages.
 
-                    // Message si liste vide (notifs)
+                    // Message for an empty notification list.
                     Text {
                         anchors.centerIn: parent
                         visible: actListContainer.isNotifList && actListContainer.actCount === 0
@@ -1817,7 +1817,7 @@ ShellRoot {
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
 
-                        // Auto-scroll vers la notif focusée
+                        // Auto-scroll to the focused notification.
                         function scrollToFocus() {
                             var acts = root.actList()
                             for (var i = 0; i < acts.length; i++) {
@@ -1856,7 +1856,7 @@ ShellRoot {
                         }
                     }
 
-                    // Indicateur de scroll visible (track + thumb)
+                        // Visible scroll indicator (track + thumb).
                     Rectangle {
                         anchors.right: parent.right
                         anchors.top: parent.top
@@ -1881,7 +1881,7 @@ ShellRoot {
                     }
                 }
 
-                // ── Footer pinned : "Clear All" pour les notifs (visible si notifs > 0) ──
+                // ── Pinned footer: "Clear All" for notifications (visible when count > 0) ──
                 Item {
                     width: parent.width
                     visible: sl.slotKey === "right" && root.sub === "history" && root.notifications.length > 0
@@ -1921,7 +1921,7 @@ ShellRoot {
                     }
                 }
 
-                // ── Composants pour la liste ──
+                // ── List components ──
                 Component {
                     id: actionBtnComp
                     ActionBtn {
@@ -1939,7 +1939,7 @@ ShellRoot {
                     }
                 }
 
-                // ── Slider Volume (visible quand bottom.volume) ──
+                // ── Volume slider (visible when bottom.volume) ──
                 Item {
                     width: parent.width
                     visible: sl.slotKey === "bottom" && root.sub === "volume"
@@ -1963,7 +1963,7 @@ ShellRoot {
                             border.color: root.colInk
                             border.width: 1
 
-                            // Bordure interne
+                            // Inner border.
                             Rectangle {
                                 anchors.fill: parent
                                 anchors.margins: 3
@@ -1973,7 +1973,7 @@ ShellRoot {
                                 opacity: 0.35
                             }
 
-                            // Fill (volume actuel)
+                            // Fill (current volume).
                             Rectangle {
                                 anchors.left: parent.left
                                 anchors.top: parent.top
@@ -1986,7 +1986,7 @@ ShellRoot {
                                 Behavior on opacity { NumberAnimation { duration: 200 } }
                             }
 
-                            // MouseArea : clic = mute toggle, drag = set volume
+                            // MouseArea: click toggles mute, drag sets volume.
                             MouseArea {
                                 anchors.fill: parent
                                 hoverEnabled: true
@@ -2008,10 +2008,10 @@ ShellRoot {
                                     if (dragging) setVol(e.x)
                                 }
                                 onClicked: function(e) {
-                                    // Click simple sans drag : mute/unmute si sur la cellule à droite (au-delà de la ligne actuelle)
-                                    // Sinon set vol
+                                    // A click without dragging toggles mute on the cell right of the current line.
+                                    // Otherwise set the volume.
                                     if (Math.abs(e.x - lastX) < 3) {
-                                        // C'était juste un click : on a déjà appelé setVol, c'est ok
+                                        // It was only a click; setVol was already called.
                                     }
                                 }
                                 onWheel: function(e) {
@@ -2029,7 +2029,7 @@ ShellRoot {
                             }
                         }
 
-                        // Indication mute clickable
+                        // Clickable mute indicator.
                         Text {
                             text: root.audioMuted ? "Muted · Click track to unmute" : "Right-click track to mute · Scroll to adjust"
                             font.family: "Inter"
@@ -2041,7 +2041,7 @@ ShellRoot {
                     }
                 }
 
-                // ── Prompt mot de passe Wi-Fi (visible quand wifiPromptSSID est set) ──
+                // ── Wi-Fi password prompt (visible when wifiPromptSSID is set) ──
                 Item {
                     width: parent.width
                     visible: sl.slotKey === "top" && root.sub === "wifi" && root.wifiPromptSSID !== ""
@@ -2090,8 +2090,8 @@ ShellRoot {
                                 onAccepted: root.dispatchAction("top","wifi","submit-password")
                                 Keys.onEscapePressed: root.dispatchAction("top","wifi","cancel-prompt")
 
-                                // Timer pour forcer le focus après que le widget soit rendu
-                                // (le focus immédiat est volé par le keyHandler parent)
+                                // Timer to force focus after the widget is rendered.
+                                // Immediate focus is stolen by the parent key handler.
                                 Timer {
                                     id: pwFocusTimer
                                     interval: 50
@@ -2114,7 +2114,7 @@ ShellRoot {
                                         pwInput.text = ""
                                     }
                                 }
-                                // Au cas où le widget devient visible avant que la propriété change
+                                // Handle the widget becoming visible before the property changes.
                                 onVisibleChanged: {
                                     if (visible && root.wifiPromptSSID !== "") {
                                         pwFocusTimer.restart()
@@ -2123,7 +2123,7 @@ ShellRoot {
                             }
                         }
 
-                        // Erreur si applicable
+                        // Error, when applicable.
                         Text {
                             visible: root.wifiError !== ""
                             text: root.wifiError
@@ -2132,7 +2132,7 @@ ShellRoot {
                             color: "#cc1515"
                         }
 
-                        // Boutons Connect / Cancel
+                        // Connect / Cancel buttons.
                         Row {
                             spacing: 8
                             Rectangle {
@@ -2177,7 +2177,7 @@ ShellRoot {
             }
         }
 
-        // Hover / clic sur la box
+        // Hover / click on the box.
         MouseArea {
             anchors.fill: boxWrap
             hoverEnabled: true
@@ -2220,14 +2220,14 @@ ShellRoot {
             }
         }
 
-        // Fond opaque permanent
+        // Permanent opaque background.
         Rectangle {
             anchors.fill: parent
             color: root.colCard
             z: 0
         }
 
-        // Bordure : fine en repos, épaisse au focus
+        // Border: thin at rest, thick when focused.
         Rectangle {
             anchors.fill: parent
             color: "transparent"
@@ -2277,7 +2277,7 @@ ShellRoot {
             }
         }
 
-        // Re-scramble quand devient focus
+        // Re-scramble when focused.
         onIsFocusChanged: if (isFocus) subScramble.start()
 
         MouseArea {
@@ -2293,7 +2293,7 @@ ShellRoot {
         }
     }
 
-    // ── Bouton d'action ──
+    // ── Action button ──
     component ActionBtn: Item {
         id: btn
         property var    actionData
@@ -2325,7 +2325,7 @@ ShellRoot {
             Behavior on opacity { NumberAnimation { duration: 220 } }
         }
 
-        // Curtain au focus
+        // Curtain on focus.
         Rectangle {
             anchors.fill: parent
             color: root.colInk
@@ -2338,7 +2338,7 @@ ShellRoot {
             z: 1
         }
 
-        // Marqueur losange à gauche au focus
+        // Diamond marker on the left when focused.
         Rectangle {
             width: 6; height: 6; rotation: 45
             color: root.colCard
@@ -2380,7 +2380,7 @@ ShellRoot {
             }
         }
 
-        // Re-scramble quand on devient focus
+        // Re-scramble when focused.
         onIsFocusChanged: if (isFocus) btnScramble.start()
 
         MouseArea {
@@ -2394,7 +2394,7 @@ ShellRoot {
         }
     }
 
-    // ── Bouton Notification (avec expand/collapse) ──
+    // ── Notification button (with expand/collapse) ──
     component NotifBtn: Item {
         id: nbtn
         property var notifData
@@ -2416,7 +2416,7 @@ ShellRoot {
             }
         }
 
-        // Bordure
+        // Border.
         Rectangle {
             anchors.fill: parent
             color: nbtn.isFocus ? root.colInk : "transparent"
@@ -2440,7 +2440,7 @@ ShellRoot {
             z: 1
         }
 
-        // Marqueur losange focus
+        // Diamond focus marker.
         Rectangle {
             width: 5; height: 5; rotation: 45
             color: root.colCard
@@ -2452,16 +2452,16 @@ ShellRoot {
             z: 3
         }
 
-        // Contenu
+        // Content.
         Item {
             anchors.fill: parent
             anchors.leftMargin: 18
-            anchors.rightMargin: 36   // place pour le bouton expand
+            anchors.rightMargin: 36   // room for the expand button
             anchors.topMargin: 6
             anchors.bottomMargin: 6
             z: 2
 
-            // App name (petit, en haut)
+            // App name (small, at the top).
             Text {
                 id: appLabel
                 anchors.top: parent.top
@@ -2491,7 +2491,7 @@ ShellRoot {
                 wrapMode: Text.NoWrap
             }
 
-            // Body (visible quand expanded)
+            // Body (visible when expanded).
             Text {
                 id: bodyLabel
                 anchors.top: summaryLabel.bottom
@@ -2509,7 +2509,7 @@ ShellRoot {
                 elide: Text.ElideRight
             }
 
-            // Metadata (visible quand expanded) : urgency, category, timeout, actions
+            // Metadata (visible when expanded): urgency, category, timeout, actions.
             Text {
                 anchors.top: bodyLabel.visible ? bodyLabel.bottom : summaryLabel.bottom
                 anchors.topMargin: 4
@@ -2537,7 +2537,7 @@ ShellRoot {
             }
         }
 
-        // Bouton expand ▸ / ▾
+        // Expand button ▸ / ▾.
         Item {
             id: expandBtn
             width: 24; height: parent.height
@@ -2564,26 +2564,26 @@ ShellRoot {
             }
         }
 
-        // MouseArea pour clic sur le corps : 1er clic = expand, 2e clic = invoke
+        // Body MouseArea: first click expands, second click invokes.
         MouseArea {
             anchors.fill: parent
-            anchors.rightMargin: 24   // ne pas couvrir le bouton expand
+            anchors.rightMargin: 24   // Do not cover the expand button.
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             z: 0
             onEntered: root.action = nbtn.notifData.key
             onClicked: {
                 if (nbtn.expanded) {
-                    // déjà expandu → invoke source
+                    // Already expanded → invoke the source.
                     root.invokeNotif(nbtn.notifData.notifIdx)
                 } else {
-                    // pas encore expanded → expand
+                    // Not expanded yet → expand.
                     root.expandedNotifIdx = nbtn.notifData.notifIdx
                 }
             }
         }
 
-        // Quand expanded, on agrandit la hauteur
+        // Increase the height when expanded.
         states: State {
             name: "expanded"
             when: nbtn.expanded
@@ -2595,7 +2595,7 @@ ShellRoot {
 
     component ScrambleAnim: QtObject {
         id: anim
-        property Item target: null   // doit avoir une property "targetText"
+        property Item target: null   // Must have a "targetText" property.
         property int duration: 280
         property string chars: "▸◆▪▫░▒▓█/\\|-_=+*"
         property int _elapsed: 0

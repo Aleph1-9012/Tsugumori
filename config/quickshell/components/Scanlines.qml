@@ -1,20 +1,20 @@
 import QtQuick
 
-// Overlay scanlines NieR — à poser par-dessus n'importe quel widget
-// Usage :
+// Scanline overlay — place it over any widget.
+// Usage:
 //   Scanlines { anchors.fill: parent }
 
 Item {
     id:              root
     anchors.fill:    parent
     property real   lineOpacity: 0.06
-    property int    lineSpacing: 3    // px entre chaque ligne
-    property bool   grain:       true // grain de texture en plus
+    property int    lineSpacing: 3    // Pixel gap between lines.
+    property bool   grain:       true // Add texture grain.
 
-    // Ne capte aucun événement
+    // Does not capture events.
     enabled:         false
 
-    // Scanlines via Canvas (plus léger qu'un Repeater de rectangles)
+    // Draw scanlines with Canvas; lighter than a rectangle Repeater.
     Canvas {
         id:           cv
         anchors.fill: parent
@@ -29,14 +29,14 @@ Item {
             }
         }
 
-        // Redessine si la taille change
+        // Redraw when the size changes.
         onWidthChanged:  requestPaint()
         onHeightChanged: requestPaint()
 
         Component.onCompleted: requestPaint()
     }
 
-    // Grain subtil (points aléatoires semi-transparents)
+    // Subtle grain (random semi-transparent points).
     Canvas {
         id:           grainCv
         anchors.fill: parent
@@ -46,7 +46,7 @@ Item {
         onPaint: {
             var ctx = getContext("2d")
             ctx.clearRect(0, 0, width, height)
-            // Grain léger : 1 pixel tous les ~8px²
+            // Light grain: one pixel per roughly 8 square pixels.
             var density = Math.floor(width * height / 8)
             for (var i = 0; i < density; i++) {
                 var x = Math.floor(Math.random() * width)

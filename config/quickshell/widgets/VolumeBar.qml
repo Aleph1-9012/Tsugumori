@@ -4,19 +4,19 @@ import Quickshell.Io
 import Quickshell.Wayland
 
 // ═════════════════════════════════════════════════════════════════════
-//   Volume bar verticale — bord gauche
-//   - 30 segments qui morphent carré (vide) ↔ barre fine (rempli)
-//   - Scroll / clic / drag
-//   - Contrôle PulseAudio via pactl (compatible pavucontrol)
-//   - Écran actif uniquement
-//   - Click-through hors de la zone active : le panel lui-même change
-//     de largeur et de hauteur pour ne couvrir que ce qui est utile.
+//   Vertical volume bar — left edge
+//   - 30 segments morphing from square (empty) to thin bar (filled)
+//   - Scroll / click / drag
+//   - PulseAudio control through pactl
+//   - Active screen only
+//   - Click-through outside the active area: the panel changes its width
+//     and height so it covers only what is needed.
 // ═════════════════════════════════════════════════════════════════════
 
 ShellRoot {
     id: root
 
-    // ── Paramètres ──
+    // ── Parameters ──
     readonly property int segments: 30
     readonly property int hoverWidth: 65
     readonly property int barWidth: 40
@@ -35,12 +35,12 @@ ShellRoot {
     readonly property color colEmpty:  "#e8e8e8"
     readonly property color colBg:     "#0a0a0a"
 
-    // ── État volume ──
+    // ── Volume state ──
     property real volume: 0.5
     property bool muted: false
     property bool userInteracting: false
 
-    // ── Écran actif ──
+    // ── Active screen ──
     property string activeMonitor: ""
     Timer {
         interval: 200; running: true; repeat: true
@@ -89,11 +89,11 @@ ShellRoot {
     Process { id: setVolProc; command: ["sh","-c","true"]; running: false }
 
     // ═══════════════════════════════════
-    //   Un seul PanelWindow par écran
-    //   - Hauteur FIXE : barHeight (plus zone label), centré verticalement
-    //   - Largeur dynamique : hoverWidth quand caché, large quand révélé
-    //   Tout ce qui est en dehors de cette zone est click-through natif
-    //   (pas de panel = pas de capture d'events).
+    //   One PanelWindow per screen.
+    //   - FIXED height: barHeight plus label area, vertically centered.
+    //   - Dynamic width: hoverWidth when hidden, wide when revealed.
+    //   Everything outside this area is natively click-through.
+    //   (No panel means no event capture.)
     // ═══════════════════════════════════
     Variants {
         model: Quickshell.screens
@@ -109,20 +109,20 @@ ShellRoot {
 
             readonly property bool isActive: modelData.name === root.activeMonitor
 
-            // État révélé : hover sur une des zones ou interaction
+            // Revealed state: hovering one of the areas or interacting.
             property bool revealed: hoverArea.containsMouse
                                   || barMouseArea.containsMouse
                                   || barMouseArea.pressed
                                   || hideTimer.running
 
-            // Largeur : juste la zone de hover quand caché, étendue quand révélé
-            // Hauteur : toujours celle de la barre (+ marge pour label)
+            // Width: only the hover area when hidden, expanded when revealed.
+            // Height: always the bar height plus label margin.
             implicitWidth: revealed
                 ? (root.leftOffset + root.barWidth + 10)
                 : root.hoverWidth
             implicitHeight: root.barHeight + 40
 
-            // Centré verticalement
+            // Vertically centered.
             margins.top: (modelData.height - implicitHeight) / 2
 
             visible: isActive
@@ -133,7 +133,7 @@ ShellRoot {
                 repeat: false
             }
 
-            // ── Zone de hover au bord (toujours active) ──
+            // ── Edge hover area (always active) ──
             MouseArea {
                 id: hoverArea
                 hoverEnabled: true
@@ -146,7 +146,7 @@ ShellRoot {
                 onExited:  hideTimer.restart()
             }
 
-            // ── La barre (apparaît à droite de la zone de hover) ──
+            // ── BAR (appears to the right of the hover area) ──
             Item {
                 id: barContainer
                 width: root.barWidth
@@ -158,7 +158,7 @@ ShellRoot {
                 Behavior on x       { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
                 Behavior on opacity { NumberAnimation { duration: 220 } }
 
-                // Fond
+                // Background.
                 Rectangle {
                     anchors.fill: parent
                     color: root.colBg
@@ -206,7 +206,7 @@ ShellRoot {
                     }
                 }
 
-                // MouseArea d'interaction : scroll / clic / drag
+                // Interaction MouseArea: scroll / click / drag.
                 MouseArea {
                     id: barMouseArea
                     anchors.fill: parent
@@ -238,7 +238,7 @@ ShellRoot {
                     }
                 }
 
-                // Label % en haut
+                // Percentage label at the top.
                 Text {
                     anchors.top: parent.top
                     anchors.horizontalCenter: parent.horizontalCenter

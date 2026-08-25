@@ -1,5 +1,5 @@
 // notifications.qml
-// Daemon de notifications style NieR / YoRHa
+// Notification daemon with Sidonia styling.
 //
 // Installation :
 //   1. Disable any other notification daemon (dunst, mako, swaync) via its own
@@ -7,9 +7,9 @@
 //   2. qs -p notifications.qml
 //
 // Tests :
-//   notify-send "Test" "Ceci est une notification"
-//   notify-send -u critical "ATTENTION" "Niveau critique"
-//   notify-send -u low "Info" "Niveau bas"
+//   notify-send "Test" "This is a notification"
+//   notify-send -u critical "ATTENTION" "Critical level"
+//   notify-send -u low "Info" "Low level"
 
 import QtQuick
 import QtQuick.Layouts
@@ -41,7 +41,7 @@ Scope {
         onNotification: (n) => {
             n.tracked = true;
 
-            // Récupérer les actions sous forme de noms (pour l'affichage)
+            // Extract action names for display.
             var actionNames = []
             try {
                 if (n.actions) {
@@ -55,12 +55,12 @@ Scope {
                 }
             } catch(e) {}
 
-            // Hints / catégorie / urgency level
+            // Hints / category / urgency level.
             var urgencyLabel = "normal"
             if (n.urgency === 0) urgencyLabel = "low"
             else if (n.urgency === 2) urgencyLabel = "critical"
 
-            // Ajouter à l'historique (FIFO 50)
+            // Add to history (FIFO 50).
             var entry = {
                 id: n.id,
                 summary: n.summary || "",
@@ -89,11 +89,11 @@ Scope {
 
     readonly property var tracked: notifServer.trackedNotifications
 
-    // ─── Historique persistant en mémoire (max 50, FIFO) ───
+    // ─── Persistent in-memory history (max 50, FIFO) ───
     property var history: []
     property bool dndEnabled: false
 
-    // ─── IPC : exposer l'historique au ControlCenter ───
+    // ─── IPC: expose history to the Control Center ───
     IpcHandler {
         target: "notifs"
 
@@ -128,7 +128,7 @@ Scope {
             var h = root.history[idx]
             if (h.ref) {
                 try {
-                    // Si la notif a des actions, invoke la première (default)
+                    // If the notification has actions, invoke the first (default).
                     if (h.ref.actions && h.ref.actions.length > 0) {
                         h.ref.actions[0].invoke()
                     }
@@ -184,16 +184,16 @@ Scope {
             color: "transparent"
 
             // ═══════════════════════════════════════════════════════════
-            // MASQUE D'INPUT : ne capture les clics QUE dans la zone
-            // qui entoure la pile de notifs. Quand il n'y en a aucune,
-            // la région fait 0x0 → tout passe à travers.
+            // INPUT MASK: capture clicks ONLY in the area
+            // around the notification stack. When there are none,
+            // The region becomes 0x0, so everything passes through.
             // ═══════════════════════════════════════════════════════════
             mask: Region {
                 x: column.x
                 y: column.y
                 width: notifRepeater.count > 0 ? root.notifWidth : 0
                 height: {
-                    // Dépendance explicite pour forcer le recalcul
+                    // Explicit dependency to force recalculation.
                     column.layoutTrigger;
                     let h = 0;
                     for (let i = 0; i < column.children.length; i++) {
@@ -215,7 +215,7 @@ Scope {
                 width: root.notifWidth
                 height: parent.height - anchors.topMargin
 
-                // Trigger pour forcer la re-évaluation du mask de la fenêtre
+                // Trigger to force reevaluation of the window mask.
                 property int layoutTrigger: 0
 
                 Repeater {
@@ -241,7 +241,7 @@ Scope {
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Composant notif
+    // Notification component.
     // ════════════════════════════════════════════════════════════════
     component NotifItem: Item {
         id: notif
@@ -269,7 +269,7 @@ Scope {
             return "通知";
         }
 
-        // Calcul de la position Y en sommant les hauteurs des frères précédents
+        // Calculate Y by summing the heights of preceding siblings.
         y: {
             let acc = 0;
             const parentItem = parent;
@@ -378,7 +378,7 @@ Scope {
             onTriggered: notif.state = "closing"
         }
 
-        // Transition entering → visible au montage
+        // Transition from entering → visible on mount.
         Component.onCompleted: {
             Qt.callLater(() => { if (notif.state === "entering") notif.state = "visible"; });
         }
@@ -398,7 +398,7 @@ Scope {
             border.color: "#cc1515"
             border.width: 1
 
-            // Bordure gauche colorée
+            // Colored left border.
             Rectangle {
                 anchors.left: parent.left
                 anchors.top: parent.top
@@ -407,7 +407,7 @@ Scope {
                 color: notif.accentColor
             }
 
-            // Scan-line d'entrée
+            // Entry scanline.
             Rectangle {
                 id: scanLine
                 property real scanProgress: 0
@@ -428,7 +428,7 @@ Scope {
                 z: 2
             }
 
-            // Grille interne décorative
+            // Decorative inner grid.
             Canvas {
                 anchors.fill: parent
                 anchors.leftMargin: 3
@@ -476,7 +476,7 @@ Scope {
                             anchors.centerIn: parent
                             text: notif.urgencyLabel
                             color: "#c8c8c4"
-                            font.family: "JetBrains Mono"
+                            font.family: "Iosevka"
                             font.pixelSize: 8
                             font.weight: Font.Medium
                             font.letterSpacing: 2
@@ -496,7 +496,7 @@ Scope {
                               ? (notif.notification.appName || "SYSTEM").toUpperCase()
                               : "SYSTEM"
                         color: "#7a7358"
-                        font.family: "JetBrains Mono"
+                        font.family: "Iosevka"
                         font.pixelSize: 8
                         font.letterSpacing: 2
                         elide: Text.ElideRight
@@ -509,7 +509,7 @@ Scope {
                             return `${p(d.getHours())}:${p(d.getMinutes())}`;
                         }
                         color: "#7a7358"
-                        font.family: "JetBrains Mono"
+                        font.family: "Iosevka"
                         font.pixelSize: 8
                         font.letterSpacing: 1
                     }
@@ -527,7 +527,7 @@ Scope {
                             anchors.centerIn: parent
                             text: "✕"
                             color: closeMouse.containsMouse ? "#c8c8c4" : "#cc1515"
-                            font.family: "JetBrains Mono"
+                            font.family: "Iosevka"
                             font.pixelSize: 9
                             Behavior on color { ColorAnimation { duration: 120 } }
                         }
@@ -549,12 +549,12 @@ Scope {
                     opacity: 0.2
                 }
 
-                // Zone contenu : image à gauche + texte à droite
+                // Content area: image on the left and text on the right.
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 12
 
-                    // ═══ THUMBNAIL (image ou icône) ═══
+                    // ═══ THUMBNAIL (image or icon) ═══
                     Item {
                         id: imageWrap
                         Layout.preferredWidth: 64
@@ -563,16 +563,16 @@ Scope {
 
                         readonly property string imageSource: {
                             if (!notif.notification) return "";
-                            // priorité à l'image embarquée, puis à l'appIcon
+                            // Prefer the embedded image, then appIcon.
                             const img = notif.notification.image || "";
                             if (img.length > 0) return img;
                             const appIcon = notif.notification.appIcon || "";
                             if (appIcon.length > 0) {
-                                // si c'est un chemin absolu
+                                // If it is an absolute path.
                                 if (appIcon.startsWith("/") || appIcon.startsWith("file://")) {
                                     return appIcon;
                                 }
-                                // sinon c'est un nom d'icône de thème
+                                // Otherwise it is a theme icon name.
                                 return Quickshell.iconPath(appIcon, true);
                             }
                             return "";
@@ -580,7 +580,7 @@ Scope {
 
                         visible: imageSource.length > 0
 
-                        // Cadre style NieR
+                        // Sidonia-styled frame.
                         Rectangle {
                             anchors.fill: parent
                             color: "transparent"
@@ -588,7 +588,7 @@ Scope {
                             border.width: 1
                         }
 
-                        // Badge ID coin supérieur gauche
+                        // ID badge in the upper-left corner.
                         Rectangle {
                             anchors.top: parent.top
                             anchors.left: parent.left
@@ -601,13 +601,13 @@ Scope {
                                 anchors.centerIn: parent
                                 text: String(notif.itemIndex + 1).padStart(2, '0')
                                 color: "#c8c8c4"
-                                font.family: "JetBrains Mono"
+                                font.family: "Iosevka"
                                 font.pixelSize: 7
                                 font.letterSpacing: 0.5
                             }
                         }
 
-                        // L'image
+                        // Image.
                         Image {
                             anchors.fill: parent
                             anchors.margins: 2
@@ -621,7 +621,7 @@ Scope {
                             visible: status === Image.Ready
                         }
 
-                        // Petits repères décoratifs dans les coins
+                        // Small decorative corner markers.
                         Repeater {
                             model: 4
                             delegate: Item {
@@ -645,7 +645,7 @@ Scope {
                         }
                     }
 
-                    // ═══ TEXTE ═══
+                    // ═══ TEXT ═══
                     ColumnLayout {
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignTop
@@ -683,7 +683,7 @@ Scope {
                     }
                 }
 
-                // Actions (le Repeater accepte directement l'ObjectModel)
+                // Actions (the Repeater accepts the ObjectModel directly).
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.topMargin: 4
@@ -710,7 +710,7 @@ Scope {
                                 anchors.centerIn: parent
                                 text: `▸ ${(modelData && modelData.text ? modelData.text : "").toUpperCase()}`
                                 color: actMouse.containsMouse ? "#c8c8c4" : "#cc1515"
-                                font.family: "JetBrains Mono"
+                                font.family: "Iosevka"
                                 font.pixelSize: 9
                                 font.letterSpacing: 1.5
                                 Behavior on color { ColorAnimation { duration: 120 } }
@@ -733,7 +733,7 @@ Scope {
                 Item { Layout.preferredHeight: 4 }
             }
 
-            // Barre de progression du timeout
+            // Timeout progress bar.
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
@@ -761,7 +761,7 @@ Scope {
                 }
             }
 
-            // Hover sur la carte → pause du timer
+            // Hover over the card → pause the timer.
             MouseArea {
                 anchors.fill: parent
                 hoverEnabled: true

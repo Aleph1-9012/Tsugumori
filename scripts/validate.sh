@@ -62,7 +62,48 @@ if rg -n 'curl[^[:cntrl:]]*\[[[:space:]]*https?://' README.md; then
     exit 1
 fi
 
-if rg -n 'playerctl|nier-arrow\.png|/tmp/(pomodoro_state|qs-menu|qs-toggle|qs-front|mpv-tsugumori\.sock|qshare-(events|qr\.png)|yzi-out)|LOCKPWD|pamtester[[:space:]]+qs-lock' config packages; then
+if rg -nP '[\x{00C0}-\x{00D6}\x{00D8}-\x{00F6}\x{00F8}-\x{024F}]' \
+    README.md install.sh config; then
+    printf 'Installed files contain accented Latin presentation text.\n' >&2
+    exit 1
+fi
+
+if rg -ni "\\b(p[o]lice|tr[a]it (horizontal|vertical)|optimis[a]tion vectorielle|r[e]ndu|s[o]rtie|l[a]ncement|ab[a]ndon|l[e]cture [.]desktop|compos[a]nts?|l['’]im[a]ge|t[e]xte|c[o]nteneur|volume act[u]el|s[i]non|indicat[i]on mute|c[a]rrousel|art[i]ste|scale gl[o]bal|c[o]uleurs|b[o]utons)\\b" \
+    README.md install.sh config; then
+    printf 'Installed files contain legacy French or mixed-French presentation text.\n' >&2
+    exit 1
+fi
+
+if rg -n 'ttf-[g]oogle|INSTALL_A[U]R|bootstrap_aur_[h]elper|pinned-[a]ur|base-[d]evel' \
+    install.sh packages scripts/update-pins.sh README.md; then
+    printf 'Legacy AUR or build-tool bootstrap logic remains.\n' >&2
+    exit 1
+fi
+
+if rg -n 'session-[s]tart|session_start_[c]ommand|force_renderer_[r]eload|hl[.]dsp[.]d[p]ms' \
+    config scripts; then
+    printf 'Monitor-recovery feature code remains mixed into the cleanup branch.\n' >&2
+    exit 1
+fi
+
+for generator in \
+    config/quickshell/pixel_wave.py \
+    config/quickshell/pixel-wave-close-video.py \
+    config/quickshell/ext_last_fr.py; do
+    [[ ! -e "$generator" ]] || { printf 'Maintainer generator remains deployed: %s\n' "$generator" >&2; exit 1; }
+done
+for generator in \
+    tools/wave-assets/pixel_wave.py \
+    tools/wave-assets/pixel-wave-close-video.py \
+    tools/wave-assets/extract_last_frame.py; do
+    [[ -f "$generator" ]] || { printf 'Maintainer generator is missing: %s\n' "$generator" >&2; exit 1; }
+done
+if rg -n '\bpython(3)?\b|pixel[_-]wave|ext_last|generat(e|ing|or)' config/quickshell/wave-check.sh; then
+    printf 'Login-time wave verification still invokes asset generation.\n' >&2
+    exit 1
+fi
+
+if rg -n 'playerctl|n[i]er-arrow\.png|/tmp/(pomodoro_state|qs-menu|qs-toggle|qs-front|mpv-tsugumori\.sock|qshare-(events|qr\.png)|yzi-out)|LOCKPWD|pamtester[[:space:]]+qs-lock' config packages; then
     printf 'Deprecated runtime path, asset, or credential transport found.\n' >&2
     exit 1
 fi
@@ -101,9 +142,9 @@ for token in 'fallback_lock' 'exec hyprlock' 'qs --no-duplicate --path "$lockscr
     fi
 done
 
-if rg -ni 'nier|mot de passe|authentification|tentative|Noto Sans JP' \
+if rg -ni 'n[i]er|mot de p[a]sse|authent[i]fication|tent[a]tive|Noto Sans JP' \
     config/hypr/hyprlock.conf; then
-    printf 'The Hyprlock fallback still contains legacy NieR or French presentation text.\n' >&2
+    printf 'The Hyprlock fallback still contains legacy branding or French presentation text.\n' >&2
     exit 1
 fi
 
@@ -169,29 +210,61 @@ print("Secure lock assets: OK")
 PY
 
 python3 - <<'PY'
+import hashlib
 from pathlib import Path
 
-manifest_packages = {}
-for manifest in (Path("packages/pacman.txt"), Path("packages/aur.txt")):
-    packages = [
-        line.strip()
-        for line in manifest.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
-    manifest_packages[manifest.name] = set(packages)
-    duplicates = sorted({package for package in packages if packages.count(package) > 1})
-    if duplicates:
-        raise SystemExit(f"{manifest}: duplicate packages: {', '.join(duplicates)}")
+font_assets = {
+    Path("assets/fonts/share-tech-mono/ShareTechMono-Regular.ttf"):
+        "9ceab1f87414829af259c0f537573ae03ef7dd3147c0b27a36a1a0beb6732677",
+    Path("assets/fonts/share-tech-mono/OFL.txt"):
+        "9d96f445b6e9c701428811d0177f894874f8d6f07ecc30d568c506542368f3ff",
+}
+for path, wanted_hash in font_assets.items():
+    if not path.is_file():
+        raise SystemExit(f"{path}: bundled font asset is missing")
+    data = path.read_bytes()
+    if not data:
+        raise SystemExit(f"{path}: bundled font asset is empty")
+    actual_hash = hashlib.sha256(data).hexdigest()
+    if actual_hash != wanted_hash:
+        raise SystemExit(f"{path}: unexpected SHA-256 {actual_hash}")
+
+print("Bundled font assets: OK")
+PY
+
+python3 - <<'PY'
+from pathlib import Path
+
+manifest = Path("packages/pacman.txt")
+packages = [
+    line.strip()
+    for line in manifest.read_text(encoding="utf-8").splitlines()
+    if line.strip() and not line.lstrip().startswith("#")
+]
+package_set = set(packages)
+duplicates = sorted({package for package in packages if packages.count(package) > 1})
+if duplicates:
+    raise SystemExit(f"{manifest}: duplicate packages: {', '.join(duplicates)}")
+if len(packages) != 39:
+    raise SystemExit(f"{manifest}: expected 39 direct packages, found {len(packages)}")
+obsolete_manifests = [Path("packages/" "aur.txt"), Path("packages/pinned-" "aur.txt")]
+present_obsolete = [str(path) for path in obsolete_manifests if path.exists()]
+if present_obsolete:
+    raise SystemExit(f"obsolete package manifests must remain removed: {', '.join(present_obsolete)}")
 
 required_pacman = {"awww", "quickshell", "qt6-multimedia-ffmpeg", "hyprlock", "hypridle"}
-missing = sorted(required_pacman - manifest_packages["pacman.txt"])
+missing = sorted(required_pacman - package_set)
 if missing:
     raise SystemExit(f"packages/pacman.txt: missing required runtime: {', '.join(missing)}")
 
-if "quickshell-git" in manifest_packages["aur.txt"]:
-    raise SystemExit("packages/aur.txt: Quickshell must not be optional or conflict with the required official package")
-if "awww" in manifest_packages["aur.txt"]:
-    raise SystemExit("packages/aur.txt: awww is an official package and must not be optional")
+removed_packages = {
+    "qt5-wayland", "gtk4-layer-shell", "figlet", "pavucontrol", "satty",
+    "ttf-jetbrains-mono", "fish", "starship", "python-cairo", "python-numpy",
+    "python-opencv", "qrencode",
+}
+reintroduced = sorted(removed_packages & package_set)
+if reintroduced:
+    raise SystemExit(f"packages/pacman.txt: removed packages reintroduced: {', '.join(reintroduced)}")
 
 print("Package manifests: OK")
 PY
@@ -222,7 +295,7 @@ fi
 
 if [[ -n "$QMLLINT_BIN" ]]; then
     mapfile -d '' QML_FILES < <(rg --files -0 -g '*.qml' config/quickshell)
-    (( ${#QML_FILES[@]} >= 17 )) || { printf 'Expected at least 17 QML files, found %d.\n' "${#QML_FILES[@]}" >&2; exit 1; }
+    (( ${#QML_FILES[@]} >= 16 )) || { printf 'Expected at least 16 QML files, found %d.\n' "${#QML_FILES[@]}" >&2; exit 1; }
     QMLLINT_LOG=$(mktemp)
     if ! "$QMLLINT_BIN" -I config/quickshell "${QML_FILES[@]}" >"$QMLLINT_LOG" 2>&1; then
         sed -n '1,500p' "$QMLLINT_LOG" >&2

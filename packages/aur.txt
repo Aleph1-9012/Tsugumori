@@ -1,2 +1,0 @@
-# Provides the exact "Share Tech Mono" family used throughout the UI
-ttf-google

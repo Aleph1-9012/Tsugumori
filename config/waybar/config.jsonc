@@ -49,7 +49,7 @@
   "pulseaudio": {
     "format": "VOL {volume}%",
     "format-muted": "VOL --",
-    "on-click": "pavucontrol"
+    "on-click": "qs ipc call ctrl toggle"
   },
 
   "clock": {

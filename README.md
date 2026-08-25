@@ -52,6 +52,10 @@ Quickshell 0.3 is a required official package. On upgrades, an already-installed
 compatible provider such as `quickshell-git` is retained to avoid a package
 conflict; fresh installations use Arch's `quickshell` package.
 
+The default installer uses official Arch packages only. Share Tech Mono and its
+SIL Open Font License are bundled and installed per-user, so no AUR helper or
+build-tool bootstrap is required.
+
 ## What's included
 
 - **Window manager**: Hyprland 0.55.2+ with a native Lua config and custom keybinds (QWERTY layout)
@@ -83,7 +87,7 @@ A NieR:Automata-style radial menu with Knights of Sidonia theme accessible via `
 
 ### Features
 
-- **Connexion** — Wi-Fi & Bluetooth
+- **Connection** — Wi-Fi & Bluetooth
   - Toggle radio on/off
   - Scan and connect to Wi-Fi networks with an inline password prompt (no external GUI)
   - List paired Bluetooth devices with connect/disconnect, pair, unpair, and live scan for new devices

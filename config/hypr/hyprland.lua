@@ -79,15 +79,15 @@ hl.config({
     },
 })
 
-hl.curve("niercurve", {
+hl.curve("tsugumori", {
     type = "bezier",
     points = { { 0.4, 0 }, { 0.2, 1 } },
 })
 
-hl.animation({ leaf = "windows", enabled = true, speed = 4, bezier = "niercurve", style = "slide" })
-hl.animation({ leaf = "windowsOut", enabled = true, speed = 3, bezier = "niercurve", style = "slide" })
-hl.animation({ leaf = "fade", enabled = true, speed = 4, bezier = "niercurve" })
-hl.animation({ leaf = "workspaces", enabled = true, speed = 5, bezier = "niercurve", style = "slidevert" })
+hl.animation({ leaf = "windows", enabled = true, speed = 4, bezier = "tsugumori", style = "slide" })
+hl.animation({ leaf = "windowsOut", enabled = true, speed = 3, bezier = "tsugumori", style = "slide" })
+hl.animation({ leaf = "fade", enabled = true, speed = 4, bezier = "tsugumori" })
+hl.animation({ leaf = "workspaces", enabled = true, speed = 5, bezier = "tsugumori", style = "slidevert" })
 
 hl.window_rule({
     name = "tsugumori-quickshell",

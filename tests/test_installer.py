@@ -292,6 +292,49 @@ class InstallerLuaMigrationTests(unittest.TestCase):
             b"bundled-tsugumori-lock\n",
         )
 
+    def test_bundled_font_assets_are_installed_per_user(self) -> None:
+        data_home = self.root / "data"
+        cache_log = self.root / "font-cache.log"
+        self.write_executable(
+            "fc-cache",
+            """
+            #!/bin/sh
+            printf '%s\n' "$@" >"$FAKE_FONT_CACHE_LOG"
+            """,
+        )
+
+        result = self.run_installer_shell(
+            """
+            source_dir="$CLONE_DIR/assets/fonts/share-tech-mono"
+            mkdir -p "$source_dir"
+            printf '%s\n' 'font-bytes' >"$source_dir/ShareTechMono-Regular.ttf"
+            printf '%s\n' 'license-text' >"$source_dir/OFL.txt"
+            install_font_assets
+            font_dir="$XDG_DATA_HOME/fonts/Tsugumori"
+            stat -c 'font-mode=%a' "$font_dir/ShareTechMono-Regular.ttf"
+            stat -c 'license-mode=%a' "$font_dir/OFL.txt"
+            shopt -s nullglob
+            leftovers=("$font_dir"/.*.??????)
+            printf 'temporary-files=%s\n' "${#leftovers[@]}"
+            """,
+            extra_env={
+                "XDG_DATA_HOME": str(data_home),
+                "PATH": f"{self.fake_bin}{os.pathsep}{self.env['PATH']}",
+                "FAKE_FONT_CACHE_LOG": str(cache_log),
+            },
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        font_dir = data_home / "fonts/Tsugumori"
+        self.assertEqual(
+            (font_dir / "ShareTechMono-Regular.ttf").read_bytes(), b"font-bytes\n"
+        )
+        self.assertEqual((font_dir / "OFL.txt").read_bytes(), b"license-text\n")
+        self.assertIn("font-mode=644\n", result.stdout)
+        self.assertIn("license-mode=644\n", result.stdout)
+        self.assertIn("temporary-files=0\n", result.stdout)
+        self.assertIn(str(font_dir), cache_log.read_text(encoding="utf-8"))
+
     def test_deploy_preserves_exact_relative_symlinks_for_all_user_files(self) -> None:
         custom_dir = self.config_home / "custom"
         custom_dir.mkdir()
@@ -670,10 +713,19 @@ class InstallerLuaMigrationTests(unittest.TestCase):
         main_body = source.split("main() {", 1)[1].split("\n}", 1)[0]
 
         render = main_body.index('write_tsugumori_options "$CLONE_DIR/config/hypr/tsugumori_options.lua"')
+        validate_font = main_body.index("validate_font_assets")
+        install_font = main_body.index("install_font_assets")
         validate = main_body.index("validate_hyprland_config")
         deploy = main_body.index("deploy_configs")
+        finalize = main_body.index("finalize")
+        self.assertLess(validate_font, deploy)
+        self.assertLess(deploy, install_font)
+        self.assertLess(install_font, finalize)
         self.assertLess(render, validate)
         self.assertLess(validate, deploy)
+        self.assertNotIn("INSTALL_AUR", source)
+        self.assertNotIn("bootstrap_aur_helper", source)
+        self.assertNotIn("base-devel", source)
         self.assertNotIn("apply_vm_software_gl_tweaks_deployed", source)
         self.assertNotIn("exec-once = sleep 4 && awww img", source)
         self.assertNotIn("hyprland.conf", source)
