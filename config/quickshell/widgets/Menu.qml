@@ -250,7 +250,7 @@ Item {
                         Rectangle { width:24; height:1; color:root.inkSoft; anchors.verticalCenter:parent.verticalCenter }
                         Text { text:"システム"; font.pixelSize:10; font.letterSpacing:2; color:root.inkSoft }
                     }
-                    Item { width:parent.width - 340; height:1 }
+                    Item { width:parent.width - width-425; height:1 }
                     Row {
                         spacing:14; anchors.verticalCenter:parent.verticalCenter
                         Item {
@@ -473,7 +473,7 @@ Item {
                                             Behavior on color { ColorAnimation { duration:120 } }
                                         }
                                     }
-                                    Item { width:appList.width-310; height:1 }
+                                    Item { width:appList.width-480; height:1 }
                                     Text {
                                         anchors.verticalCenter:parent.verticalCenter
                                         text:(root.catLabels[modelData.cat]||modelData.cat).toUpperCase()
