@@ -2,7 +2,7 @@
 # Tsugumori animated secure lock launcher.
 #
 # Quickshell owns ext-session-lock-v1 and authenticates through PamContext;
-# the original NieR reveal/hide presentation remains intact.
+# the original reveal/hide presentation remains intact.
 set -eu
 umask 077
 

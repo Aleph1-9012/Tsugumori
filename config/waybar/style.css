@@ -39,14 +39,14 @@ window#waybar {
   letter-spacing: 1px;
 }
 
-/* TICKER CENTRE */
+/* CENTER TICKER */
 #custom-ticker {
   color: rgba(232, 232, 232, 0.5);
   letter-spacing: 1px;
   font-size: 11px;
 }
 
-/* MODULES DROITE */
+/* RIGHT-SIDE MODULES */
 #cpu,
 #memory,
 #network,

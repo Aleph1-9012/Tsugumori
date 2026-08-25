@@ -26,7 +26,7 @@ readonly PRESERVED_FILES=(
 
 # Add support for flags
 PINNED_MODE=false
-VM_GL_TWEAKS=false          # Mesa llvmpipe + libgl software for Quickshell/Kitty (VirtualBox et al.)
+VM_GL_TWEAKS=false          # Mesa llvmpipe + software libgl for Quickshell/Kitty (VirtualBox and similar).
 BOOT_WALLPAPER_VM=false     # Lua start callback applies the first wallpaper in VM mode
 
 [[ "${TSUGUMORI_VM:-}" == "1" || "${TSUGUMORI_VM:-}" == "yes" ]] && VM_GL_TWEAKS=true
@@ -132,7 +132,7 @@ collect_choices() {
     BACKUP_OLD=true;          ask_yn "Backup existing configs to $BACKUP_DIR?" y || BACKUP_OLD=false
     INSTALL_AUR=true;         ask_yn "Install optional AUR package (Share Tech Mono)?" y || INSTALL_AUR=false
     INSTALL_WALLPAPERS=true;  ask_yn "Install default wallpapers to ~/Pictures/wallpapers?" y || INSTALL_WALLPAPERS=false
-    INSTALL_BASHRC=true;      ask_yn "Install Tsugumori .bashrc (welcome banner + NieR prompt)?" y || INSTALL_BASHRC=false
+    INSTALL_BASHRC=true;      ask_yn "Install Tsugumori .bashrc (welcome banner + Tsugumori prompt)?" y || INSTALL_BASHRC=false
     ENABLE_SERVICES=true;     ask_yn "Enable system services (NetworkManager, pipewire)?" y || ENABLE_SERVICES=false
 
     if $VM_GL_TWEAKS; then

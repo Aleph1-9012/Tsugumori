@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-qshare — partage de fichiers PC <-> téléphone via HTTP + QR code
+qshare — PC <-> phone file sharing over HTTP + QR code
 
-Usage CLI :
-    qshare send <fichier|dossier...> [--tunnel] [-k]
+CLI usage:
+    qshare send <file|directory...> [--tunnel] [-k]
     qshare recv [-o DIR] [--tunnel] [-k]
 
-Usage interne (depuis Quickshell) :
+Internal usage (from Quickshell):
     qshare ... --qr-out "$XDG_RUNTIME_DIR/tsugumori/qshare-qr-RUN.png" \
         --event-file "$XDG_RUNTIME_DIR/tsugumori/qshare-events-RUN"
 """
@@ -38,7 +38,7 @@ try:
     import qrcode
     from qrcode.image.pil import PilImage
 except ImportError:
-    sys.exit("Manque la dépendance : pacman -S python-qrcode  (ou pip install qrcode[pil])")
+    sys.exit("Missing dependency: pacman -S python-qrcode  (or pip install qrcode[pil])")
 
 
 _CHILD_PROCESSES: set[subprocess.Popen] = set()
@@ -60,7 +60,7 @@ signal.signal(signal.SIGTERM, _handle_termination)
 signal.signal(signal.SIGINT, _handle_termination)
 
 
-NIER_BG, NIER_FG, NIER_ACCENT, NIER_DIM = "#1c1a17", "#a89a7e", "#d4c8a8", "#6b6453"
+TSUGUMORI_BG, TSUGUMORI_FG, TSUGUMORI_ACCENT, TSUGUMORI_DIM = "#1c1a17", "#a89a7e", "#d4c8a8", "#6b6453"
 ANSI_FG = "\033[38;2;168;154;126m"
 ANSI_DIM = "\033[38;2;107;100;83m"
 ANSI_RESET = "\033[0m"
@@ -102,11 +102,11 @@ class _DeadlineReader:
 
     def _fill(self) -> None:
         if self.remaining <= 0:
-            raise UploadRejected(HTTPStatus.BAD_REQUEST, "Corps multipart tronqué")
+            raise UploadRejected(HTTPStatus.BAD_REQUEST, "Truncated multipart body")
 
         timeout = self.deadline - time.monotonic()
         if timeout <= 0:
-            raise UploadRejected(HTTPStatus.REQUEST_TIMEOUT, "Délai d'envoi dépassé")
+            raise UploadRejected(HTTPStatus.REQUEST_TIMEOUT, "Upload deadline exceeded")
         self.connection.settimeout(timeout)
 
         read = getattr(self.rfile, "read1", self.rfile.read)
@@ -114,10 +114,10 @@ class _DeadlineReader:
             chunk = read(min(_UPLOAD_CHUNK_SIZE, self.remaining))
         except (TimeoutError, socket.timeout) as exc:
             raise UploadRejected(
-                HTTPStatus.REQUEST_TIMEOUT, "Délai d'envoi dépassé"
+                HTTPStatus.REQUEST_TIMEOUT, "Upload deadline exceeded"
             ) from exc
         if not chunk:
-            raise UploadRejected(HTTPStatus.BAD_REQUEST, "Corps multipart tronqué")
+            raise UploadRejected(HTTPStatus.BAD_REQUEST, "Truncated multipart body")
         self.remaining -= len(chunk)
         self.buffer.extend(chunk)
 
@@ -128,14 +128,14 @@ class _DeadlineReader:
                 end = newline + 1
                 if end > limit:
                     raise UploadRejected(
-                        HTTPStatus.BAD_REQUEST, "En-tête multipart trop long"
+                        HTTPStatus.BAD_REQUEST, "Multipart header too long"
                     )
                 line = bytes(self.buffer[:end])
                 del self.buffer[:end]
                 return line
             if len(self.buffer) >= limit:
                 raise UploadRejected(
-                    HTTPStatus.BAD_REQUEST, "En-tête multipart trop long"
+                    HTTPStatus.BAD_REQUEST, "Multipart header too long"
                 )
             if self.remaining <= 0:
                 if not self.buffer:
@@ -155,7 +155,7 @@ class _DeadlineReader:
             nonlocal written
             if written + len(data) > max_bytes:
                 raise UploadRejected(
-                    HTTPStatus.CONTENT_TOO_LARGE, "Limite de taille dépassée"
+                    HTTPStatus.CONTENT_TOO_LARGE, "Size limit exceeded"
                 )
             if out is not None:
                 out.write(data)
@@ -168,7 +168,7 @@ class _DeadlineReader:
                 while len(self.buffer) < marker_end + suffix_size:
                     if self.remaining <= 0:
                         raise UploadRejected(
-                            HTTPStatus.BAD_REQUEST, "Fin multipart invalide"
+                            HTTPStatus.BAD_REQUEST, "Invalid multipart ending"
                         )
                     self._fill()
                 suffix = bytes(self.buffer[marker_end:marker_end + suffix_size])
@@ -199,7 +199,7 @@ class _DeadlineReader:
             self.buffer.clear()
 
 
-# ─── Réseau ───────────────────────────────────────────────────────────────────
+# ─── Network ──────────────────────────────────────────────────────────────────
 def get_local_ip(iface: str | None = None) -> str:
     if iface:
         try:
@@ -208,7 +208,7 @@ def get_local_ip(iface: str | None = None) -> str:
                 packed = struct.pack("256s", iface.encode()[:15])
                 return socket.inet_ntoa(fcntl.ioctl(s.fileno(), 0x8915, packed)[20:24])
         except OSError as e:
-            sys.exit(f"Impossible de lire l'IP de {iface}: {e}")
+            sys.exit(f"Could not read the IP address for {iface}: {e}")
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
         try:
             s.connect(("10.255.255.255", 1))
@@ -226,7 +226,7 @@ def _free_port() -> int:
 # ─── Cloudflare Tunnel ────────────────────────────────────────────────────────
 def start_cloudflared(local_port: int) -> tuple[subprocess.Popen, str]:
     if not shutil.which("cloudflared"):
-        sys.exit("cloudflared introuvable. Installe-le : pacman -S cloudflared")
+        sys.exit("cloudflared not found. Install it with: pacman -S cloudflared")
 
     cmd = [
         "cloudflared", "tunnel",
@@ -259,8 +259,8 @@ def start_cloudflared(local_port: int) -> tuple[subprocess.Popen, str]:
 
     threading.Thread(target=_read_output, daemon=True).start()
 
-    print(f"{ANSI_DIM}Démarrage du tunnel Cloudflare…{ANSI_RESET}")
-    failure = "Impossible d'établir le tunnel Cloudflare (timeout)."
+    print(f"{ANSI_DIM}Starting Cloudflare tunnel…{ANSI_RESET}")
+    failure = "Could not establish the Cloudflare tunnel (timeout)."
     while not (public_url and registered):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -270,7 +270,7 @@ def start_cloudflared(local_port: int) -> tuple[subprocess.Popen, str]:
         except queue.Empty:
             break
         if line is None:
-            failure = "cloudflared s'est arrêté avant d'établir le tunnel."
+            failure = "cloudflared stopped before establishing the tunnel."
             break
         if not public_url:
             m = url_pattern.search(line)
@@ -303,7 +303,7 @@ def print_qr(url: str) -> None:
 
 
 def write_qr_png(url: str, path: Path) -> None:
-    """Écrit un PNG du QR avec la palette NieR (fond sombre, modules clairs)."""
+    """Write a QR PNG using the Sidonia palette (dark background, light modules)."""
     qr = qrcode.QRCode(
         border=2,
         box_size=12,
@@ -313,14 +313,14 @@ def write_qr_png(url: str, path: Path) -> None:
     qr.make(fit=True)
     img = qr.make_image(
         image_factory=PilImage,
-        fill_color=NIER_FG,
-        back_color=NIER_BG,
+        fill_color=TSUGUMORI_FG,
+        back_color=TSUGUMORI_BG,
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(path)
 
 
-# ─── Event file (IPC vers Quickshell) ─────────────────────────────────────────
+# ─── Event file (IPC to Quickshell) ───────────────────────────────────────────
 class EventLog:
     def __init__(self, path: str | None):
         self.path = Path(path) if path else None
@@ -337,11 +337,11 @@ class EventLog:
                 f.write(line.rstrip("\n") + "\n")
 
 
-# ─── Préparation du payload pour SEND ─────────────────────────────────────────
+# ─── Prepare the SEND payload ─────────────────────────────────────────────────
 def build_payload(paths: list[Path]) -> tuple[Path, str, bool]:
     for p in paths:
         if not p.exists():
-            sys.exit(f"Introuvable : {p}")
+            sys.exit(f"Not found: {p}")
 
     if len(paths) == 1 and paths[0].is_file():
         return paths[0], paths[0].name, False
@@ -370,9 +370,9 @@ def build_payload(paths: list[Path]) -> tuple[Path, str, bool]:
     return zip_path, archive_name, True
 
 
-# ─── Page HTML d'upload (style NieR) ──────────────────────────────────────────
+# ─── Upload HTML page (Sidonia style) ────────────────────────────────────────
 UPLOAD_HTML = """<!doctype html>
-<html lang="fr"><head>
+<html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>qshare</title>
@@ -420,7 +420,7 @@ const progress = document.querySelector(".progress");
 const status = document.getElementById("status");
 btn.addEventListener("click", () => {{
   const files = filesInput.files;
-  if (!files.length) {{ status.textContent = "Aucun fichier sélectionné."; return; }}
+  if (!files.length) {{ status.textContent = "No file selected."; return; }}
   const fd = new FormData();
   for (const f of files) fd.append("files", f, f.name);
   const xhr = new XMLHttpRequest();
@@ -433,12 +433,12 @@ btn.addEventListener("click", () => {{
   }};
   xhr.onload = () => {{
     btn.disabled = false;
-    if (xhr.status === 200) {{ status.textContent = "✓ Transfert terminé."; status.className = "status ok"; }}
-    else {{ status.textContent = "✗ Erreur " + xhr.status; status.className = "status err"; }}
+    if (xhr.status === 200) {{ status.textContent = "✓ Transfer complete."; status.className = "status ok"; }}
+    else {{ status.textContent = "✗ Error " + xhr.status; status.className = "status err"; }}
   }};
-  xhr.onerror = () => {{ btn.disabled = false; status.textContent = "✗ Erreur réseau."; status.className = "status err"; }};
+  xhr.onerror = () => {{ btn.disabled = false; status.textContent = "✗ Network error."; status.className = "status err"; }};
   btn.disabled = true;
-  status.textContent = "Envoi en cours…";
+  status.textContent = "Sending…";
   status.className = "status";
   xhr.send(fd);
 }});
@@ -542,7 +542,7 @@ class SendHandler(BaseHTTPRequestHandler):
             # only this connection leaves the server available for a retry.
             self.close_connection = True
             return
-        print(f"{ANSI_FG}{ANSI_BOLD}✓ {self.file_name} envoyé{ANSI_RESET}")
+        print(f"{ANSI_FG}{ANSI_BOLD}✓ {self.file_name} sent{ANSI_RESET}")
         if self.events:
             self.events.emit(f"TICK {self.file_name}")
         if not self.keep_alive:
@@ -602,7 +602,7 @@ class RecvHandler(BaseHTTPRequestHandler):
             expectation.lower() != "100-continue"
             or self.request_version < "HTTP/1.1"
         ):
-            self.send_error(HTTPStatus.EXPECTATION_FAILED, "Expect non pris en charge")
+            self.send_error(HTTPStatus.EXPECTATION_FAILED, "Expect header not supported")
             return False
         return True
 
@@ -642,7 +642,7 @@ class RecvHandler(BaseHTTPRequestHandler):
         if self.path != f"/{self.token}":
             self.send_error(404); return
         html = UPLOAD_HTML.format(
-            bg=NIER_BG, fg=NIER_FG, accent=NIER_ACCENT, dim=NIER_DIM, token=self.token
+            bg=TSUGUMORI_BG, fg=TSUGUMORI_FG, accent=TSUGUMORI_ACCENT, dim=TSUGUMORI_DIM, token=self.token
         ).encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -665,45 +665,45 @@ class RecvHandler(BaseHTTPRequestHandler):
     def _validate_upload_request(self) -> tuple[bytes, int]:
         target = urlsplit(self.path)
         if target.path != "/upload":
-            raise UploadRejected(HTTPStatus.NOT_FOUND, "Ressource introuvable")
+            raise UploadRejected(HTTPStatus.NOT_FOUND, "Resource not found")
         if parse_qs(target.query, keep_blank_values=True).get("t") != [self.token]:
-            raise UploadRejected(HTTPStatus.FORBIDDEN, "Jeton invalide")
+            raise UploadRejected(HTTPStatus.FORBIDDEN, "Invalid token")
 
         if self.headers.get_content_type() != "multipart/form-data":
             raise UploadRejected(
-                HTTPStatus.BAD_REQUEST, "multipart/form-data attendu"
+                HTTPStatus.BAD_REQUEST, "multipart/form-data required"
             )
         boundary_text = self.headers.get_param("boundary", header="content-type")
         if not boundary_text:
-            raise UploadRejected(HTTPStatus.BAD_REQUEST, "boundary multipart absent")
+            raise UploadRejected(HTTPStatus.BAD_REQUEST, "Missing multipart boundary")
         try:
             boundary = boundary_text.encode("ascii")
         except UnicodeEncodeError as exc:
             raise UploadRejected(
-                HTTPStatus.BAD_REQUEST, "boundary multipart invalide"
+                HTTPStatus.BAD_REQUEST, "Invalid multipart boundary"
             ) from exc
         if not 1 <= len(boundary) <= 70 or b"\r" in boundary or b"\n" in boundary:
-            raise UploadRejected(HTTPStatus.BAD_REQUEST, "boundary multipart invalide")
+            raise UploadRejected(HTTPStatus.BAD_REQUEST, "Invalid multipart boundary")
 
         if self.headers.get("Transfer-Encoding"):
-            raise UploadRejected(HTTPStatus.LENGTH_REQUIRED, "Content-Length requis")
+            raise UploadRejected(HTTPStatus.LENGTH_REQUIRED, "Content-Length required")
         raw_lengths = self.headers.get_all("Content-Length", [])
         if not raw_lengths:
-            raise UploadRejected(HTTPStatus.LENGTH_REQUIRED, "Content-Length requis")
+            raise UploadRejected(HTTPStatus.LENGTH_REQUIRED, "Content-Length required")
         if len(raw_lengths) != 1:
-            raise UploadRejected(HTTPStatus.BAD_REQUEST, "Content-Length ambigu")
+            raise UploadRejected(HTTPStatus.BAD_REQUEST, "Ambiguous Content-Length")
         try:
             length = int(raw_lengths[0])
         except ValueError as exc:
             raise UploadRejected(
-                HTTPStatus.BAD_REQUEST, "Content-Length invalide"
+                HTTPStatus.BAD_REQUEST, "Invalid Content-Length"
             ) from exc
         if length <= 0:
-            raise UploadRejected(HTTPStatus.BAD_REQUEST, "Corps d'envoi vide")
+            raise UploadRejected(HTTPStatus.BAD_REQUEST, "Empty upload body")
         if length > self.max_upload_bytes:
             raise UploadRejected(
                 HTTPStatus.CONTENT_TOO_LARGE,
-                f"Envoi limité à {self.max_upload_bytes} octets",
+                f"Upload limited to {self.max_upload_bytes} bytes",
             )
         return boundary, length
 
@@ -719,11 +719,11 @@ class RecvHandler(BaseHTTPRequestHandler):
         )
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            self._send_upload_error(HTTPStatus.REQUEST_TIMEOUT, "Délai d'envoi dépassé")
+            self._send_upload_error(HTTPStatus.REQUEST_TIMEOUT, "Upload deadline exceeded")
             return
         acquired = self.upload_lock.acquire(timeout=remaining)
         if not acquired:
-            self._send_upload_error(HTTPStatus.REQUEST_TIMEOUT, "Délai d'envoi dépassé")
+            self._send_upload_error(HTTPStatus.REQUEST_TIMEOUT, "Upload deadline exceeded")
             return
 
         error: UploadRejected | None = None
@@ -732,7 +732,7 @@ class RecvHandler(BaseHTTPRequestHandler):
             if state.session_upload_count >= self.max_files_per_session:
                 raise UploadRejected(
                     HTTPStatus.TOO_MANY_REQUESTS,
-                    "Limite de fichiers de la session atteinte",
+                    "Session file limit reached",
                 )
             saved = self._parse_multipart(boundary, length, deadline)
         except UploadRejected as exc:
@@ -741,7 +741,7 @@ class RecvHandler(BaseHTTPRequestHandler):
         except OSError:
             error = UploadRejected(
                 HTTPStatus.INSUFFICIENT_STORAGE,
-                "Impossible d'enregistrer l'envoi",
+                "Could not save the upload",
             )
             saved = []
         finally:
@@ -765,7 +765,7 @@ class RecvHandler(BaseHTTPRequestHandler):
         try:
             for name in saved:
                 try:
-                    print(f"{ANSI_FG}{ANSI_BOLD}✓ reçu : {name}{ANSI_RESET}")
+                    print(f"{ANSI_FG}{ANSI_BOLD}✓ received: {name}{ANSI_RESET}")
                 except OSError:
                     pass
                 self._emit_event_safely(f"TICK {name}")
@@ -783,7 +783,7 @@ class RecvHandler(BaseHTTPRequestHandler):
         except OSError as exc:
             try:
                 print(
-                    f"qshare: impossible d'écrire l'événement {line!r}: {exc}",
+                    f"qshare: could not write event {line!r}: {exc}",
                     file=sys.stderr,
                 )
             except OSError:
@@ -817,7 +817,7 @@ class RecvHandler(BaseHTTPRequestHandler):
                 return []
             if opening.rstrip(b"\r\n") != delim:
                 raise UploadRejected(
-                    HTTPStatus.BAD_REQUEST, "Début multipart invalide"
+                    HTTPStatus.BAD_REQUEST, "Invalid multipart start"
                 )
 
             final_boundary = False
@@ -830,13 +830,13 @@ class RecvHandler(BaseHTTPRequestHandler):
                         break
                     if not line or b":" not in line:
                         raise UploadRejected(
-                            HTTPStatus.BAD_REQUEST, "En-tête multipart invalide"
+                            HTTPStatus.BAD_REQUEST, "Invalid multipart header"
                         )
                     key, value = line.decode("utf-8", "replace").split(":", 1)
                     headers[key.strip().lower()] = value.strip()
                 else:
                     raise UploadRejected(
-                        HTTPStatus.BAD_REQUEST, "Trop d'en-têtes multipart"
+                        HTTPStatus.BAD_REQUEST, "Too many multipart headers"
                     )
 
                 disposition = Message()
@@ -852,19 +852,19 @@ class RecvHandler(BaseHTTPRequestHandler):
 
                 safe_name = Path(filename.replace("\\", "/").replace("\x00", "")).name
                 if safe_name in ("", ".", ".."):
-                    raise UploadRejected(HTTPStatus.BAD_REQUEST, "Nom de fichier invalide")
+                    raise UploadRejected(HTTPStatus.BAD_REQUEST, "Invalid file name")
 
                 request_count = len(pending) + 1
                 state = type(self)
                 if request_count > self.max_files_per_request:
                     raise UploadRejected(
                         HTTPStatus.CONTENT_TOO_LARGE,
-                        "Trop de fichiers dans cet envoi",
+                        "Too many files in this upload",
                     )
                 if state.session_upload_count + request_count > self.max_files_per_session:
                     raise UploadRejected(
                         HTTPStatus.TOO_MANY_REQUESTS,
-                        "Limite de fichiers de la session atteinte",
+                        "Session file limit reached",
                     )
 
                 session_remaining = (
@@ -875,7 +875,7 @@ class RecvHandler(BaseHTTPRequestHandler):
                 if session_remaining < 0:
                     raise UploadRejected(
                         HTTPStatus.CONTENT_TOO_LARGE,
-                        "Limite de taille de la session atteinte",
+                        "Session size limit reached",
                     )
 
                 fd, tmp_name = tempfile.mkstemp(prefix=".qshare-", dir=self.out_dir)
@@ -931,7 +931,7 @@ def _unique_path(p: Path) -> Path:
         i += 1
 
 
-# ─── Commandes ────────────────────────────────────────────────────────────────
+# ─── Commands ─────────────────────────────────────────────────────────────────
 class BoundedThreadingHTTPServer(ThreadingHTTPServer):
     """Threading HTTP server with a hard cap applied before thread creation."""
 
@@ -1040,7 +1040,7 @@ def cmd_send(args: argparse.Namespace) -> None:
             SendHandler.done_event.wait()
             server.shutdown()
     except KeyboardInterrupt:
-        print(f"\n{ANSI_DIM}interrompu{ANSI_RESET}")
+        print(f"\n{ANSI_DIM}interrupted{ANSI_RESET}")
         events.emit("CANCELLED")
     finally:
         if is_tmp:
@@ -1098,7 +1098,7 @@ def cmd_recv(args: argparse.Namespace) -> None:
             RecvHandler.done_event.wait()
             server.shutdown()
     except KeyboardInterrupt:
-        print(f"\n{ANSI_DIM}interrompu{ANSI_RESET}")
+        print(f"\n{ANSI_DIM}interrupted{ANSI_RESET}")
         events.emit("CANCELLED")
     finally:
         if tunnel_proc:
@@ -1111,20 +1111,20 @@ def _print_banner(mode: str, target: str, url: str, *, tunneled: bool) -> None:
     print(f"\n{ANSI_FG}{line}")
     mode_label = f"{mode} (TUNNEL)" if tunneled else mode
     print(f"  qshare // {mode_label}")
-    print(f"  {ANSI_DIM}cible : {ANSI_FG}{target}")
+    print(f"  {ANSI_DIM}target: {ANSI_FG}{target}")
     print(f"  {ANSI_DIM}url   : {ANSI_FG}{url}")
     print(f"{line}{ANSI_RESET}\n")
     print_qr(url)
-    hint = "QR public, accessible depuis Internet (4G OK)." if tunneled \
-           else "QR LAN, même Wi-Fi requis."
-    print(f"\n{ANSI_DIM}{hint} Ctrl-C pour arrêter.{ANSI_RESET}\n")
+    hint = "Public QR, accessible from the Internet (4G OK)." if tunneled \
+           else "LAN QR, same Wi-Fi required."
+    print(f"\n{ANSI_DIM}{hint} Press Ctrl-C to stop.{ANSI_RESET}\n")
 
 
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 def _positive_int(value: str) -> int:
     parsed = int(value)
     if parsed <= 0:
-        raise argparse.ArgumentTypeError("doit être supérieur à zéro")
+        raise argparse.ArgumentTypeError("must be greater than zero")
     return parsed
 
 
@@ -1136,22 +1136,22 @@ def _positive_float(value: str) -> float:
         or parsed > MAX_UPLOAD_TIMEOUT
     ):
         raise argparse.ArgumentTypeError(
-            f"doit être compris entre 0 et {MAX_UPLOAD_TIMEOUT:g} secondes"
+            f"must be between 0 and {MAX_UPLOAD_TIMEOUT:g} seconds"
         )
     return parsed
 
 
 def main() -> None:
     p = argparse.ArgumentParser(prog="qshare",
-        description="Partage de fichiers PC <-> tél via HTTP + QR")
+        description="Share files PC <-> phone over HTTP + QR")
     sub = p.add_subparsers(dest="cmd", required=True)
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("-p", "--port", type=int, default=0)
     common.add_argument("-i", "--iface")
     common.add_argument("-k", "--keep-alive", action="store_true")
     common.add_argument("-t", "--tunnel", action="store_true")
-    common.add_argument("--qr-out", help="Écrire un PNG du QR à ce chemin (pour Quickshell)")
-    common.add_argument("--event-file", help="Fichier d'événements pour IPC Quickshell")
+    common.add_argument("--qr-out", help="Write a QR PNG to this path (for Quickshell)")
+    common.add_argument("--event-file", help="Event file for Quickshell IPC")
 
     sp_send = sub.add_parser("send", parents=[common])
     sp_send.add_argument("paths", nargs="+")
@@ -1160,8 +1160,8 @@ def main() -> None:
         type=_positive_float,
         default=DEFAULT_TRANSFER_TIMEOUT,
         help=(
-            "Délai maximal d'un téléchargement en secondes "
-            f"(défaut : {DEFAULT_TRANSFER_TIMEOUT:g}, maximum : {MAX_UPLOAD_TIMEOUT:g})"
+            "Maximum download time in seconds "
+            f"(default: {DEFAULT_TRANSFER_TIMEOUT:g}, maximum: {MAX_UPLOAD_TIMEOUT:g})"
         ),
     )
     sp_send.set_defaults(func=cmd_send)
@@ -1172,33 +1172,33 @@ def main() -> None:
         "--max-upload-bytes",
         type=_positive_int,
         default=DEFAULT_MAX_UPLOAD_BYTES,
-        help=f"Taille maximale d'une requête (défaut : {DEFAULT_MAX_UPLOAD_BYTES})",
+        help=f"Maximum request size (default: {DEFAULT_MAX_UPLOAD_BYTES})",
     )
     sp_recv.add_argument(
         "--max-session-bytes",
         type=_positive_int,
         default=DEFAULT_MAX_SESSION_BYTES,
-        help=f"Taille cumulée maximale par session (défaut : {DEFAULT_MAX_SESSION_BYTES})",
+        help=f"Maximum cumulative session size (default: {DEFAULT_MAX_SESSION_BYTES})",
     )
     sp_recv.add_argument(
         "--max-files-per-request",
         type=_positive_int,
         default=DEFAULT_MAX_FILES_PER_REQUEST,
-        help=f"Nombre maximal de fichiers par requête (défaut : {DEFAULT_MAX_FILES_PER_REQUEST})",
+        help=f"Maximum files per request (default: {DEFAULT_MAX_FILES_PER_REQUEST})",
     )
     sp_recv.add_argument(
         "--max-files-per-session",
         type=_positive_int,
         default=DEFAULT_MAX_FILES_PER_SESSION,
-        help=f"Nombre maximal de fichiers par session (défaut : {DEFAULT_MAX_FILES_PER_SESSION})",
+        help=f"Maximum files per session (default: {DEFAULT_MAX_FILES_PER_SESSION})",
     )
     sp_recv.add_argument(
         "--upload-timeout",
         type=_positive_float,
         default=DEFAULT_UPLOAD_TIMEOUT,
         help=(
-            "Délai maximal d'une requête en secondes "
-            f"(défaut : {DEFAULT_UPLOAD_TIMEOUT:g}, maximum : {MAX_UPLOAD_TIMEOUT:g})"
+            "Maximum request time in seconds "
+            f"(default: {DEFAULT_UPLOAD_TIMEOUT:g}, maximum: {MAX_UPLOAD_TIMEOUT:g})"
         ),
     )
     sp_recv.set_defaults(func=cmd_recv)

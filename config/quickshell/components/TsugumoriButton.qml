@@ -1,8 +1,8 @@
 import QtQuick
 
-// Bouton NieR : fill-slide hover + flash au clic
-// Usage :
-//   NierButton { label: "PLAY"; onClicked: doSomething() }
+// Tsugumori button: fill-slide hover + click flash.
+// Usage:
+//   TsugumoriButton { label: "PLAY"; onClicked: doSomething() }
 
 Item {
     id: root
@@ -22,7 +22,7 @@ Item {
     implicitWidth:  label_text.implicitWidth + padH * 2
     implicitHeight: label_text.implicitHeight + padV * 2
 
-    // Bordure
+    // Border
     Rectangle {
         anchors.fill: parent
         color:        "transparent"
@@ -30,7 +30,7 @@ Item {
         border.width: 1
     }
 
-    // Fill slide (de gauche à droite)
+    // Fill slide (left to right)
     Rectangle {
         id:     fillRect
         anchors {
@@ -49,7 +49,7 @@ Item {
         }
     }
 
-    // Flash au clic
+    // Click flash
     Rectangle {
         id:      clickFlash
         anchors.fill: parent
@@ -81,7 +81,7 @@ Item {
             ColorAnimation { duration: 150 }
         }
 
-        // Positionnement z-order au-dessus du fill
+        // Keep the label above the fill.
         z: 1
     }
 

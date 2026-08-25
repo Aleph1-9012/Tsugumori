@@ -62,7 +62,7 @@ if rg -n 'curl[^[:cntrl:]]*\[[[:space:]]*https?://' README.md; then
     exit 1
 fi
 
-if rg -n 'playerctl|nier-arrow\.png|/tmp/(pomodoro_state|qs-menu|qs-toggle|qs-front|mpv-tsugumori\.sock|qshare-(events|qr\.png)|yzi-out)|LOCKPWD|pamtester[[:space:]]+qs-lock' config packages; then
+if rg -n 'playerctl|n[i]er-arrow\.png|/tmp/(pomodoro_state|qs-menu|qs-toggle|qs-front|mpv-tsugumori\.sock|qshare-(events|qr\.png)|yzi-out)|LOCKPWD|pamtester[[:space:]]+qs-lock' config packages; then
     printf 'Deprecated runtime path, asset, or credential transport found.\n' >&2
     exit 1
 fi
@@ -90,7 +90,7 @@ if rg -n 'PanelWindow|WlrLayershell|WlrLayer|LOCKPWD|pamtester|environment[[:spa
     exit 1
 fi
 
-for launcher in config/quickshell/lock.sh config/quickshell/lock-handshake.sh config/quickshell/restart.sh; do
+for launcher in config/quickshell/lock.sh config/quickshell/lock-handshake.sh config/quickshell/restart.sh config/quickshell/session-start.sh; do
     [[ -x "$launcher" ]] || { printf '%s must be executable.\n' "$launcher" >&2; exit 1; }
 done
 
@@ -101,15 +101,22 @@ for token in 'fallback_lock' 'exec hyprlock' 'qs --no-duplicate --path "$lockscr
     fi
 done
 
-if rg -ni 'nier|mot de passe|authentification|tentative|Noto Sans JP' \
+if rg -ni 'n[i]er|mot de passe|authentification|tentative|Noto Sans JP' \
     config/hypr/hyprlock.conf; then
-    printf 'The Hyprlock fallback still contains legacy NieR or French presentation text.\n' >&2
+    printf 'The Hyprlock fallback still contains legacy branding or French presentation text.\n' >&2
     exit 1
 fi
 
-for token in 'allow_session_lock_restore = true' 'hl.exec_cmd("awww-daemon")'; do
+for token in 'allow_session_lock_restore = true' 'hl.exec_cmd(session_start_command)'; do
     if ! rg -Fq "$token" config/hypr/hyprland.lua; then
         printf 'Hyprland Lua contract is missing token: %s\n' "$token" >&2
+        exit 1
+    fi
+done
+
+for token in 'hyprctl -j monitors all' 'hl.dsp.dpms' 'hl.dsp.force_renderer_reload()' '/usr/bin/waybar' '/usr/bin/awww-daemon'; do
+    if ! rg -Fq "$token" config/quickshell/session-start.sh; then
+        printf 'Session startup guard is missing token: %s\n' "$token" >&2
         exit 1
     fi
 done
@@ -222,7 +229,7 @@ fi
 
 if [[ -n "$QMLLINT_BIN" ]]; then
     mapfile -d '' QML_FILES < <(rg --files -0 -g '*.qml' config/quickshell)
-    (( ${#QML_FILES[@]} >= 17 )) || { printf 'Expected at least 17 QML files, found %d.\n' "${#QML_FILES[@]}" >&2; exit 1; }
+    (( ${#QML_FILES[@]} >= 16 )) || { printf 'Expected at least 16 QML files, found %d.\n' "${#QML_FILES[@]}" >&2; exit 1; }
     QMLLINT_LOG=$(mktemp)
     if ! "$QMLLINT_BIN" -I config/quickshell "${QML_FILES[@]}" >"$QMLLINT_LOG" 2>&1; then
         sed -n '1,500p' "$QMLLINT_LOG" >&2
