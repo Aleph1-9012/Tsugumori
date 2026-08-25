@@ -195,6 +195,72 @@ def run_handler(
     return bytes(connection.output), connection
 
 
+class QuicksharePresentationTests(unittest.TestCase):
+    def rendered_upload_page(self) -> str:
+        return qshare.UPLOAD_HTML.format(
+            bg=qshare.QSHARE_BG,
+            panel=qshare.QSHARE_PANEL,
+            fg=qshare.QSHARE_FG,
+            muted=qshare.QSHARE_MUTED,
+            accent=qshare.QSHARE_ACCENT,
+            token="test-token",
+        )
+
+    def test_upload_page_uses_sidonia_palette_and_english_copy(self) -> None:
+        html = self.rendered_upload_page()
+
+        for value in ("#0a0a0a", "#111111", "#e8e8e8", "#909090", "#cc1515"):
+            self.assertIn(value, html)
+        for text in (
+            "Sidonia // File Transfer",
+            "QShare Uplink",
+            "Upload files",
+            "Awaiting selection.",
+        ):
+            self.assertIn(text, html)
+        for legacy_text in ("Transmettre", "Fin multipart absente", "Iosevka"):
+            self.assertNotIn(legacy_text, html)
+
+        self.assertIn('const TOKEN = "test-token";', html)
+        self.assertIn('xhr.open("POST", "/upload?t=" + TOKEN);', html)
+
+    def test_qr_uses_standard_quiet_zone_and_high_contrast_colors(self) -> None:
+        captured = {}
+
+        class FakeImage:
+            def save(self, path) -> None:
+                captured["saved_path"] = path
+
+        class FakeQr:
+            def __init__(self, **kwargs):
+                captured["config"] = kwargs
+
+            def add_data(self, value) -> None:
+                captured["value"] = value
+
+            def make(self, *, fit) -> None:
+                captured["fit"] = fit
+
+            def make_image(self, **kwargs):
+                captured["colors"] = kwargs
+                return FakeImage()
+
+        with (
+            tempfile.TemporaryDirectory(prefix="tsugumori-qr-") as tempdir,
+            mock.patch.object(qshare.qrcode, "QRCode", FakeQr),
+        ):
+            output = Path(tempdir) / "qshare.png"
+            qshare.write_qr_png("https://qshare.test/token", output)
+
+        self.assertEqual(captured["config"]["border"], 4)
+        self.assertEqual(captured["config"]["box_size"], 10)
+        self.assertEqual(captured["value"], "https://qshare.test/token")
+        self.assertTrue(captured["fit"])
+        self.assertEqual(captured["colors"]["fill_color"], "#000000")
+        self.assertEqual(captured["colors"]["back_color"], "#ffffff")
+        self.assertEqual(captured["saved_path"].name, "qshare.png")
+
+
 class QuickshareReceiveTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tempdir = tempfile.TemporaryDirectory(prefix="tsugumori-qshare-")
