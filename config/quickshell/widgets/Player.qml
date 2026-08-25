@@ -6,7 +6,7 @@ import "../settings"
 Item {
     id: root
 
-    // ── Shorthand Settings (scale global) ──
+    // ── Settings shorthand (global scale) ──
     readonly property int  pw:      Settings.playerWidth
     readonly property real sc:      Settings.scale
     readonly property color surfaceColor: Settings.playerBackground
@@ -735,7 +735,7 @@ Item {
 
                             Item { width: 1; height: 4 }
 
-                            // Artiste
+                            // Artist.
                             Text {
                                 id:    ciArtist
                                 width: parent.width

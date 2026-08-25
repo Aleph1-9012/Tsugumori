@@ -295,8 +295,7 @@ ShellRoot {
                     }
                 }
 
-                // ── Carrousel ──
-                // ── Carrousel ──
+                // ── Carousel ──
                 Item {
                     id: carousel
                     anchors.top: parent.top

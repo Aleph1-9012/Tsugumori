@@ -41,10 +41,9 @@ versions with:
 ./scripts/update-pins.sh
 ```
 
-This updates `packages/pinned-pacman.txt` and `packages/pinned-aur.txt`, recording
-each package's version and architecture as `package=version=architecture`.
-Those generated files must be reviewed and committed before `--pinned` can
-be offered to users.
+This updates `packages/pinned-pacman.txt`, recording each package's version and
+architecture as `package=version=architecture`. The generated file must be
+reviewed and committed before `--pinned` can be offered to users.
 
 ## How to install pinned versions
 
@@ -59,9 +58,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/Aleph1-9012/Tsugumori/main/i
 The installer verifies that a pinned manifest includes Hyprland, then asks the
 installed Hyprland binary to parse both the bundled configuration and the
 candidate configuration containing preserved `user.lua` overrides before
-deploying it. AUR helpers install the package names recorded in `pinned-aur.txt`
-at their currently available AUR versions; the AUR cannot reliably reproduce
-historical build versions.
+deploying it. Tsugumori's default package set uses official repository packages
+only; bundled Share Tech Mono assets replace the former optional font path.
 
 ## Manually pinning a single package
 

@@ -87,13 +87,13 @@ Item {
         var seg = Math.round(w * 0.33)  // Segment length.
         var dot = Math.round(w * 0.10)  // Square marker size.
 
-        // Trait horizontal
+        // Horizontal line.
         ctx.beginPath()
         ctx.moveTo(0, seg)
         ctx.lineTo(seg - dot * 0.5, seg)
         ctx.stroke()
 
-        // Trait vertical
+        // Vertical line.
         ctx.beginPath()
         ctx.moveTo(seg, 0)
         ctx.lineTo(seg, seg - dot * 0.5)

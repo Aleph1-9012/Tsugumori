@@ -7,7 +7,7 @@ import Quickshell.Wayland
 //   Vertical volume bar — left edge
 //   - 30 segments morphing from square (empty) to thin bar (filled)
 //   - Scroll / click / drag
-//   - PulseAudio control through pactl (compatible with pavucontrol)
+//   - PulseAudio control through pactl
 //   - Active screen only
 //   - Click-through outside the active area: the panel changes its width
 //     and height so it covers only what is needed.

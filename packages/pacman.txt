@@ -11,15 +11,12 @@ waybar
 # The installer accepts any already-installed package that provides
 # `quickshell` (for example quickshell-git); otherwise it installs this target.
 quickshell
-qt5-wayland
 qt6-wayland
 qt6-multimedia-ffmpeg
-gtk4-layer-shell
 mpv
 ffmpeg
 
 # ─── Terminal ──────────────────────────────────────────
-figlet
 kitty
 yazi
 
@@ -28,7 +25,6 @@ pipewire
 pipewire-alsa
 pipewire-pulse
 wireplumber
-pavucontrol
 
 # ─── Notifications + polkit ────────────────────────────
 # Quickshell provides the notification daemon; libnotify provides notify-send.
@@ -43,7 +39,6 @@ bluez-utils
 brightnessctl
 grim
 slurp
-satty
 hyprshot
 wl-clipboard
 
@@ -55,26 +50,16 @@ udisks2
 networkmanager
 
 # ─── Fonts ─────────────────────────────────────────────
-ttf-jetbrains-mono
 inter-font
 ttc-iosevka
 noto-fonts
 noto-fonts-cjk
 noto-fonts-emoji
 
-# ─── Shell + prompt ────────────────────────────────────
-fish
-starship
-
-# ─── Python deps used by pixel-wave tools / Quickshare ─
-python-cairo
-python-numpy
+# ─── Python dependencies used by Quickshare ────────────
 python-pillow
-python-opencv
 python-qrcode
 
-#   Quickshare
-qrencode
 cloudflared
 
 # ─── XDG ───────────────────────────────────────────────

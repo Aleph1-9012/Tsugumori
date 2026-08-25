@@ -4,8 +4,8 @@
 #
 #   Run this from the repo root after verifying the current config
 #   works on your system. It records the exact installed versions of
-#   every package listed in packages/pacman.txt and packages/aur.txt,
-#   so `install.sh --pinned` can reproduce a known-good setup later.
+#   every package listed in packages/pacman.txt so `install.sh --pinned`
+#   can reproduce a known-good setup later.
 #
 #   Usage: ./scripts/update-pins.sh
 # ═══════════════════════════════════════════════════════════════════
@@ -56,10 +56,6 @@ generate_pins() {
 }
 
 generate_pins "packages/pacman.txt" "packages/pinned-pacman.txt" "pacman"
-generate_pins "packages/aur.txt"    "packages/pinned-aur.txt"    "AUR"
 
 echo "── packages/pinned-pacman.txt ──"
 cat packages/pinned-pacman.txt
-echo
-echo "── packages/pinned-aur.txt ──"
-cat packages/pinned-aur.txt

@@ -56,7 +56,7 @@ Item {
         })
     }
 
-    // ── Lecture .desktop ──
+    // ── Read .desktop entries ──
     Process {
         id: desktopReader
         command: ["bash", Qt.resolvedUrl("../list-apps.sh").toString().replace("file://","")]

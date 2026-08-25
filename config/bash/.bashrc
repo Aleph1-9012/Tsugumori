@@ -25,7 +25,7 @@ _tsugumori_prompt_cmd() {
 PROMPT_COMMAND='_tsugumori_prompt_cmd'
 
 # ─── Welcome banner (only on first interactive shell) ──────────────
-if [[ -x ~/.config/quickshell/tsugumori-welcome.sh ]] && command -v figlet >/dev/null; then
+if [[ -x ~/.config/quickshell/tsugumori-welcome.sh ]]; then
     ~/.config/quickshell/tsugumori-welcome.sh
 fi
 # ─── User-specific overrides ───────────────────────────────────────

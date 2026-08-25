@@ -1046,7 +1046,7 @@ ShellRoot {
                 MouseArea { anchors.fill: parent; onClicked: root.close() }
             }
 
-            // ── Conteneur clavier + croix ──
+            // ── Keyboard container and cross ──
             Item {
                 id: keyHandler
                 anchors.fill: parent
@@ -1345,7 +1345,7 @@ ShellRoot {
     }
 
     // ═══════════════════════════════════════════════════════════════════
-    //   COMPOSANTS
+    //   COMPONENTS
     // ═══════════════════════════════════════════════════════════════════
 
     // ── Sidonia arrow ──
@@ -1973,7 +1973,7 @@ ShellRoot {
                                 opacity: 0.35
                             }
 
-                            // Fill (volume actuel)
+                            // Fill (current volume).
                             Rectangle {
                                 anchors.left: parent.left
                                 anchors.top: parent.top
@@ -2009,7 +2009,7 @@ ShellRoot {
                                 }
                                 onClicked: function(e) {
                                     // A click without dragging toggles mute on the cell right of the current line.
-                                    // Sinon set vol
+                                    // Otherwise set the volume.
                                     if (Math.abs(e.x - lastX) < 3) {
                                         // It was only a click; setVol was already called.
                                     }
@@ -2029,7 +2029,7 @@ ShellRoot {
                             }
                         }
 
-                        // Indication mute clickable
+                        // Clickable mute indicator.
                         Text {
                             text: root.audioMuted ? "Muted · Click track to unmute" : "Right-click track to mute · Scroll to adjust"
                             font.family: "Inter"

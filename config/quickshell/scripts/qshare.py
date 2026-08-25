@@ -380,7 +380,7 @@ UPLOAD_HTML = """<!doctype html>
   :root {{ --bg:{bg}; --fg:{fg}; --accent:{accent}; --dim:{dim}; }}
   * {{ box-sizing: border-box; }}
   html, body {{ margin:0; padding:0; background:var(--bg); color:var(--fg);
-    font-family:'Iosevka','JetBrains Mono',ui-monospace,monospace; min-height:100vh; }}
+    font-family:'Iosevka',ui-monospace,monospace; min-height:100vh; }}
   main {{ max-width:540px; margin:0 auto; padding:2.5rem 1.5rem; }}
   h1 {{ font-weight:400; letter-spacing:0.4em; text-transform:uppercase;
     border-bottom:1px solid var(--dim); padding-bottom:0.6rem; font-size:1.1rem; }}

@@ -241,7 +241,7 @@ Scope {
     }
 
     // ════════════════════════════════════════════════════════════════
-    // Composant notif
+    // Notification component.
     // ════════════════════════════════════════════════════════════════
     component NotifItem: Item {
         id: notif
@@ -476,7 +476,7 @@ Scope {
                             anchors.centerIn: parent
                             text: notif.urgencyLabel
                             color: "#c8c8c4"
-                            font.family: "JetBrains Mono"
+                            font.family: "Iosevka"
                             font.pixelSize: 8
                             font.weight: Font.Medium
                             font.letterSpacing: 2
@@ -496,7 +496,7 @@ Scope {
                               ? (notif.notification.appName || "SYSTEM").toUpperCase()
                               : "SYSTEM"
                         color: "#7a7358"
-                        font.family: "JetBrains Mono"
+                        font.family: "Iosevka"
                         font.pixelSize: 8
                         font.letterSpacing: 2
                         elide: Text.ElideRight
@@ -509,7 +509,7 @@ Scope {
                             return `${p(d.getHours())}:${p(d.getMinutes())}`;
                         }
                         color: "#7a7358"
-                        font.family: "JetBrains Mono"
+                        font.family: "Iosevka"
                         font.pixelSize: 8
                         font.letterSpacing: 1
                     }
@@ -527,7 +527,7 @@ Scope {
                             anchors.centerIn: parent
                             text: "✕"
                             color: closeMouse.containsMouse ? "#c8c8c4" : "#cc1515"
-                            font.family: "JetBrains Mono"
+                            font.family: "Iosevka"
                             font.pixelSize: 9
                             Behavior on color { ColorAnimation { duration: 120 } }
                         }
@@ -601,13 +601,13 @@ Scope {
                                 anchors.centerIn: parent
                                 text: String(notif.itemIndex + 1).padStart(2, '0')
                                 color: "#c8c8c4"
-                                font.family: "JetBrains Mono"
+                                font.family: "Iosevka"
                                 font.pixelSize: 7
                                 font.letterSpacing: 0.5
                             }
                         }
 
-                        // L'image
+                        // Image.
                         Image {
                             anchors.fill: parent
                             anchors.margins: 2
@@ -645,7 +645,7 @@ Scope {
                         }
                     }
 
-                    // ═══ TEXTE ═══
+                    // ═══ TEXT ═══
                     ColumnLayout {
                         Layout.fillWidth: true
                         Layout.alignment: Qt.AlignTop
@@ -710,7 +710,7 @@ Scope {
                                 anchors.centerIn: parent
                                 text: `▸ ${(modelData && modelData.text ? modelData.text : "").toUpperCase()}`
                                 color: actMouse.containsMouse ? "#c8c8c4" : "#cc1515"
-                                font.family: "JetBrains Mono"
+                                font.family: "Iosevka"
                                 font.pixelSize: 9
                                 font.letterSpacing: 1.5
                                 Behavior on color { ColorAnimation { duration: 120 } }

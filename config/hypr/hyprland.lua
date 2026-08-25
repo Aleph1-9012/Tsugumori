@@ -121,19 +121,19 @@ quickshell_command = quickshell_command
     .. "QT_MEDIA_BACKEND=ffmpeg QT_QPA_PLATFORM=wayland "
     .. "QT_WAYLAND_DISABLE_WINDOWDECORATION=1 /usr/bin/qs"
 
-local session_start_command = quickshell_script("session-start.sh")
-if options.boot_wallpaper then
-    session_start_command = session_start_command .. " --restore-wallpaper"
-end
-
 hl.on("hyprland.start", function()
     hl.exec_cmd(quickshell_command)
     hl.exec_cmd(quickshell_script("lock.sh"))
     hl.exec_cmd("hypridle")
     hl.exec_cmd("udiskie")
+    hl.exec_cmd("/usr/bin/waybar")
     hl.exec_cmd("/usr/lib/polkit-kde-authentication-agent-1")
     hl.exec_cmd(quickshell_script("wave-check.sh"))
-    hl.exec_cmd(session_start_command)
+    hl.exec_cmd("awww-daemon")
+
+    if options.boot_wallpaper then
+        hl.exec_cmd([=[sleep 4; find "$HOME/Pictures/wallpapers" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) -print0 | sort -z | head -z -n 1 | xargs -0 -r awww img --]=])
+    end
 end)
 
 -- Launcher and Quickshell panels.
