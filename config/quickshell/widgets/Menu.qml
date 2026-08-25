@@ -444,6 +444,13 @@ Item {
                                     }
                                     height: parent.height
 
+				    Behavior on anchors.leftMargin {
+				        NumberAnimation {
+				            duration: 180
+				            easing.type: Easing.OutQuart
+        			        }
+				    }
+				    
                                     Text {
                                         id: appId
                                         anchors {
