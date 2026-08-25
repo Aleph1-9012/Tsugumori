@@ -60,9 +60,15 @@ signal.signal(signal.SIGTERM, _handle_termination)
 signal.signal(signal.SIGINT, _handle_termination)
 
 
-TSUGUMORI_BG, TSUGUMORI_FG, TSUGUMORI_ACCENT, TSUGUMORI_DIM = "#1c1a17", "#a89a7e", "#d4c8a8", "#6b6453"
-ANSI_FG = "\033[38;2;168;154;126m"
-ANSI_DIM = "\033[38;2;107;100;83m"
+QSHARE_BG = "#0a0a0a"
+QSHARE_PANEL = "#111111"
+QSHARE_FG = "#e8e8e8"
+QSHARE_MUTED = "#909090"
+QSHARE_ACCENT = "#cc1515"
+QR_FILL = "#000000"
+QR_BACKGROUND = "#ffffff"
+ANSI_FG = "\033[38;2;232;232;232m"
+ANSI_DIM = "\033[38;2;144;144;144m"
 ANSI_RESET = "\033[0m"
 ANSI_BOLD = "\033[1m"
 
@@ -188,7 +194,9 @@ class _DeadlineReader:
                 write(bytes(self.buffer[:safe]))
                 del self.buffer[:safe]
             if self.remaining <= 0:
-                raise UploadRejected(HTTPStatus.BAD_REQUEST, "Fin multipart absente")
+                raise UploadRejected(
+                    HTTPStatus.BAD_REQUEST, "Missing final multipart boundary"
+                )
             self._fill()
 
     def drain(self) -> None:
@@ -303,18 +311,18 @@ def print_qr(url: str) -> None:
 
 
 def write_qr_png(url: str, path: Path) -> None:
-    """Write a QR PNG using the Sidonia palette (dark background, light modules)."""
+    """Write a conventional high-contrast QR PNG for reliable phone scanning."""
     qr = qrcode.QRCode(
-        border=2,
-        box_size=12,
+        border=4,
+        box_size=10,
         error_correction=qrcode.constants.ERROR_CORRECT_M,
     )
     qr.add_data(url)
     qr.make(fit=True)
     img = qr.make_image(
         image_factory=PilImage,
-        fill_color=TSUGUMORI_FG,
-        back_color=TSUGUMORI_BG,
+        fill_color=QR_FILL,
+        back_color=QR_BACKGROUND,
     )
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(path)
@@ -370,55 +378,288 @@ def build_payload(paths: list[Path]) -> tuple[Path, str, bool]:
     return zip_path, archive_name, True
 
 
-# ─── Upload HTML page (Sidonia style) ────────────────────────────────────────
+# ─── Upload HTML page (Tsugumori / Sidonia style) ───────────────────────────
 UPLOAD_HTML = """<!doctype html>
-<html lang="en"><head>
+<html lang="en">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>qshare</title>
+<meta name="theme-color" content="{bg}">
+<title>QShare // Sidonia Uplink</title>
 <style>
-  :root {{ --bg:{bg}; --fg:{fg}; --accent:{accent}; --dim:{dim}; }}
+  :root {{
+    color-scheme: dark;
+    --bg: {bg};
+    --panel: {panel};
+    --fg: {fg};
+    --muted: {muted};
+    --accent: {accent};
+    --line: rgba(204, 21, 21, 0.28);
+    --grid: rgba(204, 21, 21, 0.07);
+  }}
   * {{ box-sizing: border-box; }}
-  html, body {{ margin:0; padding:0; background:var(--bg); color:var(--fg);
-    font-family:'Iosevka',ui-monospace,monospace; min-height:100vh; }}
-  main {{ max-width:540px; margin:0 auto; padding:2.5rem 1.5rem; }}
-  h1 {{ font-weight:400; letter-spacing:0.4em; text-transform:uppercase;
-    border-bottom:1px solid var(--dim); padding-bottom:0.6rem; font-size:1.1rem; }}
-  .frame {{ border:1px solid var(--dim); padding:1.5rem; margin-top:1.5rem; position:relative; }}
-  .frame::before, .frame::after {{ content:""; position:absolute; width:8px; height:8px;
-    border:1px solid var(--accent); background:var(--bg); }}
-  .frame::before {{ top:-4px; left:-4px; }}
-  .frame::after {{ bottom:-4px; right:-4px; }}
-  input[type=file] {{ display:block; width:100%; color:var(--fg); margin-bottom:1.2rem; }}
-  button {{ width:100%; background:transparent; color:var(--accent); border:1px solid var(--accent);
-    padding:0.7rem; font-family:inherit; letter-spacing:0.3em; text-transform:uppercase;
-    cursor:pointer; transition:all 0.2s; }}
-  button:hover:not(:disabled) {{ background:var(--accent); color:var(--bg); }}
-  button:disabled {{ opacity:0.4; cursor:wait; }}
-  .progress {{ margin-top:1rem; height:4px; background:var(--dim); display:none; overflow:hidden; }}
-  .progress > div {{ height:100%; width:0%; background:var(--accent); transition:width 0.1s linear; }}
-  .status {{ margin-top:1rem; min-height:1.4em; font-size:0.9rem; }}
-  .ok {{ color:var(--accent); }}
-  .err {{ color:#c97a6f; }}
+  html {{ min-height: 100%; background: var(--bg); }}
+  body {{
+    margin: 0;
+    min-height: 100vh;
+    overflow-x: hidden;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: ui-monospace, "Cascadia Mono", "SFMono-Regular", Menlo,
+      Consolas, monospace;
+  }}
+  body::before {{
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 20px 20px;
+    mask-image: linear-gradient(to bottom, black, transparent 88%);
+  }}
+  main {{
+    position: relative;
+    width: min(calc(100% - 2rem), 560px);
+    margin: 0 auto;
+    padding: clamp(2rem, 8vh, 5rem) 0 2rem;
+  }}
+  .kicker {{
+    margin: 0 0 0.75rem;
+    color: var(--fg);
+    font-size: 0.72rem;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+  }}
+  .kicker::before {{ content: "▸"; margin-right: 0.65rem; color: var(--accent); }}
+  h1 {{
+    margin: 0;
+    font-size: clamp(1.65rem, 7vw, 2.4rem);
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    line-height: 1.05;
+    text-transform: uppercase;
+  }}
+  .subtitle {{
+    max-width: 46ch;
+    margin: 1rem 0 0;
+    color: var(--muted);
+    font-size: 0.88rem;
+    line-height: 1.65;
+  }}
+  .frame {{
+    position: relative;
+    margin-top: 2rem;
+    padding: clamp(1.2rem, 5vw, 1.75rem);
+    border: 1px solid var(--line);
+    background: var(--panel);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+  }}
+  .frame::before, .frame::after {{
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-color: var(--accent);
+    border-style: solid;
+  }}
+  .frame::before {{
+    top: -5px;
+    left: -5px;
+    border-width: 2px 0 0 2px;
+  }}
+  .frame::after {{
+    right: -5px;
+    bottom: -5px;
+    border-width: 0 2px 2px 0;
+  }}
+  .panel-head {{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 0.9rem;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 0.68rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }}
+  .link-status {{
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--fg);
+    white-space: nowrap;
+  }}
+  .link-dot {{
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 12px rgba(204, 21, 21, 0.8);
+    animation: pulse 1.8s ease-in-out infinite;
+  }}
+  form {{ margin-top: 1.4rem; }}
+  .file-label {{
+    display: block;
+    margin-bottom: 0.65rem;
+    color: var(--fg);
+    font-size: 0.75rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }}
+  input[type=file] {{
+    display: block;
+    width: 100%;
+    padding: 0.8rem;
+    border: 1px dashed var(--line);
+    border-radius: 0;
+    background: var(--bg);
+    color: var(--muted);
+    font: inherit;
+    font-size: 0.78rem;
+  }}
+  input[type=file]::file-selector-button {{
+    margin-right: 0.8rem;
+    padding: 0.55rem 0.75rem;
+    border: 1px solid var(--muted);
+    border-radius: 0;
+    background: transparent;
+    color: var(--fg);
+    font: inherit;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }}
+  .selection {{
+    margin: 0.65rem 0 1.25rem;
+    color: var(--muted);
+    font-size: 0.75rem;
+  }}
+  button {{
+    width: 100%;
+    padding: 0.85rem;
+    border: 1px solid var(--accent);
+    border-radius: 0;
+    background: transparent;
+    color: var(--fg);
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 160ms ease, color 160ms ease, opacity 160ms ease;
+  }}
+  button:hover:not(:disabled) {{
+    background: var(--accent);
+    color: #ffffff;
+  }}
+  button:focus-visible:not(:disabled) {{
+    background: var(--accent);
+    color: #ffffff;
+    outline: 2px solid var(--fg);
+    outline-offset: 3px;
+  }}
+  button:disabled {{ opacity: 0.4; cursor: not-allowed; }}
+  .progress {{
+    display: none;
+    height: 3px;
+    margin-top: 1rem;
+    overflow: hidden;
+    background: var(--line);
+  }}
+  .progress > div {{
+    width: 0;
+    height: 100%;
+    background: var(--accent);
+    transition: width 100ms linear;
+  }}
+  .status {{
+    min-height: 1.4em;
+    margin-top: 1rem;
+    color: var(--muted);
+    font-size: 0.82rem;
+  }}
+  .ok {{ color: var(--fg); }}
+  .err {{ color: #ff6b6b; }}
+  .note {{
+    margin: 1.35rem 0 0;
+    padding-top: 1rem;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 0.72rem;
+    line-height: 1.55;
+  }}
+  footer {{
+    margin-top: 1.4rem;
+    color: var(--muted);
+    font-size: 0.62rem;
+    letter-spacing: 0.2em;
+    text-align: center;
+    text-transform: uppercase;
+  }}
+  @keyframes pulse {{
+    0%, 100% {{ opacity: 0.45; }}
+    50% {{ opacity: 1; }}
+  }}
+  @media (max-width: 420px) {{
+    main {{ width: min(calc(100% - 1.25rem), 560px); padding-top: 1.25rem; }}
+    .panel-head {{ align-items: flex-start; flex-direction: column; }}
+  }}
+  @media (prefers-reduced-motion: reduce) {{
+    *, *::before, *::after {{ animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }}
+  }}
 </style>
-</head><body>
+</head>
+<body>
 <main>
-  <h1>qshare // upload</h1>
-  <div class="frame">
-    <input type="file" id="files" multiple>
-    <button id="send">Transmettre</button>
-    <div class="progress"><div id="bar"></div></div>
-    <div class="status" id="status"></div>
-  </div>
+  <header>
+    <p class="kicker">Sidonia // File Transfer</p>
+    <h1>QShare Uplink</h1>
+    <p class="subtitle">Choose files on this device and send them to the paired Tsugumori session.</p>
+  </header>
+  <section class="frame" aria-labelledby="panel-title">
+    <div class="panel-head">
+      <span id="panel-title">Upload channel</span>
+      <span class="link-status"><span class="link-dot" aria-hidden="true"></span>Link ready</span>
+    </div>
+    <form id="upload-form">
+      <label class="file-label" for="files">Files for transfer</label>
+      <input type="file" id="files" name="files" multiple required>
+      <p class="selection" id="selection">No files selected.</p>
+      <button id="send" type="submit" disabled>Upload files</button>
+      <div class="progress" id="progress" aria-hidden="true"><div id="bar"></div></div>
+      <div class="status" id="status" role="status" aria-live="polite">Awaiting selection.</div>
+    </form>
+    <p class="note">Keep this page open until the transfer completes.</p>
+  </section>
+  <footer>Tsugumori // Token-protected session</footer>
 </main>
 <script>
 const TOKEN = "{token}";
+const form = document.getElementById("upload-form");
 const filesInput = document.getElementById("files");
 const btn = document.getElementById("send");
 const bar = document.getElementById("bar");
-const progress = document.querySelector(".progress");
+const progress = document.getElementById("progress");
 const status = document.getElementById("status");
-btn.addEventListener("click", () => {{
+const selection = document.getElementById("selection");
+
+filesInput.addEventListener("change", () => {{
+  const count = filesInput.files.length;
+  selection.textContent = count === 0
+    ? "No files selected."
+    : count === 1 ? filesInput.files[0].name : count + " files selected.";
+  status.textContent = count ? "Ready to upload." : "Awaiting selection.";
+  status.className = "status";
+  btn.disabled = count === 0;
+}});
+
+form.addEventListener("submit", event => {{
+  event.preventDefault();
   const files = filesInput.files;
   if (!files.length) {{ status.textContent = "No file selected."; return; }}
   const fd = new FormData();
@@ -428,16 +669,25 @@ btn.addEventListener("click", () => {{
   xhr.upload.onprogress = e => {{
     if (e.lengthComputable) {{
       progress.style.display = "block";
+      progress.setAttribute("aria-hidden", "false");
       bar.style.width = (e.loaded / e.total * 100).toFixed(1) + "%";
     }}
   }};
+  const finish = () => {{
+    btn.disabled = filesInput.files.length === 0;
+    btn.textContent = "Upload files";
+    filesInput.disabled = false;
+  }};
   xhr.onload = () => {{
-    btn.disabled = false;
-    if (xhr.status === 200) {{ status.textContent = "✓ Transfer complete."; status.className = "status ok"; }}
+    finish();
+    if (xhr.status === 200) {{ bar.style.width = "100%"; status.textContent = "✓ Transfer complete."; status.className = "status ok"; }}
     else {{ status.textContent = "✗ Error " + xhr.status; status.className = "status err"; }}
   }};
-  xhr.onerror = () => {{ btn.disabled = false; status.textContent = "✗ Network error."; status.className = "status err"; }};
+  xhr.onerror = () => {{ finish(); status.textContent = "✗ Network error."; status.className = "status err"; }};
+  xhr.onabort = () => {{ finish(); status.textContent = "Transfer cancelled."; status.className = "status err"; }};
   btn.disabled = true;
+  btn.textContent = "Uploading…";
+  filesInput.disabled = true;
   status.textContent = "Sending…";
   status.className = "status";
   xhr.send(fd);
@@ -642,7 +892,12 @@ class RecvHandler(BaseHTTPRequestHandler):
         if self.path != f"/{self.token}":
             self.send_error(404); return
         html = UPLOAD_HTML.format(
-            bg=TSUGUMORI_BG, fg=TSUGUMORI_FG, accent=TSUGUMORI_ACCENT, dim=TSUGUMORI_DIM, token=self.token
+            bg=QSHARE_BG,
+            panel=QSHARE_PANEL,
+            fg=QSHARE_FG,
+            muted=QSHARE_MUTED,
+            accent=QSHARE_ACCENT,
+            token=self.token,
         ).encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")

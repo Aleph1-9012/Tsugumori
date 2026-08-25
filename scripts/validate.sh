@@ -68,7 +68,7 @@ if rg -nP '[\x{00C0}-\x{00D6}\x{00D8}-\x{00F6}\x{00F8}-\x{024F}]' \
     exit 1
 fi
 
-if rg -ni "\\b(p[o]lice|tr[a]it (horizontal|vertical)|optimis[a]tion vectorielle|r[e]ndu|s[o]rtie|l[a]ncement|ab[a]ndon|l[e]cture [.]desktop|compos[a]nts?|l['’]im[a]ge|t[e]xte|c[o]nteneur|volume act[u]el|s[i]non|indicat[i]on mute|c[a]rrousel|art[i]ste|scale gl[o]bal|c[o]uleurs|b[o]utons)\\b" \
+if rg -ni "\\b(p[o]lice|tr[a]it (horizontal|vertical)|optimis[a]tion vectorielle|r[e]ndu|s[o]rtie|l[a]ncement|ab[a]ndon|l[e]cture [.]desktop|compos[a]nts?|l['’]im[a]ge|t[e]xte|c[o]nteneur|volume act[u]el|s[i]non|indicat[i]on mute|c[a]rrousel|art[i]ste|scale gl[o]bal|c[o]uleurs|b[o]utons|transm[e]ttre|f[i]n multipart abs[e]nte)\\b" \
     README.md install.sh config; then
     printf 'Installed files contain legacy French or mixed-French presentation text.\n' >&2
     exit 1
