@@ -36,7 +36,7 @@ from urllib.parse import parse_qs, quote, urlsplit
 
 try:
     import qrcode
-    from qrcode.image.pil import PilImage
+    from PIL import Image, ImageDraw
 except ImportError:
     sys.exit("Missing dependency: pacman -S python-qrcode  (or pip install qrcode[pil])")
 
@@ -65,8 +65,13 @@ QSHARE_PANEL = "#111111"
 QSHARE_FG = "#e8e8e8"
 QSHARE_MUTED = "#909090"
 QSHARE_ACCENT = "#cc1515"
-QR_FILL = "#000000"
 QR_BACKGROUND = "#ffffff"
+QR_STEEL = "#263b4a"
+QR_DEEP_STEEL = "#172b3a"
+QR_SPACE_NAVY = "#0b1f33"
+QR_SENSOR_RED = "#751018"
+QR_BORDER = 4
+QR_BOX_SIZE = 10
 ANSI_FG = "\033[38;2;232;232;232m"
 ANSI_DIM = "\033[38;2;144;144;144m"
 ANSI_RESET = "\033[0m"
@@ -310,20 +315,76 @@ def print_qr(url: str) -> None:
     qr.print_ascii(invert=True)
 
 
+def _qr_finder_origins(size: int) -> tuple[tuple[int, int], ...]:
+    return (
+        (QR_BORDER, QR_BORDER),
+        (size - QR_BORDER - 7, QR_BORDER),
+        (QR_BORDER, size - QR_BORDER - 7),
+    )
+
+
+def _qr_in_finder(x: int, y: int, size: int) -> bool:
+    return any(
+        start_x <= x < start_x + 7 and start_y <= y < start_y + 7
+        for start_x, start_y in _qr_finder_origins(size)
+    )
+
+
+def _qr_in_finder_core(x: int, y: int, size: int) -> bool:
+    return any(
+        start_x + 2 <= x < start_x + 5 and start_y + 2 <= y < start_y + 5
+        for start_x, start_y in _qr_finder_origins(size)
+    )
+
+
+def _qr_module_color(x: int, y: int, size: int) -> str:
+    """Choose a dark Sidonia armor color without changing the QR matrix."""
+    if _qr_in_finder_core(x, y, size):
+        return QR_SENSOR_RED
+    if _qr_in_finder(x, y, size):
+        return QR_SPACE_NAVY
+
+    center = (size - 1) / 2
+    upper_right = x > center + 2 and y < center - 3 and x - y > 9
+    lower_left = x < center - 3 and y > center + 3 and y - x > 11
+    center_keel = abs(x - center) <= 3 and y > center + 1
+    if upper_right or lower_left or center_keel:
+        return QR_DEEP_STEEL
+    return QR_STEEL
+
+
 def write_qr_png(url: str, path: Path) -> None:
-    """Write a conventional high-contrast QR PNG for reliable phone scanning."""
+    """Write a high-contrast QR with Sidonia-inspired armor coloring."""
     qr = qrcode.QRCode(
-        border=4,
-        box_size=10,
+        border=QR_BORDER,
+        box_size=QR_BOX_SIZE,
         error_correction=qrcode.constants.ERROR_CORRECT_M,
     )
     qr.add_data(url)
     qr.make(fit=True)
-    img = qr.make_image(
-        image_factory=PilImage,
-        fill_color=QR_FILL,
-        back_color=QR_BACKGROUND,
+
+    matrix = qr.get_matrix()
+    size = len(matrix)
+    img = Image.new(
+        "RGB",
+        (size * QR_BOX_SIZE, size * QR_BOX_SIZE),
+        QR_BACKGROUND,
     )
+    draw = ImageDraw.Draw(img)
+    for y, row in enumerate(matrix):
+        for x, dark in enumerate(row):
+            if not dark:
+                continue
+            draw.rectangle(
+                (
+                    x * QR_BOX_SIZE,
+                    y * QR_BOX_SIZE,
+                    (x + 1) * QR_BOX_SIZE - 1,
+                    (y + 1) * QR_BOX_SIZE - 1,
+                ),
+                fill=_qr_module_color(x, y, size),
+            )
+
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(path)
 
