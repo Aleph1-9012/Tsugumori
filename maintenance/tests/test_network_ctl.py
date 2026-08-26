@@ -9,7 +9,7 @@ import unittest
 from unittest import mock
 
 
-HELPER = Path(__file__).parents[1] / "config/quickshell/scripts/network_ctl.py"
+HELPER = Path(__file__).parents[2] / "config/quickshell/scripts/network_ctl.py"
 
 
 def load_helper():

@@ -9,7 +9,7 @@ import time
 import unittest
 
 
-REPO_ROOT = Path(__file__).parents[1]
+REPO_ROOT = Path(__file__).parents[2]
 STATUS_SCRIPT = REPO_ROOT / "config/waybar/scripts/pomodoro.sh"
 TOGGLE_SCRIPT = REPO_ROOT / "config/waybar/scripts/pomodoro_toggle.sh"
 

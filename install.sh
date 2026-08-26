@@ -210,7 +210,7 @@ validate_pinned_manifest() {
     actual=$(awk -F= '!/^[[:space:]]*(#|$)/ {print $1}' "$pinned_manifest" | sort)
     duplicates=$(awk -F= '!/^[[:space:]]*(#|$)/ {count[$1]++} END {for (pkg in count) if (count[pkg] > 1) print pkg}' "$pinned_manifest")
     [[ -z "$duplicates" ]] || fatal "$label pinned manifest contains duplicate package records."
-    [[ "$expected" == "$actual" ]] || fatal "$label pinned manifest does not exactly match its package manifest; regenerate it with scripts/update-pins.sh."
+    [[ "$expected" == "$actual" ]] || fatal "$label pinned manifest does not exactly match its package manifest; regenerate it with maintenance/update-pins.sh."
 }
 
 install_packages() {

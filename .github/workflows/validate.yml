@@ -26,4 +26,4 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Run repository validation
-        run: bash scripts/validate.sh
+        run: bash maintenance/validate.sh
