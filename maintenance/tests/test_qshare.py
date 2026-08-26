@@ -14,7 +14,7 @@ from unittest import mock
 
 
 QSHARE_PATH = (
-    Path(__file__).parents[1] / "config/quickshell/scripts/qshare.py"
+    Path(__file__).parents[2] / "config/quickshell/scripts/qshare.py"
 )
 
 

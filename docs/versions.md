@@ -38,7 +38,7 @@ After verifying the config works, the maintainer regenerates pinned
 versions with:
 
 ```bash
-./scripts/update-pins.sh
+./maintenance/update-pins.sh
 ```
 
 This updates `packages/pinned-pacman.txt`, recording each package's version and

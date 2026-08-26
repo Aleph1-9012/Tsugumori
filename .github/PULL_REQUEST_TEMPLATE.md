@@ -13,5 +13,5 @@ How did you verify this works? (e.g. ran `install.sh`, tested on Hyprland versio
 
 ## Checklist
 - [ ] I've tested this on my own system
-- [ ] I've updated `VERSIONS.md` / `packages/` if this changes a dependency
+- [ ] I've updated `docs/versions.md` / `packages/` if this changes a dependency
 - [ ] I've updated the README if this changes user-facing behavior

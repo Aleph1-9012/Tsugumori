@@ -54,7 +54,7 @@ for path in paths:
 print(f"Python syntax: OK ({count} files)")
 PY
 
-python3 -m unittest discover -s tests -p 'test_*.py'
+python3 -m unittest discover -s maintenance/tests -p 'test_*.py'
 printf 'Python unit tests: OK\n'
 
 if rg -n 'curl[^[:cntrl:]]*\[[[:space:]]*https?://' README.md; then
@@ -63,25 +63,25 @@ if rg -n 'curl[^[:cntrl:]]*\[[[:space:]]*https?://' README.md; then
 fi
 
 if rg -nP '[\x{00C0}-\x{00D6}\x{00D8}-\x{00F6}\x{00F8}-\x{024F}]' \
-    README.md install.sh config; then
-    printf 'Installed files contain accented Latin presentation text.\n' >&2
+    README.md docs install.sh config; then
+    printf 'User-facing files contain accented Latin presentation text.\n' >&2
     exit 1
 fi
 
 if rg -ni "\\b(p[o]lice|tr[a]it (horizontal|vertical)|optimis[a]tion vectorielle|r[e]ndu|s[o]rtie|l[a]ncement|ab[a]ndon|l[e]cture [.]desktop|compos[a]nts?|l['’]im[a]ge|t[e]xte|c[o]nteneur|volume act[u]el|s[i]non|indicat[i]on mute|c[a]rrousel|art[i]ste|scale gl[o]bal|c[o]uleurs|b[o]utons|transm[e]ttre|f[i]n multipart abs[e]nte)\\b" \
-    README.md install.sh config; then
-    printf 'Installed files contain legacy French or mixed-French presentation text.\n' >&2
+    README.md docs install.sh config; then
+    printf 'User-facing files contain legacy French or mixed-French presentation text.\n' >&2
     exit 1
 fi
 
 if rg -n 'ttf-[g]oogle|INSTALL_A[U]R|bootstrap_aur_[h]elper|pinned-[a]ur|base-[d]evel' \
-    install.sh packages scripts/update-pins.sh README.md; then
+    install.sh packages maintenance/update-pins.sh README.md; then
     printf 'Legacy AUR or build-tool bootstrap logic remains.\n' >&2
     exit 1
 fi
 
 if rg -n 'session-[s]tart|session_start_[c]ommand|force_renderer_[r]eload|hl[.]dsp[.]d[p]ms' \
-    config scripts; then
+    config maintenance; then
     printf 'Monitor-recovery feature code remains mixed into the cleanup branch.\n' >&2
     exit 1
 fi
@@ -93,9 +93,9 @@ for generator in \
     [[ ! -e "$generator" ]] || { printf 'Maintainer generator remains deployed: %s\n' "$generator" >&2; exit 1; }
 done
 for generator in \
-    tools/wave-assets/pixel_wave.py \
-    tools/wave-assets/pixel-wave-close-video.py \
-    tools/wave-assets/extract_last_frame.py; do
+    maintenance/wave-assets/pixel_wave.py \
+    maintenance/wave-assets/pixel-wave-close-video.py \
+    maintenance/wave-assets/extract_last_frame.py; do
     [[ -f "$generator" ]] || { printf 'Maintainer generator is missing: %s\n' "$generator" >&2; exit 1; }
 done
 if rg -n '\bpython(3)?\b|pixel[_-]wave|ext_last|generat(e|ing|or)' config/quickshell/wave-check.sh; then

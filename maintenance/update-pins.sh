@@ -7,7 +7,7 @@
 #   every package listed in packages/pacman.txt so `install.sh --pinned`
 #   can reproduce a known-good setup later.
 #
-#   Usage: ./scripts/update-pins.sh
+#   Usage: ./maintenance/update-pins.sh
 # ═══════════════════════════════════════════════════════════════════
 set -euo pipefail
 
