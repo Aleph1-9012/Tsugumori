@@ -2,13 +2,12 @@
 
 Knights of Sidonia-inspired Hyprland desktop for Arch Linux.
 
-![Project status: beta](https://img.shields.io/badge/status-beta-c8b89a)
 ![Hyprland: 0.55.2+](https://img.shields.io/badge/Hyprland-0.55.2%2B-58e1ff)
 ![License: MIT](https://img.shields.io/badge/license-MIT-7a7358)
 
+https://github.com/user-attachments/assets/34b4f963-c526-4c36-b54b-739372b248d7
+
 <p align="center">
-  <img src="https://i.ytimg.com/vi/VwLABphh-E0/maxresdefault.jpg" width="900" alt="Tsugumori desktop showcase">
-  <br>
   <a href="https://youtu.be/VwLABphh-E0">Watch the showcase in higher quality on YouTube</a>
 </p>
 
@@ -24,8 +23,8 @@ Knights of Sidonia-inspired Hyprland desktop for Arch Linux.
 </p>
 
 > [!NOTE]
-> Tsugumori is currently a beta. The installer checks the configuration before
-> replacing anything and keeps timestamped backups by default.
+> The installer checks the configuration before replacing anything and keeps
+> timestamped backups by default.
 
 ## Install
 
