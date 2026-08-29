@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
@@ -52,7 +51,8 @@ ShellRoot {
         top:    [ {key:"wifi",      label:"Wi-Fi"},
                   {key:"bluetooth", label:"Bluetooth"} ],
         bottom: [ {key:"output",    label:"Output"},
-                  {key:"volume",    label:"Volume"} ],
+                  {key:"volume",    label:"Volume"},
+                  {key:"brightness",label:"Brightness"} ],
         left:   [ {key:"send",      label:"Send"},
                   {key:"receive",   label:"Receive"} ],
         right:  [ {key:"history",   label:"History"},
@@ -68,6 +68,8 @@ ShellRoot {
                               actions:[{key:"placeholder",label:"Sub-menu coming"}]},
         "bottom.volume":    {h3:"Volume",              status:"—",    on:false,
                               actions:[{key:"placeholder",label:"Sub-menu coming"}]},
+        "bottom.brightness":{h3:"Brightness",          status:"—",    on:false,
+                              actions:[]},
         "left.send":        {h3:"Send Files",          status:"Ready", on:false,
                               actions:[{key:"placeholder",label:"Sub-menu coming"}]},
         "left.receive":     {h3:"Receive Files",       status:"—",    on:false,
@@ -203,6 +205,7 @@ ShellRoot {
         if (key === "top.bluetooth")     return "Bluetooth"
         if (key === "bottom.output")     return "Audio Output"
         if (key === "bottom.volume")     return "Volume"
+        if (key === "bottom.brightness") return "Brightness"
         if (key === "left.send")         return "Send Files"
         if (key === "left.receive")      return "Receive Files"
         if (key === "right.history")     return "Notifications"
@@ -234,6 +237,10 @@ ShellRoot {
             if (audioMuted) return "Muted"
             return Math.round(audioVolume * 100) + "%"
         }
+        if (key === "bottom.brightness") {
+            if (!brightnessAvailable) return "Unavailable"
+            return Math.round(brightnessLevel * 100) + "%"
+        }
         if (key === "left.send") {
             if (pendingFilePath === "") return "Ready · pick a file"
             return qshareTunnel ? "Tunnel mode" : "LAN mode"
@@ -257,6 +264,7 @@ ShellRoot {
         if (key === "top.bluetooth")     return btEnabled
         if (key === "bottom.output")     return true
         if (key === "bottom.volume")     return !audioMuted
+        if (key === "bottom.brightness") return brightnessAvailable
         if (key === "left.send")         return pendingFilePath !== ""
         if (key === "left.receive")      return qshareUrl !== ""
         if (key === "right.history")     return notifications.length > 0
@@ -347,6 +355,131 @@ ShellRoot {
                 root.audioSinks = sinks
             }
         }
+    }
+
+    // ── System data: Display brightness ──
+    property real   brightnessLevel: 1.0
+    property bool   brightnessAvailable: false
+    property string brightnessLoadingMonitor: ""
+    property int    brightnessRequestedPercent: 100
+    property int    brightnessPendingPercent: -1
+    property string brightnessPendingMonitor: ""
+    property var    brightnessByMonitor: ({})
+
+    function monitorBrightness(name) {
+        var value = brightnessByMonitor[name]
+        return value === undefined ? 1.0 : Math.max(0.01, Math.min(1.0, value))
+    }
+
+    function rememberMonitorBrightness(name, value) {
+        if (name === "") return
+        var next = {}
+        for (var key in brightnessByMonitor)
+            next[key] = brightnessByMonitor[key]
+        next[name] = Math.max(0.01, Math.min(1.0, value))
+        brightnessByMonitor = next
+    }
+
+    function brightnessStatePath(name) {
+        return runtimeDir + "/brightness-" + name
+    }
+
+    function loadBrightness() {
+        if (setBrightnessProc.running || brightnessPendingPercent >= 0
+                || loadBrightnessProc.running)
+            return
+
+        var monitor = activeMonitor
+        if (monitor === "") return
+
+        brightnessLoadingMonitor = monitor
+        loadBrightnessProc.command = ["sh", "-c",
+            "if [ -r \"$1\" ]; then cat -- \"$1\"; else printf '100\\n'; fi",
+            "brightness-state", brightnessStatePath(monitor)]
+        loadBrightnessProc.running = true
+    }
+
+    Process {
+        id: loadBrightnessProc
+        command: []
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                // Do not let a load overwrite a drag that is being applied.
+                if (root.brightnessPendingPercent >= 0 || setBrightnessProc.running)
+                    return
+                root.brightnessAvailable = false
+
+                var percent = parseInt(this.text.trim())
+                if (isNaN(percent)) return
+                percent = Math.max(1, Math.min(100, percent))
+                root.brightnessLevel = percent / 100
+                root.brightnessRequestedPercent = percent
+                root.rememberMonitorBrightness(root.brightnessLoadingMonitor,
+                    root.brightnessLevel)
+                root.brightnessAvailable = true
+            }
+        }
+    }
+
+    Process {
+        id: setBrightnessProc
+        property int appliedPercent: -1
+        property string appliedMonitor: ""
+        command: []
+        running: false
+        stderr: StdioCollector { id: brightnessSetError }
+        onExited: exitCode => {
+            if (exitCode !== 0) {
+                root.brightnessAvailable = false
+                console.warn("Brightness write failed:", brightnessSetError.text.trim())
+            }
+            if (root.brightnessPendingPercent >= 0
+                    && (root.brightnessPendingPercent !== appliedPercent
+                        || root.brightnessPendingMonitor !== appliedMonitor)) {
+                root.startBrightnessWrite()
+                return
+            }
+            root.brightnessPendingPercent = -1
+            root.brightnessPendingMonitor = ""
+            if (exitCode === 0)
+                root.brightnessAvailable = true
+        }
+    }
+
+    function setBrightnessPercent(value, monitorName) {
+        if (!brightnessAvailable) return
+        var monitor = monitorName || activeMonitor
+        if (monitor === "") return
+        var percent = Math.max(1, Math.min(100, Math.round(value)))
+        brightnessRequestedPercent = percent
+        brightnessLevel = percent / 100
+        rememberMonitorBrightness(monitor, brightnessLevel)
+        brightnessPendingPercent = percent
+        brightnessPendingMonitor = monitor
+        if (!setBrightnessProc.running)
+            startBrightnessWrite()
+    }
+
+    function startBrightnessWrite() {
+        if (setBrightnessProc.running || brightnessPendingPercent < 0) return
+        var monitor = brightnessPendingMonitor
+        if (!/^[A-Za-z0-9_.:-]+$/.test(monitor)) {
+            brightnessPendingPercent = -1
+            brightnessPendingMonitor = ""
+            brightnessAvailable = false
+            return
+        }
+
+        setBrightnessProc.appliedPercent = brightnessPendingPercent
+        setBrightnessProc.appliedMonitor = monitor
+        brightnessPendingPercent = -1
+        brightnessPendingMonitor = ""
+
+        setBrightnessProc.command = ["sh", "-c", "printf '%s\\n' \"$1\" > \"$2\"",
+            "brightness-state", String(setBrightnessProc.appliedPercent),
+            brightnessStatePath(monitor)]
+        setBrightnessProc.running = true
     }
 
     // ── Notifications via IPC to Notifications.qml (which owns the D-Bus bus) ──
@@ -693,7 +826,10 @@ ShellRoot {
     onSlotChanged: {
         cancelWifiPrompt()
         if (slot === "top")    { wifiService.refresh(); pollBt.running = true }
-        if (slot === "bottom") { pollAudio.running = true }
+        if (slot === "bottom") {
+            pollAudio.running = true
+            root.loadBrightness()
+        }
         if (slot === "right")  {
             pollNotifsHistory.running = true
             pollNotifsDnd.running = true
@@ -977,6 +1113,12 @@ ShellRoot {
             if (t2 && t2 !== slot) slot = t2
         }
         else if (level === 3) {
+            if (slot === "bottom" && sub === "brightness"
+                    && (dir === "left" || dir === "right")) {
+                var brightnessStep = dir === "right" ? 5 : -5
+                root.setBrightnessPercent(brightnessRequestedPercent + brightnessStep)
+                return
+            }
             var subs = subList(slot)
             var subKeys = subs.map(function(s){ return s.key })
             var subIdx = subKeys.indexOf(sub)
@@ -1006,10 +1148,15 @@ ShellRoot {
 
     // ── Active screen detection ──
     property string activeMonitor: ""
+    onActiveMonitorChanged: {
+        root.brightnessAvailable = false
+        if (root.open && root.slot === "bottom")
+            root.loadBrightness()
+    }
     Process {
         id: getMonitorProc
         running: root.open
-        command: ["sh","-c","hyprctl cursorpos -j | python3 -c \"\nimport sys,json,subprocess\npos=json.load(sys.stdin)\nmons=json.loads(subprocess.check_output(['hyprctl','monitors','-j']))\nfor m in mons:\n    x,y=m['x'],m['y']\n    w,h=m['width'],m['height']\n    if x<=pos['x']<x+w and y<=pos['y']<y+h:\n        print(m['name'])\n        break\n\""]
+        command: ["sh","-c","hyprctl cursorpos -j | python3 -c \"\nimport sys,json,subprocess\npos=json.load(sys.stdin)\nmons=json.loads(subprocess.check_output(['hyprctl','monitors','-j']))\nfor m in mons:\n    x,y=m['x'],m['y']\n    scale=float(m.get('scale') or 1)\n    w,h=m['width']/scale,m['height']/scale\n    if int(m.get('transform',0)) % 2:\n        w,h=h,w\n    if x<=pos['x']<x+w and y<=pos['y']<y+h:\n        print(m['name'])\n        break\n\""]
         stdout: StdioCollector {
             onStreamFinished: {
                 var n = this.text.trim()
@@ -1021,9 +1168,41 @@ ShellRoot {
     // ═══════════════════════════════════
     //   PANEL
     // ═══════════════════════════════════
+
+    // The available hardware brightness interfaces do not visibly affect both
+    // panels, so each screen gets the same input-transparent dimming surface.
     Variants {
         model: Quickshell.screens
         PanelWindow {
+            required property var modelData
+            screen: modelData
+            anchors.top: true
+            anchors.bottom: true
+            anchors.left: true
+            anchors.right: true
+            exclusionMode: ExclusionMode.Ignore
+            color: "transparent"
+            visible: root.monitorBrightness(modelData.name) < 0.999
+            implicitWidth: modelData.width
+            implicitHeight: modelData.height
+            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.namespace: "tsugumori-brightness-dimmer"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+            mask: Region { width: 0; height: 0 }
+
+            Rectangle {
+                anchors.fill: parent
+                color: "#000000"
+                opacity: 1.0 - root.monitorBrightness(modelData.name)
+            }
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+        PanelWindow {
+            id: controlPanel
             required property var modelData
             screen: modelData
             anchors.top: true; anchors.bottom: true; anchors.left: true; anchors.right: true
@@ -1129,8 +1308,8 @@ ShellRoot {
                     }
                     Slot {
                         slotKey: "bottom"
-                        title: "Audio"
-                        subtitle: "Output · Volume"
+                        title: "Audio / Display"
+                        subtitle: "Output · Volume · Brightness"
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.verticalCenterOffset: (root.open && !root.closing) ? root.slotGapV : 0
@@ -2032,6 +2211,95 @@ ShellRoot {
                         // Clickable mute indicator.
                         Text {
                             text: root.audioMuted ? "Muted · Click track to unmute" : "Right-click track to mute · Scroll to adjust"
+                            font.family: "Inter"
+                            font.pixelSize: 9
+                            color: root.colInk
+                            opacity: 0.5
+                            font.letterSpacing: 1
+                        }
+                    }
+                }
+
+                // ── Brightness slider (visible when bottom.brightness) ──
+                Item {
+                    width: parent.width
+                    visible: sl.slotKey === "bottom" && root.sub === "brightness"
+                    height: visible ? 60 : 0
+
+                    Item { width: 1; height: 14 }
+
+                    Column {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.topMargin: 14
+                        spacing: 6
+
+                        Rectangle {
+                            id: brightnessTrack
+                            width: parent.width
+                            height: 24
+                            color: "transparent"
+                            border.color: root.colInk
+                            border.width: 1
+                            opacity: root.brightnessAvailable ? 1 : 0.35
+                            Behavior on opacity { NumberAnimation { duration: 200 } }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.margins: 3
+                                color: "transparent"
+                                border.color: root.colInk
+                                border.width: 1
+                                opacity: 0.35
+                            }
+
+                            Rectangle {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                anchors.margins: 3
+                                width: (parent.width - 6) * root.brightnessLevel
+                                color: root.colInk
+                                Behavior on width { NumberAnimation { duration: 120 } }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: root.brightnessAvailable
+                                hoverEnabled: true
+                                acceptedButtons: Qt.LeftButton
+                                property bool dragging: false
+
+                                onPressed: function(e) {
+                                    dragging = true
+                                    setBrightness(e.x)
+                                }
+                                onReleased: dragging = false
+                                onCanceled: dragging = false
+                                onPositionChanged: function(e) {
+                                    if (dragging) setBrightness(e.x)
+                                }
+                                onWheel: function(e) {
+                                    var delta = e.angleDelta.y > 0 ? 5 : -5
+                                    root.setBrightnessPercent(
+                                        root.brightnessRequestedPercent + delta,
+                                        controlPanel.modelData.name)
+                                }
+
+                                function setBrightness(x) {
+                                    var usableWidth = brightnessTrack.width - 6
+                                    var ratio = Math.max(0.01, Math.min(1, (x - 3) / usableWidth))
+                                    root.setBrightnessPercent(Math.round(ratio * 100),
+                                        controlPanel.modelData.name)
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: root.brightnessAvailable
+                                ? "Drag or scroll to adjust"
+                                : "Brightness control unavailable"
                             font.family: "Inter"
                             font.pixelSize: 9
                             color: root.colInk

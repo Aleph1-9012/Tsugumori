@@ -22,10 +22,10 @@
 
 Open the Control Center with `SUPER + Tab`. Its four areas provide:
 
-- **Connection** — Wi-Fi and Bluetooth
-- **Audio** — output selection, volume, and mute
-- **Quickshare** — send or receive files using HTTP and QR codes
-- **Notifications** — history, actions, Do Not Disturb, and Clear All
+- **Connection:** Wi-Fi and Bluetooth
+- **Audio and display:** output selection, volume, mute, and per-monitor brightness
+- **Quickshare:** send or receive files using HTTP and QR codes
+- **Notifications:** history, actions, Do Not Disturb, and Clear All
 
 See the [Quickshare guide](quickshare.md) for transfer steps, limits, and
 network-safety information.
@@ -35,3 +35,7 @@ open the selected item, and press `Esc` to go back or close the menu.
 
 From the center, press a direction to open that side. Inside a panel, use the
 same keys to move through its controls.
+
+Choose Brightness to adjust the monitor where the Control Center opened. Drag
+or scroll over the slider, or use the left and right keys. Each monitor keeps
+its own level for the current login session.

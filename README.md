@@ -49,7 +49,7 @@ included in the repository, so the installer does not need an AUR helper.
 - Hyprland with a native Lua configuration and custom keybindings
 - A NieR:Automata-style Control Center with a Knights of Sidonia theme
 - Quickshell launcher, lock screen, notifications, player, and wallpaper picker
-- Wi-Fi, Bluetooth, audio, and Quickshare controls
+- Wi-Fi, Bluetooth, audio, per-monitor brightness, and Quickshare controls
 - Waybar and Kitty configurations
 - Animated transitions and bundled wallpapers
 
