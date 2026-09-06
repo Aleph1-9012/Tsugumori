@@ -6,6 +6,7 @@
 |---|---|
 | `SUPER` | Open the application menu |
 | `SUPER + Tab` | Open the Control Center |
+| `SUPER + N` | Open or close quick notes on the focused monitor |
 | `SUPER + L` | Lock the session |
 | `SUPER + T` | Open Kitty |
 | `SUPER + Return` | Show or hide the player |
@@ -39,3 +40,33 @@ same keys to move through its controls.
 Choose Brightness to adjust the monitor where the Control Center opened. Drag
 or scroll over the slider, or use the left and right keys. Each monitor keeps
 its own level for the current login session.
+
+## Quick notes
+
+`SUPER + N` opens the standalone drawer on the focused monitor. Pressing it
+again closes it. From another monitor it moves the same drawer
+there without changing your note. Escape, the ESC button, or clicking outside
+the drawer closes it.
+
+Opening and closing use the Menu's pale curtain wipe and slide transition.
+The red hover and selection animations inside the note list are independent.
+
+Choose `+ NEW NOTE`, then type a title and body. Rows use `01// title`
+numbering. The selected row stays red; choosing another row lets the previous
+row's fill retract. Use the separate X to delete a note and `UNDO` to restore
+the last deletion. Undo survives closing the drawer, but ends when the shell
+restarts.
+
+Edits save automatically. `SAVING` means a write is pending; `SAVED` means the
+latest edit has been acknowledged by storage. `SAVE FAILED` keeps your draft
+in memory and offers Retry. Wait for `SAVED` before restarting the shell.
+
+Notes are stored as private, unencrypted text at
+`$XDG_DATA_HOME/tsugumori/notes.json`, or
+`~/.local/share/tsugumori/notes.json` when that variable is unset. Notes do not
+belong to the installed config or the Git repository.
+
+The drawer uses the existing `Settings.scale`. Set
+`TSUGUMORI_REDUCED_MOTION=1` in the desktop shell's launch environment to make
+the drawer and row/button fill changes immediate. No new Settings fields are
+required.

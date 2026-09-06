@@ -1,3 +1,4 @@
 module Services
 ShellIpc 1.0 ShellIpc.qml
 WifiService 1.0 WifiService.qml
+NotesService 1.0 NotesService.qml

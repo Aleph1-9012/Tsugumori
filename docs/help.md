@@ -33,6 +33,28 @@ Both devices must be able to reach each other for a local transfer. Use a
 trusted local network or enable tunnel mode. See the
 [Quickshare guide](quickshare.md) for transfer limits and security information.
 
+## Quick notes cannot save or load
+
+The drawer keeps unsaved edits in memory after a storage failure. Use Retry
+after resolving the permission or disk-space issue. Do not restart while it
+says `SAVE FAILED`; copy any draft you need to keep first.
+
+If another process changed the file, the revision guard refuses to overwrite
+it. Copy your pending draft, then restart the desktop shell to load the disk
+version. Personal notes are plain text, not encrypted. The data directory is
+private to your user, with mode 0700, and its files use mode 0600.
+
+If the notes file is unreadable and a valid previous backup exists, choose
+`RECOVER BACKUP`, then `CONFIRM RECOVERY`. This loads `notes.json.bak` and keeps
+the damaged file under a unique `notes.json.damaged-*` name. Recovery is only
+available before editing begins. If no valid backup exists, the drawer leaves
+the original file untouched for manual recovery.
+
+The data directory is `$XDG_DATA_HOME/tsugumori`, falling back to
+`~/.local/share/tsugumori`. Keep it when reinstalling or removing the widget.
+The previous-file backup is not unlimited history, and deletion Undo only
+lasts for the current shell session.
+
 ## Lock-screen fallback
 
 If the Quickshell lock cannot start safely, Tsugumori starts Hyprlock instead.

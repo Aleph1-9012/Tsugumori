@@ -20,6 +20,10 @@ ShellRoot {
     // ── VOLUMEBAR ──
     VolumeBar {}
 
+    // Standalone notes drawer, separate from the Control Center.
+    NotesService { id: notesService }
+    QuickNotes { id: quickNotes; store: notesService }
+
     // ── PLAYER STATE ──
     property bool   playerVisible: false
     property bool   playerOnTop:   true
@@ -659,6 +663,9 @@ ShellRoot {
     }
 
     ShellIpc {
+        onNotesShowRequested: quickNotes.show()
+        onNotesHideRequested: quickNotes.hide()
+        onNotesToggleRequested: quickNotes.toggle()
         onMenuRequested: {
             if (!detectMonitor.running) detectMonitor.running = true
         }

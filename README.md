@@ -50,6 +50,7 @@ included in the repository, so the installer does not need an AUR helper.
 - A NieR:Automata-style Control Center with a Knights of Sidonia theme
 - Quickshell launcher, lock screen, notifications, player, and wallpaper picker
 - Wi-Fi, Bluetooth, audio, per-monitor brightness, and Quickshare controls
+- Standalone quick notes drawer on `SUPER + N`, with local autosave and deletion Undo
 - Waybar and Kitty configurations
 - Animated transitions and bundled wallpapers
 
@@ -76,6 +77,7 @@ files.
 |---|---|
 | `SUPER` | Open the application menu |
 | `SUPER + Tab` | Open the Control Center |
+| `SUPER + N` | Open or close Quick Notes on the focused monitor |
 | `SUPER + L` | Lock the session |
 | `SUPER + T` | Open Kitty |
 | `SUPER + P` | Open the wallpaper picker |
@@ -85,6 +87,11 @@ files.
 | `ALT + SHIFT + S` | Select an area for a screenshot |
 
 See [controls and keybindings](docs/controls.md) for the complete guide.
+
+Quick Notes is a standalone drawer, separate from the Control Center. Press
+`SUPER + N` again to close it, or use the shortcut on another monitor to move
+the same drawer there. Notes autosave locally, and deleted notes can be
+restored with Undo during the current shell session.
 
 ## Help and project information
 
