@@ -18,10 +18,12 @@ ShellRoot {
     property string xdgConfigHome: Quickshell.env("XDG_CONFIG_HOME") || (home + "/.config")
     readonly property string runtimeBase: Quickshell.env("XDG_RUNTIME_DIR") || (home + "/.cache/tsugumori/runtime")
     readonly property string runtimeDir: runtimeBase + (Quickshell.env("XDG_RUNTIME_DIR") ? "/tsugumori" : "")
+    property bool runtimeReady: false
     Process {
         id: runtimeInitProc
         command: ["install", "-d", "-m", "700", root.runtimeDir]
         running: true
+        onExited: exitCode => { root.runtimeReady = exitCode === 0 }
     }
 
     // ── Sidonia palette ──
@@ -360,7 +362,6 @@ ShellRoot {
     // ── System data: Display brightness ──
     property real   brightnessLevel: 1.0
     property bool   brightnessAvailable: false
-    property string brightnessLoadingMonitor: ""
     property int    brightnessRequestedPercent: 100
     property int    brightnessPendingPercent: -1
     property string brightnessPendingMonitor: ""
@@ -378,48 +379,17 @@ ShellRoot {
             next[key] = brightnessByMonitor[key]
         next[name] = Math.max(0.01, Math.min(1.0, value))
         brightnessByMonitor = next
+        if (name === activeMonitor) syncBrightnessSlider()
     }
 
     function brightnessStatePath(name) {
         return runtimeDir + "/brightness-" + name
     }
 
-    function loadBrightness() {
-        if (setBrightnessProc.running || brightnessPendingPercent >= 0
-                || loadBrightnessProc.running)
-            return
-
-        var monitor = activeMonitor
-        if (monitor === "") return
-
-        brightnessLoadingMonitor = monitor
-        loadBrightnessProc.command = ["sh", "-c",
-            "if [ -r \"$1\" ]; then cat -- \"$1\"; else printf '100\\n'; fi",
-            "brightness-state", brightnessStatePath(monitor)]
-        loadBrightnessProc.running = true
-    }
-
-    Process {
-        id: loadBrightnessProc
-        command: []
-        running: false
-        stdout: StdioCollector {
-            onStreamFinished: {
-                // Do not let a load overwrite a drag that is being applied.
-                if (root.brightnessPendingPercent >= 0 || setBrightnessProc.running)
-                    return
-                root.brightnessAvailable = false
-
-                var percent = parseInt(this.text.trim())
-                if (isNaN(percent)) return
-                percent = Math.max(1, Math.min(100, percent))
-                root.brightnessLevel = percent / 100
-                root.brightnessRequestedPercent = percent
-                root.rememberMonitorBrightness(root.brightnessLoadingMonitor,
-                    root.brightnessLevel)
-                root.brightnessAvailable = true
-            }
-        }
+    function syncBrightnessSlider() {
+        brightnessAvailable = brightnessByMonitor[activeMonitor] !== undefined
+        brightnessLevel = monitorBrightness(activeMonitor)
+        brightnessRequestedPercent = Math.round(brightnessLevel * 100)
     }
 
     Process {
@@ -452,9 +422,7 @@ ShellRoot {
         var monitor = monitorName || activeMonitor
         if (monitor === "") return
         var percent = Math.max(1, Math.min(100, Math.round(value)))
-        brightnessRequestedPercent = percent
-        brightnessLevel = percent / 100
-        rememberMonitorBrightness(monitor, brightnessLevel)
+        rememberMonitorBrightness(monitor, percent / 100)
         brightnessPendingPercent = percent
         brightnessPendingMonitor = monitor
         if (!setBrightnessProc.running)
@@ -828,7 +796,7 @@ ShellRoot {
         if (slot === "top")    { wifiService.refresh(); pollBt.running = true }
         if (slot === "bottom") {
             pollAudio.running = true
-            root.loadBrightness()
+            root.syncBrightnessSlider()
         }
         if (slot === "right")  {
             pollNotifsHistory.running = true
@@ -1148,11 +1116,7 @@ ShellRoot {
 
     // ── Active screen detection ──
     property string activeMonitor: ""
-    onActiveMonitorChanged: {
-        root.brightnessAvailable = false
-        if (root.open && root.slot === "bottom")
-            root.loadBrightness()
-    }
+    onActiveMonitorChanged: syncBrightnessSlider()
     Process {
         id: getMonitorProc
         running: root.open
@@ -1169,36 +1133,6 @@ ShellRoot {
     //   PANEL
     // ═══════════════════════════════════
 
-    // The available hardware brightness interfaces do not visibly affect both
-    // panels, so each screen gets the same input-transparent dimming surface.
-    Variants {
-        model: Quickshell.screens
-        PanelWindow {
-            required property var modelData
-            screen: modelData
-            anchors.top: true
-            anchors.bottom: true
-            anchors.left: true
-            anchors.right: true
-            exclusionMode: ExclusionMode.Ignore
-            color: "transparent"
-            visible: root.monitorBrightness(modelData.name) < 0.999
-            implicitWidth: modelData.width
-            implicitHeight: modelData.height
-            WlrLayershell.layer: WlrLayer.Top
-            WlrLayershell.namespace: "tsugumori-brightness-dimmer"
-            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-
-            mask: Region { width: 0; height: 0 }
-
-            Rectangle {
-                anchors.fill: parent
-                color: "#000000"
-                opacity: 1.0 - root.monitorBrightness(modelData.name)
-            }
-        }
-    }
-
     Variants {
         model: Quickshell.screens
         PanelWindow {
@@ -1211,10 +1145,41 @@ ShellRoot {
             implicitWidth: modelData.width
             implicitHeight: modelData.height
             WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: (root.open && modelData.name === root.activeMonitor)
+            WlrLayershell.keyboardFocus: (root.open && !root.closing && isActive)
                 ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-            visible: root.open || root.closing
+            visible: root.open || root.closing || root.monitorBrightness(modelData.name) < 0.999
             readonly property bool isActive: modelData.name === root.activeMonitor
+
+            mask: Region {
+                width: root.open && !root.closing ? controlPanel.width : 0
+                height: root.open && !root.closing ? controlPanel.height : 0
+            }
+
+            // Restore every connected screen, even while the controls are closed.
+            Process {
+                running: root.runtimeReady
+                command: ["sh", "-c",
+                    "if [ -r \"$1\" ]; then cat -- \"$1\"; else printf '100\\n'; fi",
+                    "brightness-state", root.brightnessStatePath(controlPanel.modelData.name)]
+                stdout: StdioCollector {
+                    onStreamFinished: {
+                        var monitor = controlPanel.modelData.name
+                        // A late startup read must not replace a newer adjustment.
+                        if (root.brightnessByMonitor[monitor] !== undefined) return
+                        var percent = parseInt(this.text.trim())
+                        if (isNaN(percent)) return
+                        root.rememberMonitorBrightness(monitor,
+                            Math.max(1, Math.min(100, percent)) / 100)
+                    }
+                }
+            }
+
+            // Share the Overlay window so fullscreen apps dim beneath the controls.
+            Rectangle {
+                anchors.fill: parent
+                color: "#000000"
+                opacity: 1.0 - root.monitorBrightness(controlPanel.modelData.name)
+            }
 
             // Dim background.
             Rectangle {

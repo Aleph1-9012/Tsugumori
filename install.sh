@@ -739,17 +739,28 @@ deploy_shell_config() {
 
     [[ -f "$bashrc_src" ]] || { warn "No bundled .bashrc found in repo."; return; }
 
-    # Backup existing .bashrc if it's not already a Tsugumori one
-    if [[ -f "$bashrc_dest" ]] && ! grep -q "Tsugumori default .bashrc" "$bashrc_dest"; then
+    # Inspect the entry itself, including dangling links, without following it.
+    if [[ -e "$bashrc_dest" && ! -f "$bashrc_dest" && ! -L "$bashrc_dest" ]]; then
+        fatal "Refusing to replace unexpected .bashrc destination: $bashrc_dest"
+    fi
+    if [[ -L "$bashrc_dest" || -f "$bashrc_dest" ]]; then
         if $BACKUP_OLD; then
             mkdir -p "$BACKUP_DIR"
-            cp "$bashrc_dest" "$BACKUP_DIR/.bashrc"
+            [[ ! -e "$BACKUP_DIR/.bashrc" && ! -L "$BACKUP_DIR/.bashrc" ]] \
+                || fatal "A .bashrc backup already exists: $BACKUP_DIR/.bashrc"
+            cp -a -- "$bashrc_dest" "$BACKUP_DIR/.bashrc"
             log "Backed up existing ~/.bashrc"
         fi
     fi
 
     log "Installing Tsugumori .bashrc (welcome banner enabled)…"
-    cp "$bashrc_src" "$bashrc_dest"
+    local bashrc_stage
+    bashrc_stage=$(mktemp "$HOME/.bashrc.XXXXXX")
+    if ! install -m 644 -- "$bashrc_src" "$bashrc_stage" \
+        || ! mv -fT -- "$bashrc_stage" "$bashrc_dest"; then
+        rm -f -- "$bashrc_stage"
+        fatal "Could not replace .bashrc: $bashrc_dest"
+    fi
 
     # Create empty user override if missing
     if [[ ! -f "$HOME/.bashrc.local" ]]; then
