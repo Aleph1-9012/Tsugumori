@@ -5,7 +5,7 @@ Knights of Sidonia-inspired Hyprland desktop for Arch Linux.
 ![Hyprland: 0.55.2+](https://img.shields.io/badge/Hyprland-0.55.2%2B-58e1ff)
 ![License: MIT](https://img.shields.io/badge/license-MIT-7a7358)
 
-[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/G3M826JKYV)
+
 
 https://github.com/user-attachments/assets/34b4f963-c526-4c36-b54b-739372b248d7
 
@@ -111,6 +111,11 @@ restored with Undo during the current shell session.
 | `packages/` | Applications installed by `install.sh` |
 | `docs/` | Customization, controls, help, and release information |
 | `maintenance/` | Tests and project utilities that normal users can ignore |
+
+
+
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/G3M826JKYV)
+
 
 ## Credits
 
