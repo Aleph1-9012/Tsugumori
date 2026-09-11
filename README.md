@@ -83,6 +83,7 @@ files.
 | `SUPER + Tab` | Open the Control Center |
 | `SUPER + N` | Open or close Quick Notes on the focused monitor |
 | `SUPER + J` | Open or close clipboard history on the focused monitor |
+| `SUPER + Enter` | Show or hide the music player |
 | `SUPER + L` | Lock the session |
 | `SUPER + T` | Open Kitty |
 | `SUPER + P` | Open the wallpaper picker |

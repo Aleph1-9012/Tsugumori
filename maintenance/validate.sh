@@ -245,14 +245,17 @@ package_set = set(packages)
 duplicates = sorted({package for package in packages if packages.count(package) > 1})
 if duplicates:
     raise SystemExit(f"{manifest}: duplicate packages: {', '.join(duplicates)}")
-if len(packages) != 39:
-    raise SystemExit(f"{manifest}: expected 39 direct packages, found {len(packages)}")
+if len(packages) != 40:
+    raise SystemExit(f"{manifest}: expected 40 direct packages, found {len(packages)}")
 obsolete_manifests = [Path("packages/" "aur.txt"), Path("packages/pinned-" "aur.txt")]
 present_obsolete = [str(path) for path in obsolete_manifests if path.exists()]
 if present_obsolete:
     raise SystemExit(f"obsolete package manifests must remain removed: {', '.join(present_obsolete)}")
 
-required_pacman = {"awww", "quickshell", "qt6-multimedia-ffmpeg", "hyprlock", "hypridle"}
+required_pacman = {
+    "awww", "quickshell", "qt6-multimedia-ffmpeg", "hyprlock", "hypridle",
+    "ttf-jetbrains-mono-nerd",
+}
 missing = sorted(required_pacman - package_set)
 if missing:
     raise SystemExit(f"packages/pacman.txt: missing required runtime: {', '.join(missing)}")
