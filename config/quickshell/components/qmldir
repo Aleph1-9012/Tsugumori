@@ -4,3 +4,7 @@ TsugumoriButton 1.0 TsugumoriButton.qml
 Scanlines    1.0 Scanlines.qml
 CornerDeco   1.0 CornerDeco.qml
 NoteRow 1.0 NoteRow.qml
+ClipboardRow 1.0 ClipboardRow.qml
+PlayerGlyph 1.0 PlayerGlyph.qml
+PlayerTransportButton 1.0 PlayerTransportButton.qml
+PlayerTrackRow 1.0 PlayerTrackRow.qml

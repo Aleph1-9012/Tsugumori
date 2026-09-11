@@ -15,6 +15,9 @@ QtObject {
     // 1.0 = normal, 1.25 = 25% larger, 0.8 = 20% smaller.
     readonly property real scale: 1
 
+    // Clipboard palette: false matches the notification white; true uses charcoal.
+    readonly property bool clipboardDark: false
+
     // Main screen dimensions (equivalent to 100vw / 100vh).
     readonly property real screenW: Quickshell.screens.length > 0
                                     ? Quickshell.screens[0].width  : 1920
@@ -36,16 +39,16 @@ QtObject {
     readonly property bool playerBackground: true
 
     // Background color (used only when playerBackground = true).
-    readonly property color playerBgColor: "#000000"
+    readonly property color playerBgColor: "#0a0a0a"
 
-    // Player vertical position (0.0 = top, 1.0 = bottom of the screen).
-    readonly property real playerPositionY: 0.39
+    // Vertical alignment in the free space: 0.0 = top, 0.5 = centre, 1.0 = bottom.
+    readonly property real playerPositionY: 0.5
 
     // Distance from the right edge in pixels.
     readonly property int playerMarginRight: s(20)
 
     // Player width in pixels (scaled automatically).
-    readonly property int playerWidth: s(700)
+    readonly property int playerWidth: s(680)
 
     // ── GLOBAL COLORS ───────────────────────────────────────────
 
@@ -68,10 +71,6 @@ QtObject {
 
     // Hide duration (ms).
     readonly property int hideDuration: 380
-
-    // Blocky cover transition duration (ms per step).
-    readonly property int coverTransitionStep: 30
-
 
     // ── WAYBAR ──────────────────────────────────────────────────
 

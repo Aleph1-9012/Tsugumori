@@ -7,6 +7,7 @@
 | `SUPER` | Open the application menu |
 | `SUPER + Tab` | Open the Control Center |
 | `SUPER + N` | Open or close quick notes on the focused monitor |
+| `SUPER + J` | Open or close clipboard history on the focused monitor |
 | `SUPER + L` | Lock the session |
 | `SUPER + T` | Open Kitty |
 | `SUPER + Return` | Show or hide the player |
@@ -45,7 +46,7 @@ its own level for the current login session.
 
 `SUPER + N` opens the standalone drawer on the focused monitor. Pressing it
 again closes it. From another monitor it moves the same drawer
-there without changing your note. Escape, the ESC button, or clicking outside
+there without changing your note. Escape, the top-right × button, or clicking outside
 the drawer closes it.
 
 Opening and closing use the Menu's pale curtain wipe and slide transition.
@@ -70,3 +71,29 @@ The drawer uses the existing `Settings.scale`. Set
 `TSUGUMORI_REDUCED_MOTION=1` in the desktop shell's launch environment to make
 the drawer and row/button fill changes immediate. No new Settings fields are
 required.
+
+## Clipboard history
+
+`SUPER + J` opens the clipboard drawer on the focused monitor. Press it again
+to close, or use it on another monitor to move the drawer there. Escape and
+the top-right × button also close it.
+
+Search copied text and links, preview images, or filter to pinned entries.
+Use the arrow keys to select an entry and `Ctrl + F` to focus search. Press
+`Enter` from the search field or history list, or choose `USE`, to restore
+the entry to the clipboard and close the drawer. Paste it in your application
+as usual.
+
+Pin entries to keep them out of automatic history cleanup. Delete removes one
+entry; Clear removes unpinned history after confirmation. `UNDO` restores
+the latest deletion for 30 seconds.
+
+History is stored locally in an unencrypted database at
+`$XDG_DATA_HOME/tsugumori/clipboard/history.sqlite3`, or
+`~/.local/share/tsugumori/clipboard/history.sqlite3` when that variable is
+unset. This data is not part of the configuration or repository.
+
+Set `clipboardDark: true` in `Settings.qml` for the charcoal palette.
+The default is the light notification-style palette. Upgrades preserve your
+existing Settings file, so add `readonly property bool clipboardDark: false`
+if it is missing.

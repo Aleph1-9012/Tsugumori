@@ -5,3 +5,4 @@ Notifications 1.0 Notifications.qml
 VolumeBar 1.0 VolumeBar.qml
 ControlCenter 1.0 ControlCenter.qml
 QuickNotes 1.0 QuickNotes.qml
+Clipboard 1.0 Clipboard.qml

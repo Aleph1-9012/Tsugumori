@@ -53,6 +53,8 @@ included in the repository, so the installer does not need an AUR helper.
 - Quickshell launcher, lock screen, notifications, player, and wallpaper picker
 - Wi-Fi, Bluetooth, audio, per-monitor brightness, and Quickshare controls
 - Standalone quick notes drawer on `SUPER + N`, with local autosave and deletion Undo
+- Clipboard history on `SUPER + J`, with search, image previews, pins, and deletion Undo
+- Compact music player with an artwork glyph matrix, hover colour reveal, and local track drawer
 - Waybar and Kitty configurations
 - Animated transitions and bundled wallpapers
 
@@ -80,6 +82,7 @@ files.
 | `SUPER` | Open the application menu |
 | `SUPER + Tab` | Open the Control Center |
 | `SUPER + N` | Open or close Quick Notes on the focused monitor |
+| `SUPER + J` | Open or close clipboard history on the focused monitor |
 | `SUPER + L` | Lock the session |
 | `SUPER + T` | Open Kitty |
 | `SUPER + P` | Open the wallpaper picker |

@@ -280,7 +280,13 @@ Scope {
                             Text { text: "QUICK NOTES"; font.family: Theme.mono; font.pixelSize: 14 * drawer.s; font.letterSpacing: 3.5 * drawer.s; color: Theme.fg }
                             Rectangle { width: 36 * drawer.s; height: 1; color: Qt.alpha(Theme.a1, 0.55) }
                         }
-                        NotesButton { text: "ESC"; Accessible.name: "Close quick notes"; onClicked: root.hide() }
+                        NotesButton {
+                            text: "×"; textSize: 21
+                            padding: 0; leftPadding: 0; rightPadding: 0
+                            implicitWidth: 32 * drawer.s; implicitHeight: 32 * drawer.s
+                            Accessible.name: "Close quick notes"
+                            onClicked: root.hide()
+                        }
                     }
                     ListView {
                         id: noteList

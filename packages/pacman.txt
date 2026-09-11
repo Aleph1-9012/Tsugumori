@@ -52,11 +52,12 @@ networkmanager
 # ─── Fonts ─────────────────────────────────────────────
 inter-font
 ttc-iosevka
+ttf-jetbrains-mono-nerd
 noto-fonts
 noto-fonts-cjk
 noto-fonts-emoji
 
-# ─── Python dependencies used by Quickshare ────────────
+# ─── Python dependencies for Quickshare and clipboard ─
 python-pillow
 python-qrcode
 

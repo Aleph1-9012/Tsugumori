@@ -141,6 +141,8 @@ hl.bind("SUPER + Super_L", exec("qs ipc call tsugumoriShell toggleMenu"), { rele
 hl.bind("SUPER + Tab", exec(quickshell_script("ctrl.sh")))
 hl.bind("SUPER + N", exec("qs ipc --path " .. shell_quote(quickshell_dir .. "/shell.qml")
     .. " call tsugumoriShell toggleNotes"))
+hl.bind("SUPER + J", exec("qs ipc --path " .. shell_quote(quickshell_dir .. "/shell.qml")
+    .. " call tsugumoriShell toggleClipboard"))
 hl.bind("SUPER + L", exec(quickshell_script("lock.sh")), { release = true })
 hl.bind("SUPER + Return", exec("qs ipc call tsugumoriShell togglePlayer"))
 hl.bind("SUPER + SHIFT + Return", exec("qs ipc call tsugumoriShell toggleFront"))

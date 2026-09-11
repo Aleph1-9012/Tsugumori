@@ -24,11 +24,18 @@ ShellRoot {
     NotesService { id: notesService }
     QuickNotes { id: quickNotes; store: notesService }
 
+    // Visual clipboard history, separate from the Control Center and notes.
+    ClipboardService { id: clipboardService }
+    Clipboard { id: clipboardDrawer; store: clipboardService }
+
     // ── PLAYER STATE ──
     property bool   playerVisible: false
     property bool   playerOnTop:   true
     property string mpTitle:    "NO MEDIA"
     property string mpArtist:   ""
+    property string mpAlbum:    ""
+    property int    mpTrackNumber: 0
+    property int    mediaRevision: 0
     property string mpCoverUrl: ""
     property bool   mpPlaying:  false
     property real   mpPosition: 0
@@ -99,6 +106,7 @@ ShellRoot {
 
     function clearExternalState() {
         if (root.localMode) return
+        if (root.mpTitle !== "NO MEDIA") root.mediaRevision++
         root.externalMediaKey = ""
         root.externalServiceKey = ""
         root.externalTrackChangePending = false
@@ -109,6 +117,8 @@ ShellRoot {
         root.externalPositionAwaitingFresh = false
         root.mpTitle = "NO MEDIA"
         root.mpArtist = ""
+        root.mpAlbum = ""
+        root.mpTrackNumber = 0
         root.mpCoverUrl = ""
         root.mpPlaying = false
         root.mpPosition = 0
@@ -319,12 +329,15 @@ ShellRoot {
         }
         if (newMedia) {
             var hadPreviousExternalMedia = root.externalMediaKey.length > 0
+            root.mediaRevision++
             // A genuine non-empty identity change is visible immediately. Missing
             // fields start empty/zero for this new track rather than leaking the
             // previous track's artwork or timer.
             root.externalMediaKey = candidateKey
             root.mpTitle = "NO TITLE"
             root.mpArtist = "UNKNOWN ARTIST"
+            root.mpAlbum = ""
+            root.mpTrackNumber = 0
             root.mpCoverUrl = ""
             root.mpPosition = 0
             root.mpLength = 0
@@ -337,8 +350,13 @@ ShellRoot {
         var title = String(player.trackTitle || "").trim()
         var artist = String(player.trackArtist || "").trim()
         var cover = root.coverUrlForPlayer(player)
+        var album = String(player.trackAlbum || "").trim()
+        var trackNumber = Number(root.metadataString(player, "xesam:trackNumber"))
         if (title.length > 0) root.mpTitle = title
         if (artist.length > 0) root.mpArtist = artist
+        if (album.length > 0) root.mpAlbum = album
+        if (Number.isFinite(trackNumber) && trackNumber > 0)
+            root.mpTrackNumber = Math.floor(trackNumber)
         if (cover.length > 0) root.mpCoverUrl = cover
         root.mpPlaying = player.isPlaying
 
@@ -381,6 +399,7 @@ ShellRoot {
                 function onPostTrackChanged() { root.finishExternalTrackChange(modelData) }
                 function onTrackTitleChanged() { root.syncExternalState(); root.scheduleExternalRefresh() }
                 function onTrackArtistChanged() { root.syncExternalState(); root.scheduleExternalRefresh() }
+                function onTrackAlbumChanged() { root.syncExternalState(); root.scheduleExternalRefresh() }
                 function onTrackArtUrlChanged() { root.syncExternalState(); root.scheduleExternalRefresh() }
                 function onMetadataChanged() { root.syncExternalState(); root.scheduleExternalRefresh() }
                 function onCanControlChanged() { root.reselectExternalPlayer() }
@@ -554,6 +573,15 @@ ShellRoot {
         if (message.type !== "state") return
 
         if (root.localMode) {
+            // Every timing/metadata snapshot belongs to one file. Ignore replies
+            // for a file that was replaced while the bridge was catching up.
+            if (String(message.path || "") !== root.localTrackPath) return
+            if (message.metadataPath === root.localTrackPath) {
+                var tags = message.metadata || {}
+                root.mpTitle = root.localTag(tags, "title") || root.localTrackPath.split("/").pop().replace(/\.[^.]+$/, "")
+                root.mpArtist = root.localTag(tags, "artist") || "LOCAL FILE"
+                root.mpAlbum = root.localTag(tags, "album")
+            }
             var pos = Number(message.position)
             var len = Number(message.duration)
             var ended = Boolean(message.eofReached) || Boolean(message.idleActive)
@@ -569,6 +597,14 @@ ShellRoot {
         root.mpvCommandQueue = root.mpvCommandQueue
         root.startMpvIfNeeded()
         root.flushMpvCommands()
+    }
+
+    function localTag(metadata, name) {
+        for (var key in metadata) {
+            if (key.toLowerCase() === name && metadata[key] !== null)
+                return String(metadata[key]).trim()
+        }
+        return ""
     }
 
     function togglePlayback() {
@@ -591,6 +627,9 @@ ShellRoot {
     }
 
     function seekTo(seconds) {
+        if (!root.localMode && (!root.externalPlayer || !root.externalPlayer.canSeek
+                               || !root.externalPlayer.positionSupported)) return
+        if (root.mpLength <= 0) return
         var target = Math.max(0, Number(seconds))
         if (!isFinite(target)) return
         root.mpPosition = root.mpLength > 0 ? Math.min(target, root.mpLength) : target
@@ -606,6 +645,7 @@ ShellRoot {
     property int localTrackIndex: -1
 
     function playLocalTrack(path) {
+        if (!root.localMode || path !== root.localTrackPath) root.mediaRevision++
         root.externalMediaKey = ""
         root.localTrackPath = path
         root.localTrackIndex = root.localTracks.indexOf(path)
@@ -620,7 +660,10 @@ ShellRoot {
         var fname = path.split("/").pop().replace(/\.[^.]+$/, "")
         root.mpTitle = fname
         root.mpArtist = "LOCAL FILE"
+        root.mpAlbum = ""
+        root.mpTrackNumber = 0
         root.mpPosition = 0
+        root.mpLength = 0
         root.mpCoverUrl = ""
         root.mpvSend(["loadfile", path, "replace"])
         // Selecting a drawer row is a play action even if the prior file was
@@ -663,6 +706,9 @@ ShellRoot {
     }
 
     ShellIpc {
+        onClipboardShowRequested: clipboardDrawer.show()
+        onClipboardHideRequested: clipboardDrawer.hide()
+        onClipboardToggleRequested: clipboardDrawer.toggle()
         onNotesShowRequested: quickNotes.show()
         onNotesHideRequested: quickNotes.hide()
         onNotesToggleRequested: quickNotes.toggle()
@@ -706,14 +752,18 @@ ShellRoot {
     Variants {
         model:Quickshell.screens
         PanelWindow {
+            id: playerWindow
             required property var modelData;screen:modelData
             anchors.top:true;anchors.right:true
-            margins.top:Math.round(modelData.height*Settings.playerPositionY);margins.right:Settings.playerMarginRight
+            margins.top:Math.max(0, Math.round((modelData.height-height)*Settings.playerPositionY))
+            margins.right:Settings.playerMarginRight
             exclusionMode:ExclusionMode.Ignore
             WlrLayershell.namespace: "tsugumori-player"
             WlrLayershell.layer: root.playerOnTop ? WlrLayer.Overlay : WlrLayer.Bottom
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
             color:"transparent"
-            implicitWidth:Settings.playerWidth;implicitHeight:playerItem.implicitHeight
+            implicitWidth:Math.min(Settings.playerWidth, Math.max(1, modelData.width-2*Settings.playerMarginRight))
+            implicitHeight:playerItem.implicitHeight
             // Real input-accepting region — must track the ACTUAL current visible content
             // (collapsed or expanded, per the drawer state), not the padded window buffer
             // above. Without this, a transparent layer-shell surface claims pointer input
@@ -722,13 +772,21 @@ ShellRoot {
             // player is hidden (mid wipe-out/before wipe-in), the mask collapses to
             // nothing so the screen area is fully click-through.
             mask: Region {
-                x: playerItem.currentInputX; y: 0
+                x: playerItem.currentInputX; y: playerItem.y
                 width: playerItem.currentInputWidth
                 height: playerItem.currentInputWidth > 0 ? playerItem.currentContentHeight : 0
             }
-            Player{id:playerItem;anchors.fill:parent
+            Player{id:playerItem;width:parent.width;height:parent.height
+                // Centre the drawn content inside the stable, partly transparent window buffer.
+                y:Math.max(0, Math.round((modelData.height-currentContentHeight)*Settings.playerPositionY)-playerWindow.margins.top)
                 mpTitle:root.mpTitle;mpArtist:root.mpArtist;mpCoverUrl:root.mpCoverUrl
+                mpAlbum:root.mpAlbum;mpTrackNumber:root.mpTrackNumber;mpMediaKey:String(root.mediaRevision)
                 mpPlaying:root.mpPlaying;mpPosition:root.mpPosition;mpLength:root.mpLength
+                canPlayPause:root.localMode ? root.localTrackPath.length > 0 : Boolean(root.externalPlayer && root.externalPlayer.canTogglePlaying)
+                canGoNext:root.localMode ? root.localTracks.length > 0 : Boolean(root.externalPlayer && root.externalPlayer.canGoNext)
+                canGoPrevious:root.localMode ? root.localTracks.length > 0 : Boolean(root.externalPlayer && root.externalPlayer.canGoPrevious)
+                canSeek:root.localMode ? root.mpLength > 0 : Boolean(root.externalPlayer && root.externalPlayer.canSeek && root.externalPlayer.positionSupported)
+                availableHeight:Math.max(0, modelData.height-Math.round(40*Settings.scale))
                 localTracks:root.localTracks
                 localMode:root.localMode
                 mediaAvailable:root.localMode || root.externalMediaAvailable

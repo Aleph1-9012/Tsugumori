@@ -12,9 +12,24 @@ Scope {
     signal notesShowRequested()
     signal notesHideRequested()
     signal notesToggleRequested()
+    signal clipboardShowRequested()
+    signal clipboardHideRequested()
+    signal clipboardToggleRequested()
 
     IpcHandler {
         target: "tsugumoriShell"
+
+        function showClipboard(): void {
+            root.clipboardShowRequested()
+        }
+
+        function hideClipboard(): void {
+            root.clipboardHideRequested()
+        }
+
+        function toggleClipboard(): void {
+            root.clipboardToggleRequested()
+        }
 
         function showNotes(): void {
             root.notesShowRequested()

@@ -18,6 +18,7 @@ OBSERVED_PROPERTIES = (
     "duration",
     "eof-reached",
     "idle-active",
+    "path",
 )
 
 
@@ -57,6 +58,9 @@ def publish_state(state: dict[str, Any]) -> None:
             "duration": state.get("duration") or 0,
             "eofReached": bool(state.get("eof-reached", False)),
             "idleActive": bool(state.get("idle-active", True)),
+            "path": state.get("path") or "",
+            "metadata": state.get("metadata") or {},
+            "metadataPath": state.get("metadataPath") or "",
         }
     )
 
@@ -81,8 +85,28 @@ def main() -> int:
         "duration": 0,
         "eof-reached": False,
         "idle-active": True,
+        "path": "",
+        "metadata": {},
+        "metadataPath": "",
     }
     next_connect_at = 0.0
+    metadata_request = 0
+    metadata_pending: dict[int, str] = {}
+    metadata_snapshot: dict[str, Any] = {}
+
+    def request_metadata() -> None:
+        nonlocal metadata_request
+        if sock is None:
+            return
+        metadata_request += 1
+        metadata_pending.clear()
+        metadata_snapshot.clear()
+        # Pair metadata with a path from the same request generation. Replies
+        # from a replaced file or an older connection cannot fill the new state.
+        for offset, field in enumerate(("path", "metadata")):
+            request_id = 2000 + metadata_request * 2 + offset
+            metadata_pending[request_id] = field
+            send(sock, ["get_property", field], request_id)
 
     def disconnect() -> None:
         nonlocal sock, socket_buffer, next_connect_at
@@ -101,8 +125,13 @@ def main() -> int:
                 "duration": 0,
                 "eof-reached": False,
                 "idle-active": True,
+                "path": "",
+                "metadata": {},
+                "metadataPath": "",
             }
         )
+        metadata_pending.clear()
+        metadata_snapshot.clear()
         emit({"type": "disconnected"})
         next_connect_at = time.monotonic() + 0.1
 
@@ -172,8 +201,36 @@ def main() -> int:
                         if not raw:
                             continue
                         message = json.loads(raw)
+                        request_id = message.get("request_id")
+                        if request_id in metadata_pending:
+                            field = metadata_pending.pop(request_id)
+                            metadata_snapshot[field] = message.get("data") if message.get("error") == "success" else None
+                            if not metadata_pending:
+                                path = metadata_snapshot.get("path")
+                                tags = metadata_snapshot.get("metadata")
+                                if path and path == state.get("path"):
+                                    state["metadata"] = tags if isinstance(tags, dict) else {}
+                                    state["metadataPath"] = path
+                                    publish_state(state)
+                            continue
+                        if message.get("event") == "start-file":
+                            state.update({"path": "", "metadata": {}, "metadataPath": "",
+                                          "time-pos": 0, "duration": 0, "eof-reached": False,
+                                          "idle-active": False})
+                            metadata_pending.clear()
+                            metadata_snapshot.clear()
+                            publish_state(state)
+                        elif message.get("event") == "file-loaded":
+                            request_metadata()
                         name = message.get("name")
-                        if message.get("event") == "property-change" and name in state:
+                        if message.get("event") == "property-change" and name in OBSERVED_PROPERTIES:
+                            if name == "path" and message.get("data") != state.get("path"):
+                                state["metadata"] = {}
+                                state["metadataPath"] = ""
+                                metadata_pending.clear()
+                                metadata_snapshot.clear()
+                                if message.get("data"):
+                                    request_metadata()
                             state[name] = message.get("data")
                             publish_state(state)
                 except (ConnectionError, json.JSONDecodeError, OSError):
