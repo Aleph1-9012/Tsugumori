@@ -116,11 +116,6 @@ restored with Undo during the current shell session.
 | `docs/` | Customization, controls, help, and release information |
 | `maintenance/` | Tests and project utilities that normal users can ignore |
 
-
-
-[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/G3M826JKYV)
-
-
 ## Credits
 
 Inspired by [caelestia-dots/shell](https://github.com/caelestia-dots/shell),

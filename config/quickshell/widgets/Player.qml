@@ -424,17 +424,12 @@ Item {
                         anchors.bottom: parent.bottom
                         width: parent.width * libraryToggle.underlineProgress; height: root.s(2); color: Theme.a1
                     }
-                    Rectangle {
-                        anchors.fill: parent; anchors.margins: root.s(3)
-                        visible: libraryToggle.activeFocus; color: "transparent"
-                        border.width: 1; border.color: Theme.fg
-                    }
                 }
                 contentItem: RowLayout {
                     spacing: root.s(12)
                     Text {
                         Layout.fillWidth: true
-                        text: libraryToggle.text; color: libraryToggle.interactionActive ? "#ef7664" : "#bab1a8"
+                        text: libraryToggle.text; color: libraryToggle.interactionActive ? Theme.a1 : "#bab1a8"
                         font.family: Theme.mono; font.pixelSize: root.s(11); font.letterSpacing: 1.1 * root.sc
                         elide: Text.ElideRight
                     }

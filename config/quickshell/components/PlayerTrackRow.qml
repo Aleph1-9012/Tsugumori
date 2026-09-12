@@ -54,7 +54,7 @@ Button {
             Layout.preferredWidth: 42 * root.uiScale
             text: root.number.toString().padStart(2, "0") + " //"
             font.family: Theme.mono; font.pixelSize: 11 * root.uiScale
-            color: root.fillActive ? Theme.fg : "#aaa29c"
+            color: root.fillActive ? Theme.fg : Theme.a1
         }
         ColumnLayout {
             Layout.fillWidth: true; spacing: 4 * root.uiScale

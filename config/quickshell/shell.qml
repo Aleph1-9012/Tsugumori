@@ -755,7 +755,8 @@ ShellRoot {
             id: playerWindow
             required property var modelData;screen:modelData
             anchors.top:true;anchors.right:true
-            margins.top:Math.max(0, Math.round((modelData.height-height)*Settings.playerPositionY))
+            // Keep the collapsed player anchored while Local Tracks expands below it.
+            margins.top:Math.max(0, Math.round((modelData.height-playerItem.collapsedHeight)*Settings.playerPositionY))
             margins.right:Settings.playerMarginRight
             exclusionMode:ExclusionMode.Ignore
             WlrLayershell.namespace: "tsugumori-player"
@@ -763,7 +764,7 @@ ShellRoot {
             WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
             color:"transparent"
             implicitWidth:Math.min(Settings.playerWidth, Math.max(1, modelData.width-2*Settings.playerMarginRight))
-            implicitHeight:playerItem.implicitHeight
+            implicitHeight:Math.min(playerItem.implicitHeight, Math.max(1, modelData.height-playerWindow.margins.top))
             // Real input-accepting region — must track the ACTUAL current visible content
             // (collapsed or expanded, per the drawer state), not the padded window buffer
             // above. Without this, a transparent layer-shell surface claims pointer input
@@ -777,8 +778,6 @@ ShellRoot {
                 height: playerItem.currentInputWidth > 0 ? playerItem.currentContentHeight : 0
             }
             Player{id:playerItem;width:parent.width;height:parent.height
-                // Centre the drawn content inside the stable, partly transparent window buffer.
-                y:Math.max(0, Math.round((modelData.height-currentContentHeight)*Settings.playerPositionY)-playerWindow.margins.top)
                 mpTitle:root.mpTitle;mpArtist:root.mpArtist;mpCoverUrl:root.mpCoverUrl
                 mpAlbum:root.mpAlbum;mpTrackNumber:root.mpTrackNumber;mpMediaKey:String(root.mediaRevision)
                 mpPlaying:root.mpPlaying;mpPosition:root.mpPosition;mpLength:root.mpLength
@@ -786,7 +785,7 @@ ShellRoot {
                 canGoNext:root.localMode ? root.localTracks.length > 0 : Boolean(root.externalPlayer && root.externalPlayer.canGoNext)
                 canGoPrevious:root.localMode ? root.localTracks.length > 0 : Boolean(root.externalPlayer && root.externalPlayer.canGoPrevious)
                 canSeek:root.localMode ? root.mpLength > 0 : Boolean(root.externalPlayer && root.externalPlayer.canSeek && root.externalPlayer.positionSupported)
-                availableHeight:Math.max(0, modelData.height-Math.round(40*Settings.scale))
+                availableHeight:Math.max(0, modelData.height-playerWindow.margins.top-Math.round(20*Settings.scale))
                 localTracks:root.localTracks
                 localMode:root.localMode
                 mediaAvailable:root.localMode || root.externalMediaAvailable
