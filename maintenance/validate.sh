@@ -19,10 +19,12 @@ mapfile -d '' SHELL_FILES < <(rg --files -0 -g '*.sh')
 for file in "${SHELL_FILES[@]}"; do
     bash -n "$file"
 done
-printf 'Bash syntax: OK (%d files)\n' "${#SHELL_FILES[@]}"
+bash -n config/bash/.bashrc
+printf 'Bash syntax: OK (%d files)\n' "$(( ${#SHELL_FILES[@]} + 1 ))"
 
 if command -v shellcheck >/dev/null 2>&1; then
     shellcheck --severity=error -- "${SHELL_FILES[@]}"
+    shellcheck --severity=error --shell=bash -- config/bash/.bashrc
     printf 'ShellCheck errors: none\n'
 else
     missing_optional_tool "ShellCheck"
@@ -54,7 +56,7 @@ for path in paths:
 print(f"Python syntax: OK ({count} files)")
 PY
 
-python3 -m unittest discover -s maintenance/tests -p 'test_*.py'
+python3 -B -m unittest discover -s maintenance/tests -p 'test_*.py'
 printf 'Python unit tests: OK\n'
 
 if rg -n 'curl[^[:cntrl:]]*\[[[:space:]]*https?://' README.md; then
@@ -62,8 +64,10 @@ if rg -n 'curl[^[:cntrl:]]*\[[[:space:]]*https?://' README.md; then
     exit 1
 fi
 
+# Macrons in the approved Shōi/SHŌI terminal title are intentional.
 if rg -nP '[\x{00C0}-\x{00D6}\x{00D8}-\x{00F6}\x{00F8}-\x{024F}]' \
-    README.md docs install.sh config; then
+    README.md docs install.sh config | sed -e 's/Shōi/Shoi/g' -e 's/SHŌI/SHOI/g' \
+    | rg -P '[\x{00C0}-\x{00D6}\x{00D8}-\x{00F6}\x{00F8}-\x{024F}]'; then
     printf 'User-facing files contain accented Latin presentation text.\n' >&2
     exit 1
 fi
@@ -86,17 +90,11 @@ if rg -n 'session-[s]tart|session_start_[c]ommand|force_renderer_[r]eload|hl[.]d
     exit 1
 fi
 
-for generator in \
-    config/quickshell/pixel_wave.py \
-    config/quickshell/pixel-wave-close-video.py \
-    config/quickshell/ext_last_fr.py; do
-    [[ ! -e "$generator" ]] || { printf 'Maintainer generator remains deployed: %s\n' "$generator" >&2; exit 1; }
-done
-for generator in \
-    maintenance/wave-assets/pixel_wave.py \
-    maintenance/wave-assets/pixel-wave-close-video.py \
-    maintenance/wave-assets/extract_last_frame.py; do
-    [[ -f "$generator" ]] || { printf 'Maintainer generator is missing: %s\n' "$generator" >&2; exit 1; }
+for retired in config/quickshell/videos maintenance/wave-assets \
+    config/waybar/scripts/pomodoro.sh config/waybar/scripts/pomodoro_toggle.sh \
+    config/quickshell/components/WipeCurtain.qml config/quickshell/components/Scanlines.qml \
+    config/quickshell/components/CornerDeco.qml config/quickshell/components/TsugumoriButton.qml; do
+    [[ ! -e "$retired" ]] || { printf 'Retired file remains: %s\n' "$retired" >&2; exit 1; }
 done
 if rg -n '\bpython(3)?\b|pixel[_-]wave|ext_last|generat(e|ing|or)' config/quickshell/wave-check.sh; then
     printf 'Login-time wave verification still invokes asset generation.\n' >&2
@@ -171,18 +169,6 @@ import struct
 from pathlib import Path
 
 expected = {
-    Path("config/quickshell/videos/wave_reveal.mp4"): (
-        "27aa916ecf517f9ae8fd81b01cd2d98540bd871f0157ea8638401ce6f3ed2ac0",
-        None,
-    ),
-    Path("config/quickshell/videos/wave_hide.mp4"): (
-        "2de71962d6617f1610e1da422a97b31316826cc76d56f2246b013130dc089f09",
-        None,
-    ),
-    Path("config/quickshell/videos/wave_last_frame.png"): (
-        "b2da90aa03b3600887732977cab6b918ede7e3af58b24bc3e91150f6a9fea3f1",
-        (2560, 1600),
-    ),
     Path("assets/wallpapers/Aleph1.png"): (
         "c4219b4d669751aa3ab7f8d621dc7a40d82b5e1daebf52ca2aaa575bc9bace87",
         (8000, 4500),
@@ -197,8 +183,6 @@ for path, (wanted_hash, wanted_dimensions) in expected.items():
     if actual_hash != wanted_hash:
         raise SystemExit(f"{path}: unexpected SHA-256 {actual_hash}")
 
-    if path.suffix == ".mp4" and (len(data) < 12 or data[4:8] != b"ftyp"):
-        raise SystemExit(f"{path}: invalid ISO BMFF/MP4 signature")
     if wanted_dimensions is not None:
         if data[:8] != b"\x89PNG\r\n\x1a\n":
             raise SystemExit(f"{path}: invalid PNG signature")
@@ -206,7 +190,7 @@ for path, (wanted_hash, wanted_dimensions) in expected.items():
         if (width, height) != wanted_dimensions:
             raise SystemExit(f"{path}: unexpected dimensions {width}x{height}")
 
-print("Secure lock assets: OK")
+print("Fallback lock wallpaper: OK")
 PY
 
 python3 - <<'PY'
@@ -218,6 +202,12 @@ font_assets = {
         "9ceab1f87414829af259c0f537573ae03ef7dd3147c0b27a36a1a0beb6732677",
     Path("assets/fonts/share-tech-mono/OFL.txt"):
         "9d96f445b6e9c701428811d0177f894874f8d6f07ecc30d568c506542368f3ff",
+    Path("config/quickshell/assets/fonts/ibm-plex-mono/IBMPlexMono-Regular.ttf"):
+        "6a3412f058c7d8dfd9170c41e85ade48e5156ecb89356110ca57a0a27734af46",
+    Path("config/quickshell/assets/fonts/ibm-plex-mono/IBMPlexMono-Medium.ttf"):
+        "a9b4c49bb299e05b5f6c481e7fb5e78943d2793249a0c8874ab574a2d1ea6755",
+    Path("config/quickshell/assets/fonts/ibm-plex-mono/OFL.txt"):
+        "7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da",
 }
 for path, wanted_hash in font_assets.items():
     if not path.is_file():
@@ -245,15 +235,15 @@ package_set = set(packages)
 duplicates = sorted({package for package in packages if packages.count(package) > 1})
 if duplicates:
     raise SystemExit(f"{manifest}: duplicate packages: {', '.join(duplicates)}")
-if len(packages) != 40:
-    raise SystemExit(f"{manifest}: expected 40 direct packages, found {len(packages)}")
+if len(packages) != 39:
+    raise SystemExit(f"{manifest}: expected 39 direct packages, found {len(packages)}")
 obsolete_manifests = [Path("packages/" "aur.txt"), Path("packages/pinned-" "aur.txt")]
 present_obsolete = [str(path) for path in obsolete_manifests if path.exists()]
 if present_obsolete:
     raise SystemExit(f"obsolete package manifests must remain removed: {', '.join(present_obsolete)}")
 
 required_pacman = {
-    "awww", "quickshell", "qt6-multimedia-ffmpeg", "hyprlock", "hypridle",
+    "awww", "quickshell", "hyprlock", "hypridle",
     "ttf-jetbrains-mono-nerd",
 }
 missing = sorted(required_pacman - package_set)
@@ -261,6 +251,7 @@ if missing:
     raise SystemExit(f"packages/pacman.txt: missing required runtime: {', '.join(missing)}")
 
 removed_packages = {
+    "qt6-multimedia-ffmpeg",
     "qt5-wayland", "gtk4-layer-shell", "figlet", "pavucontrol", "satty",
     "ttf-jetbrains-mono", "fish", "starship", "python-cairo", "python-numpy",
     "python-opencv", "qrencode",
@@ -309,6 +300,32 @@ if [[ -n "$QMLLINT_BIN" ]]; then
     printf 'QML syntax and imports: OK (%d files)\n' "${#QML_FILES[@]}"
 else
     missing_optional_tool "QML syntax and imports"
+fi
+
+if [[ -x /usr/lib/qt6/bin/qsb ]]; then
+    SHADER_VERIFY_DIR=$(mktemp -d)
+    for stage in vert frag; do
+        shader="config/quickshell/widgets/lockscreen/shaders/lines.$stage"
+        if ! /usr/lib/qt6/bin/qsb --dump "$shader.qsb" >/dev/null \
+            || ! /usr/lib/qt6/bin/qsb --glsl '300 es,330' --hlsl 50 --msl 12 \
+                -o "$SHADER_VERIFY_DIR/lines.$stage.qsb" "$shader"; then
+            rm -rf -- "$SHADER_VERIFY_DIR"
+            exit 1
+        fi
+    done
+    rm -rf -- "$SHADER_VERIFY_DIR"
+    printf 'Native shader packages and source compilation: OK\n'
+else
+    missing_optional_tool "Native shader packages"
+fi
+
+if [[ -x /usr/lib/qt6/bin/qmltestrunner ]]; then
+    for suite in lockscreen wallpaper; do
+        QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_SCALE_FACTOR=1.25 \
+            /usr/lib/qt6/bin/qmltestrunner -input "maintenance/qmltests/$suite" -o -,txt
+    done
+else
+    missing_optional_tool "Qt presentation tests"
 fi
 
 printf 'Repository validation: OK\n'

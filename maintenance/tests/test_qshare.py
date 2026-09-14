@@ -224,54 +224,30 @@ class QuicksharePresentationTests(unittest.TestCase):
         self.assertIn('const TOKEN = "test-token";', html)
         self.assertIn('xhr.open("POST", "/upload?t=" + TOKEN);', html)
 
-    def test_qr_uses_sidonia_armor_palette_and_quiet_zone(self) -> None:
-        captured = {}
-
-        class FakeQr:
-            def __init__(self, **kwargs):
-                captured["config"] = kwargs
-                self.matrix = [[False] * 29 for _ in range(29)]
-
-            def add_data(self, value) -> None:
-                captured["value"] = value
-
-            def make(self, *, fit) -> None:
-                captured["fit"] = fit
-                for x, y in ((4, 4), (6, 6), (13, 13), (14, 18)):
-                    self.matrix[y][x] = True
-
-            def get_matrix(self) -> list[list[bool]]:
-                return self.matrix
-
-        with (
-            tempfile.TemporaryDirectory(prefix="tsugumori-qr-") as tempdir,
-            mock.patch.object(qshare.qrcode, "QRCode", FakeQr),
-        ):
-            output = Path(tempdir) / "qshare.png"
-            qshare.write_qr_png("https://qshare.test/token", output)
-
-            with qshare.Image.open(output) as image:
-                self.assertEqual(image.size, (290, 290))
-
-                def module_color(x: int, y: int):
-                    offset = qshare.QR_BOX_SIZE // 2
-                    return image.getpixel(
-                        (
-                            x * qshare.QR_BOX_SIZE + offset,
-                            y * qshare.QR_BOX_SIZE + offset,
-                        )
-                    )
-
-                self.assertEqual(module_color(0, 0), (255, 255, 255))
-                self.assertEqual(module_color(4, 4), (11, 31, 51))
-                self.assertEqual(module_color(6, 6), (117, 16, 24))
-                self.assertEqual(module_color(13, 13), (38, 59, 74))
-                self.assertEqual(module_color(14, 18), (23, 43, 58))
-
-        self.assertEqual(captured["config"]["border"], qshare.QR_BORDER)
-        self.assertEqual(captured["config"]["box_size"], qshare.QR_BOX_SIZE)
-        self.assertEqual(captured["value"], "https://qshare.test/token")
-        self.assertTrue(captured["fit"])
+    def test_glyph_qr_keeps_matrix_centres_and_protected_regions(self) -> None:
+        background = (17, 17, 17)
+        ink = (232, 232, 232)
+        for url in ("https://qshare.test/token", "https://qshare.test/?t=" + "a" * 400):
+            with self.subTest(length=len(url)), tempfile.TemporaryDirectory(prefix="tsugumori-qr-") as tempdir:
+                qr = qshare.qrcode.QRCode(border=qshare.QR_BORDER, box_size=qshare.QR_BOX_SIZE,
+                                         error_correction=qshare.qrcode.constants.ERROR_CORRECT_H)
+                qr.add_data(url)
+                qr.make(fit=True)
+                matrix = qr.get_matrix()
+                alignment = qshare.pattern_position(qr.version)
+                output = Path(tempdir) / "qshare.png"
+                qshare.write_qr_png(url, output)
+                with qshare.Image.open(output) as image:
+                    self.assertEqual(image.size, (len(matrix) * 20, len(matrix) * 20))
+                    for y, row in enumerate(matrix):
+                        for x, dark in enumerate(row):
+                            expected = ink if dark else background
+                            self.assertEqual(image.getpixel((x * 20 + 10, y * 20 + 10)), expected)
+                            if qshare._qr_protected(x, y, qr.modules_count, qr.version, alignment):
+                                tile = image.crop((x * 20, y * 20, (x + 1) * 20, (y + 1) * 20))
+                                self.assertEqual(tile.getcolors(), [(400, expected)])
+                    colors = {color for _, color in image.getcolors(image.width * image.height)}
+                    self.assertIn((204, 21, 21), colors)
 
 
 class QuickshareReceiveTests(unittest.TestCase):

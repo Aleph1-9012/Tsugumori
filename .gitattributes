@@ -1,2 +1,3 @@
 # Preserve the upstream license text byte-for-byte.
 assets/fonts/share-tech-mono/OFL.txt -whitespace
+config/quickshell/assets/fonts/ibm-plex-mono/OFL.txt -whitespace

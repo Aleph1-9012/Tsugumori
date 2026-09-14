@@ -309,6 +309,11 @@ class InstallerLuaMigrationTests(unittest.TestCase):
             mkdir -p "$source_dir"
             printf '%s\n' 'font-bytes' >"$source_dir/ShareTechMono-Regular.ttf"
             printf '%s\n' 'license-text' >"$source_dir/OFL.txt"
+            plex_source="$CLONE_DIR/config/quickshell/assets/fonts/ibm-plex-mono"
+            mkdir -p "$plex_source"
+            for asset in IBMPlexMono-Regular.ttf IBMPlexMono-Medium.ttf OFL.txt; do
+                printf '%s\n' "$asset" >"$plex_source/$asset"
+            done
             install_font_assets
             font_dir="$XDG_DATA_HOME/fonts/Tsugumori"
             stat -c 'font-mode=%a' "$font_dir/ShareTechMono-Regular.ttf"
@@ -330,10 +335,42 @@ class InstallerLuaMigrationTests(unittest.TestCase):
             (font_dir / "ShareTechMono-Regular.ttf").read_bytes(), b"font-bytes\n"
         )
         self.assertEqual((font_dir / "OFL.txt").read_bytes(), b"license-text\n")
+        for asset in ("IBMPlexMono-Regular.ttf", "IBMPlexMono-Medium.ttf", "OFL.txt"):
+            installed = font_dir / "ibm-plex-mono" / asset
+            self.assertEqual(installed.read_text(), asset + "\n")
+            self.assertEqual(installed.stat().st_mode & 0o777, 0o644)
+        self.assertFalse(list((font_dir / "ibm-plex-mono").glob(".*")))
         self.assertIn("font-mode=644\n", result.stdout)
         self.assertIn("license-mode=644\n", result.stdout)
         self.assertIn("temporary-files=0\n", result.stdout)
         self.assertIn(str(font_dir), cache_log.read_text(encoding="utf-8"))
+
+    def test_missing_bundled_font_leaves_installed_fonts_unchanged(self) -> None:
+        data_home = self.root / "data"
+        result = self.run_installer_shell(
+            """
+            source_dir="$CLONE_DIR/assets/fonts/share-tech-mono"
+            mkdir -p "$source_dir"
+            printf '%s\\n' 'new-font' >"$source_dir/ShareTechMono-Regular.ttf"
+            printf '%s\\n' 'license' >"$source_dir/OFL.txt"
+            plex_source="$CLONE_DIR/config/quickshell/assets/fonts/ibm-plex-mono"
+            mkdir -p "$plex_source"
+            printf '%s\\n' 'new-plex-font' >"$plex_source/IBMPlexMono-Regular.ttf"
+            printf '%s\\n' 'license' >"$plex_source/OFL.txt"
+            font_dir="$XDG_DATA_HOME/fonts/Tsugumori"
+            mkdir -p "$font_dir"
+            printf '%s\\n' 'keep-installed-font' >"$font_dir/ShareTechMono-Regular.ttf"
+            install_font_assets
+            """,
+            extra_env={"XDG_DATA_HOME": str(data_home)},
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Bundled IBM Plex Mono asset is missing or empty: IBMPlexMono-Medium.ttf",
+                      result.stderr)
+        font_dir = data_home / "fonts/Tsugumori"
+        self.assertEqual((font_dir / "ShareTechMono-Regular.ttf").read_bytes(),
+                         b"keep-installed-font\n")
+        self.assertEqual([p.name for p in font_dir.iterdir()], ["ShareTechMono-Regular.ttf"])
 
     def test_deploy_preserves_exact_relative_symlinks_for_all_user_files(self) -> None:
         custom_dir = self.config_home / "custom"

@@ -83,7 +83,6 @@ class SupervisedLockLauncherTests(unittest.TestCase):
 
         quickshell = self.config_home / "quickshell"
         (quickshell / "widgets").mkdir(parents=True)
-        (quickshell / "videos").mkdir()
         (self.config_home / "hypr").mkdir()
         self.runtime_dir.mkdir()
         self.fake_bin.mkdir()
@@ -91,21 +90,13 @@ class SupervisedLockLauncherTests(unittest.TestCase):
         shutil.copy2(LOCK_QML, quickshell / "widgets/lockscreen.qml")
         shutil.copy2(HANDSHAKE_HELPER, quickshell / "lock-handshake.sh")
         (quickshell / "lock-handshake.sh").chmod(0o755)
-        (quickshell / "videos/wave_hide.mp4").write_bytes(b"hide")
-        (quickshell / "videos/wave_reveal.mp4").write_bytes(b"reveal")
-        (quickshell / "videos/wave_last_frame.png").write_bytes(b"frame")
+        shutil.copytree(REPO_ROOT / "config/quickshell/widgets/lockscreen",
+                        quickshell / "widgets/lockscreen")
         (self.config_home / "hypr/hyprlock.conf").write_text(
             "general { immediate_render = true }\n", encoding="utf-8"
         )
         self.pam_service.write_text("auth required pam_unix.so\n", encoding="utf-8")
 
-        self.write_executable(
-            "ffmpeg",
-            """
-            #!/bin/sh
-            exit 0
-            """,
-        )
         self.write_executable(
             "hyprlock",
             """
@@ -319,6 +310,15 @@ class SupervisedLockLauncherTests(unittest.TestCase):
         self.assertIn("without an authenticated release request", result.stderr)
         self.assert_fallback_started()
         self.assert_handshake_cleaned()
+
+    def test_missing_native_shader_uses_fallback_before_launch(self) -> None:
+        shader = self.config_home / "quickshell/widgets/lockscreen/shaders/lines.vert.qsb"
+        shader.unlink()
+        result = self.run_launcher("early-exit")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("required native-lock component is missing", result.stderr)
+        self.assert_fallback_started()
+        self.assertFalse(self.qs_log.exists())
 
     def test_live_client_without_secure_marker_times_out_and_falls_back(self) -> None:
         result = self.run_launcher("hang")

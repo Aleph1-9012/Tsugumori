@@ -20,7 +20,7 @@ jobs:
         run: >-
           pacman -Syu --noconfirm --needed
           git hyprland lua python python-pillow python-qrcode quickshell qt6-declarative
-          qt6-multimedia-ffmpeg ripgrep shellcheck
+          qt6-shadertools ripgrep shellcheck
 
       - name: Check out repository
         uses: actions/checkout@v6.0.2
