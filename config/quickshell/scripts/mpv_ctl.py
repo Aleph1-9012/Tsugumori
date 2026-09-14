@@ -93,6 +93,7 @@ def main() -> int:
     metadata_request = 0
     metadata_pending: dict[int, str] = {}
     metadata_snapshot: dict[str, Any] = {}
+    file_ended = False
 
     def request_metadata() -> None:
         nonlocal metadata_request
@@ -109,7 +110,7 @@ def main() -> int:
             send(sock, ["get_property", field], request_id)
 
     def disconnect() -> None:
-        nonlocal sock, socket_buffer, next_connect_at
+        nonlocal sock, socket_buffer, next_connect_at, file_ended
         if sock is not None:
             try:
                 selector.unregister(sock)
@@ -132,6 +133,7 @@ def main() -> int:
         )
         metadata_pending.clear()
         metadata_snapshot.clear()
+        file_ended = False
         emit({"type": "disconnected"})
         next_connect_at = time.monotonic() + 0.1
 
@@ -214,9 +216,19 @@ def main() -> int:
                                     publish_state(state)
                             continue
                         if message.get("event") == "start-file":
+                            file_ended = False
                             state.update({"path": "", "metadata": {}, "metadataPath": "",
                                           "time-pos": 0, "duration": 0, "eof-reached": False,
                                           "idle-active": False})
+                            metadata_pending.clear()
+                            metadata_snapshot.clear()
+                            publish_state(state)
+                        elif message.get("event") == "end-file":
+                            # Keep completion attached to the file QML is displaying.
+                            # Late property resets must not turn it back into playback.
+                            file_ended = True
+                            state["eof-reached"] = message.get("reason") == "eof"
+                            state["idle-active"] = True
                             metadata_pending.clear()
                             metadata_snapshot.clear()
                             publish_state(state)
@@ -224,6 +236,12 @@ def main() -> int:
                             request_metadata()
                         name = message.get("name")
                         if message.get("event") == "property-change" and name in OBSERVED_PROPERTIES:
+                            if file_ended:
+                                continue
+                            # mpv may clear path before end-file or idle-active arrives.
+                            # start-file/disconnect reset the retained identity instead.
+                            if name == "path" and not message.get("data"):
+                                continue
                             if name == "path" and message.get("data") != state.get("path"):
                                 state["metadata"] = {}
                                 state["metadataPath"] = ""

@@ -31,6 +31,12 @@ class FakeMpvServer:
         self.listener.settimeout(timeout)
         self.connection, _ = self.listener.accept()
 
+    def send_events(self, events: list[dict[str, object]]) -> None:
+        assert self.connection is not None
+        self.connection.sendall(
+            "".join(json.dumps(event) + "\n" for event in events).encode()
+        )
+
     def receive_forwarded_commands(
         self, count: int, timeout: float = 2.0
     ) -> list[list[object]]:
@@ -196,6 +202,54 @@ class MpvCtlBridgeTests(unittest.TestCase):
         bridge.send_batch(commands)
 
         self.assertEqual(server.receive_forwarded_commands(len(commands)), commands)
+
+    def test_completion_retains_path_until_the_next_file_starts(self) -> None:
+        server = self.server()
+        bridge = self.bridge()
+        server.accept()
+        bridge.wait_for("ready")
+
+        for clear_before_end in (True, False):
+            with self.subTest(clear_before_end=clear_before_end):
+                path = "/music/short.wav"
+                playback_events = [
+                    {"event": "start-file"},
+                    {"event": "property-change", "name": "path", "data": path},
+                    {"event": "property-change", "name": "pause", "data": False},
+                    {"event": "property-change", "name": "duration", "data": 3},
+                    {"event": "property-change", "name": "time-pos", "data": 2},
+                ]
+                server.send_events(playback_events)
+                for _ in playback_events:
+                    playing = bridge.wait_for("state")
+                self.assertEqual(playing["path"], path)
+                self.assertFalse(playing["idleActive"])
+                self.assertFalse(playing["eofReached"])
+
+                clear = {"event": "property-change", "name": "path"}
+                end = {"event": "end-file", "reason": "eof"}
+                server.send_events(
+                    ([clear, end] if clear_before_end else [end, clear])
+                    + [
+                        {"event": "property-change", "name": "time-pos"},
+                        {"event": "property-change", "name": "duration"},
+                        {"event": "property-change", "name": "eof-reached", "data": False},
+                        {"event": "property-change", "name": "idle-active", "data": True},
+                        {"event": "start-file"},
+                    ]
+                )
+                completed = bridge.wait_for("state")
+                self.assertEqual(completed["path"], path)
+                self.assertTrue(completed["idleActive"])
+                self.assertTrue(completed["eofReached"])
+                self.assertEqual(completed["duration"], 3)
+
+                # No property reset may overwrite completion before this new start.
+                next_file = bridge.wait_for("state")
+                self.assertEqual(next_file["path"], "")
+                self.assertFalse(next_file["idleActive"])
+                self.assertFalse(next_file["eofReached"])
+                self.assertEqual(next_file["duration"], 0)
 
     def test_commands_queued_before_socket_exists_forward_after_connect(self) -> None:
         self.assertFalse(self.socket_path.exists())

@@ -321,6 +321,8 @@ Scope {
                                     boundsBehavior: Flickable.StopAtBounds
                                     reuseItems: false
                                     currentIndex: root.store.selectedIndex
+                                    // Let the parent route arrows through the store and preview.
+                                    keyNavigationEnabled: false
                                     ScrollBar.vertical: ScrollBar {
                                         policy: ScrollBar.AsNeeded
                                         contentItem: Rectangle { implicitWidth: 3 * root.s; color: root.muted; opacity: 0.6 }
