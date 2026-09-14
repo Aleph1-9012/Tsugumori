@@ -268,10 +268,16 @@ validate_font_assets() {
         || fatal "Bundled Share Tech Mono font is missing or empty."
     [[ -s "$source_dir/OFL.txt" ]] \
         || fatal "Bundled Share Tech Mono OFL license is missing or empty."
-    ok "Bundled Share Tech Mono font and license are present."
+    local asset
+    for asset in IBMPlexMono-Regular.ttf IBMPlexMono-Medium.ttf OFL.txt; do
+        [[ -s "$CLONE_DIR/config/quickshell/assets/fonts/ibm-plex-mono/$asset" ]] \
+            || fatal "Bundled IBM Plex Mono asset is missing or empty: $asset"
+    done
+    ok "Bundled fonts and licenses are present."
 }
 
 install_font_assets() {
+    validate_font_assets
     local source_dir="$CLONE_DIR/assets/fonts/share-tech-mono"
     local font_source="$source_dir/ShareTechMono-Regular.ttf"
     local license_source="$source_dir/OFL.txt"
@@ -296,13 +302,27 @@ install_font_assets() {
         fatal "Could not install bundled Share Tech Mono assets."
     fi
 
+    # QML loads these locally; install them for Waybar's font lookup too.
+    local plex_source="$CLONE_DIR/config/quickshell/assets/fonts/ibm-plex-mono"
+    local plex_dir="$font_dir/ibm-plex-mono"
+    local asset staged_font
+    install -d -m 0755 -- "$plex_dir"
+    for asset in IBMPlexMono-Regular.ttf IBMPlexMono-Medium.ttf OFL.txt; do
+        staged_font=$(mktemp "$plex_dir/.$asset.XXXXXX")
+        if ! install -m 0644 -- "$plex_source/$asset" "$staged_font" \
+            || ! mv -f -- "$staged_font" "$plex_dir/$asset"; then
+            rm -f -- "$staged_font"
+            fatal "Could not install bundled IBM Plex Mono asset: $asset"
+        fi
+    done
+
     if command -v fc-cache >/dev/null 2>&1; then
         fc-cache -f "$font_dir" >/dev/null 2>&1 \
-            || warn "Font cache refresh failed; log out and back in before using Share Tech Mono."
+            || warn "Font cache refresh failed; log out and back in before using the bundled fonts."
     else
-        warn "fc-cache is unavailable; log out and back in before using Share Tech Mono."
+        warn "fc-cache is unavailable; log out and back in before using the bundled fonts."
     fi
-    ok "Installed bundled Share Tech Mono font: $font_dir"
+    ok "Installed bundled fonts: $font_dir"
 }
 
 validate_hyprland_config() {
@@ -373,7 +393,6 @@ validate_lock_runtime() {
 
     command -v qs >/dev/null || fatal "Quickshell was not installed; refusing to deploy a session whose lock client cannot start."
     command -v hyprlock >/dev/null || fatal "Hyprlock was not installed; its PAM service and fallback client are required."
-    command -v ffmpeg >/dev/null || fatal "ffmpeg was not installed; the animated lock requires its Qt multimedia backend."
     command -v flock >/dev/null || fatal "flock was not found; the lock launch guard requires util-linux."
     qs_version=$(qs --version 2>/dev/null | sed -n 's/.* \([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' | head -n 1)
     [[ -n "$qs_version" ]] || fatal "Could not determine the installed Quickshell version."
@@ -381,10 +400,12 @@ validate_lock_runtime() {
     [[ -r /etc/pam.d/hyprlock ]] || fatal "The required PAM service /etc/pam.d/hyprlock is missing."
     [[ -r "$lock_root/widgets/lockscreen.qml" ]] || fatal "The secure Quickshell lockscreen is missing from the checkout."
 
-    for asset in wave_reveal.mp4 wave_hide.mp4 wave_last_frame.png; do
-        [[ -s "$lock_root/videos/$asset" ]] || fatal "Required secure-lock asset is missing or empty: config/quickshell/videos/$asset"
+    for asset in PhaseLockView.qml PhaseArt.js PhaseLines.qml PhaseCpuFallback.qml \
+        FormationCorner.qml shaders/lines.vert.qsb shaders/lines.frag.qsb; do
+        [[ -s "$lock_root/widgets/lockscreen/$asset" ]] \
+            || fatal "Required native-lock asset is missing or empty: $asset"
     done
-    ok "Secure lock runtime and bundled animation assets are present."
+    ok "Secure lock runtime and native animation assets are present."
 }
 
 install_pinned_from_archive() {

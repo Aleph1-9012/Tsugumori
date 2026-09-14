@@ -1,92 +1,138 @@
+/* Tsugumori A: menu-matched rail, with a plain background. */
+@define-color ts_bg #0a0a0a;
+@define-color ts_red #cc1515;
+@define-color ts_text #e8e8e8;
+@define-color ts_muted #a29b96;
+@define-color ts_line rgba(204, 21, 21, 0.27);
+@define-color ts_stat_line rgba(204, 21, 21, 0.65);
 
 * {
-  font-family: "Share Tech Mono", monospace;
-  font-size: 13px;
+  font-family: "IBM Plex Mono", "JetBrainsMono Nerd Font", monospace;
+  font-size: 12px;
+  font-weight: 400;
+  min-height: 0;
   border: none;
   border-radius: 0;
   padding: 0;
   margin: 0;
+  text-shadow: none;
+  box-shadow: none;
 }
 
 window#waybar {
-  background: rgba(10, 10, 10, 0.92);
-  border-bottom: 1px solid rgba(204, 21, 21, 0.20);
-  color: #e8e8e8;
+  background-color: @ts_bg;
+  background-image: none;
+  border-bottom: 1px solid alpha(@ts_red, 0.4);
+  color: @ts_text;
 }
 
-/* WORKSPACES */
 #workspaces button {
-  padding: 0 8px;
-  color: rgba(232, 232, 232, 0.3);
-  border-bottom: 2px solid transparent;
-  transition: all 0.15s;
-}
-
-#workspaces button.active {
-  color: #cc1515;
-  border-bottom: 2px solid #cc1515;
+  min-width: 46px;
+  background-color: transparent;
+  background-image: none;
+  color: @ts_muted;
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
 #workspaces button:hover {
-  color: rgba(232, 232, 232, 0.7);
-  background: rgba(204, 21, 21, 0.05);
+  background-color: rgba(204, 21, 21, 0.13);
+  color: @ts_text;
 }
 
-/* WINDOW TITLE */
+#workspaces button.active,
+#workspaces button.active:hover {
+  min-width: 30px;
+  padding-left: 16px;
+  background-color: @ts_red;
+  background-image: url("assets/workspace-marker.svg");
+  background-repeat: no-repeat;
+  background-size: 9px 9px;
+  background-position: 7px center;
+  color: @ts_bg;
+}
+
+#workspaces button.urgent:not(.active) {
+  color: @ts_red;
+}
+
 #window {
-  color: rgba(232, 232, 232, 0.4);
-  padding: 0 12px;
-  letter-spacing: 1px;
+  color: @ts_text;
+  padding: 0 13px;
 }
 
-/* CENTER TICKER */
-#custom-ticker {
-  color: rgba(232, 232, 232, 0.5);
-  letter-spacing: 1px;
+#custom-sidonia {
   font-size: 11px;
+  padding: 0 18px;
 }
 
-/* RIGHT-SIDE MODULES */
+/* Two opposing L corners per reading, not a background grid. */
 #cpu,
 #memory,
 #network,
+#pulseaudio {
+  color: @ts_text;
+  font-weight: 500;
+  padding: 0 12px;
+  margin: 6px 4px;
+  background-image:
+    linear-gradient(@ts_stat_line, @ts_stat_line),
+    linear-gradient(@ts_stat_line, @ts_stat_line),
+    linear-gradient(@ts_stat_line, @ts_stat_line),
+    linear-gradient(@ts_stat_line, @ts_stat_line);
+  background-size: 5px 1px, 1px 5px, 5px 1px, 1px 5px;
+  background-position: left top, left top, right bottom, right bottom;
+  background-repeat: no-repeat;
+}
+
 #pulseaudio,
-#clock,
 #custom-power {
-  padding: 0 10px;
-  color: rgba(232, 232, 232, 0.5);
-  border-left: 1px solid rgba(204, 21, 21, 0.10);
-  letter-spacing: 1px;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+#pulseaudio:hover {
+  color: @ts_bg;
+  background-color: @ts_red;
+}
+
+#pulseaudio.muted,
+#network.disconnected {
+  color: @ts_red;
+}
+
+#pulseaudio.muted:hover {
+  color: @ts_bg;
 }
 
 #clock {
-  color: #e8e8e8;
-  letter-spacing: 2px;
+  min-width: 50px;
+  padding: 0 12px;
+  margin: 6px 4px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  color: @ts_bg;
+  background-color: @ts_red;
+  background-image: none;
 }
-
-#cpu {
-  color: #cc1515;
-}
-
-#memory {
-  color: #7a8faa;
-}
-
-#network {
-  color: #7a8faa;
-}
-
-#pulseaudio {
-  color: #c8c8c4;
-}
-
 
 #custom-power {
-  color: rgba(204, 21, 21, 0.5);
-  padding: 0 14px;
+  border-left: 1px solid @ts_line;
+  font-family: "JetBrainsMono Nerd Font", monospace;
+  font-size: 14px;
+  min-width: 38px;
+  color: @ts_red;
 }
 
 #custom-power:hover {
-  color: #cc1515;
-  background: rgba(204, 21, 21, 0.08);
+  color: @ts_bg;
+  background-color: @ts_red;
+}
+
+tooltip {
+  background: @ts_bg;
+  border: 1px solid @ts_line;
+}
+
+tooltip label {
+  color: @ts_text;
+  padding: 6px 8px;
 }

@@ -2,14 +2,14 @@
 # Tsugumori animated secure lock launcher.
 #
 # Quickshell owns ext-session-lock-v1 and authenticates through PamContext;
-# the original reveal/hide presentation remains intact.
+# Phase and K glyphs are rendered natively, without a video decoder.
 set -eu
 umask 077
 
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 lockscreen="$config_home/quickshell/widgets/lockscreen.qml"
 handshake_helper="$config_home/quickshell/lock-handshake.sh"
-video_dir="$config_home/quickshell/videos"
+visual_dir="$config_home/quickshell/widgets/lockscreen"
 hyprlock_config="$config_home/hypr/hyprlock.conf"
 export XDG_CONFIG_HOME="$config_home"
 
@@ -316,10 +316,6 @@ if ! command -v qs >/dev/null 2>&1; then
     fallback_lock "Quickshell is unavailable"
 fi
 
-if ! command -v ffmpeg >/dev/null 2>&1; then
-    fallback_lock "ffmpeg is unavailable"
-fi
-
 if [[ ! -r "$lockscreen" ]]; then
     fallback_lock "the secure Quickshell lockscreen is unreadable"
 fi
@@ -328,15 +324,12 @@ if [[ ! -r "$handshake_helper" || ! -x "$handshake_helper" ]]; then
     fallback_lock "the secure lock handshake helper is unavailable"
 fi
 
-required_assets=("$video_dir/wave_hide.mp4")
-if [[ "$fast_mode" -eq 1 ]]; then
-    required_assets+=("$video_dir/wave_last_frame.png")
-else
-    required_assets+=("$video_dir/wave_reveal.mp4")
-fi
-for asset in "${required_assets[@]}"; do
-    if [[ ! -s "$asset" || ! -r "$asset" ]]; then
-        fallback_lock "a required animated-lock asset is missing or empty ($asset)"
+for component in "$visual_dir/PhaseLockView.qml" "$visual_dir/PhaseArt.js" \
+        "$visual_dir/PhaseLines.qml" "$visual_dir/FormationCorner.qml" \
+        "$visual_dir/PhaseCpuFallback.qml" \
+        "$visual_dir/shaders/lines.vert.qsb" "$visual_dir/shaders/lines.frag.qsb"; do
+    if [[ ! -s "$component" || ! -r "$component" ]]; then
+        fallback_lock "a required native-lock component is missing or empty ($component)"
     fi
 done
 
@@ -348,7 +341,6 @@ if [[ ! -r "$pam_service" ]]; then
     fallback_lock "the required PAM service is unavailable ($pam_service)"
 fi
 
-export QT_MEDIA_BACKEND=ffmpeg
 if [[ "$fast_mode" -eq 1 ]]; then
     export UNIT3_LOCK_FAST=1
 else

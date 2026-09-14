@@ -60,7 +60,8 @@ Scope {
     }
     function moveSelection(step) {
         if (!entriesModel.count) return
-        select(entriesModel.get((Math.max(0, selectedIndex) + step + entriesModel.count) % entriesModel.count).clipId)
+        const nextIndex = Math.max(0, Math.min(entriesModel.count - 1, selectedIndex + step))
+        select(entriesModel.get(nextIndex).clipId)
     }
     function send(operation) {
         if (!worker.running || !ready) return

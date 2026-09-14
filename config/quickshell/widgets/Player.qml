@@ -17,6 +17,8 @@ Item {
     readonly property color mutedColor: "#a7a29e"
     readonly property color headerRed: "#e4372b"
     readonly property bool reducedMotion: Quickshell.env("TSUGUMORI_REDUCED_MOTION") === "1"
+    // Lengthen only the Player's opening and closing transitions by 25%.
+    readonly property real visibilityDurationScale: 1.25
     readonly property color surfaceColor: Settings.playerBackground ? Settings.playerBgColor : "transparent"
     property real availableHeight: s(900)
     function s(px) { return Math.round(px * sc) }
@@ -81,7 +83,8 @@ Item {
             revealProgress = target; wipeHost.visible = requestedVisible; return
         }
         visibilityAnim.from = revealProgress; visibilityAnim.to = target
-        visibilityAnim.duration = Math.max(1, Math.round((requestedVisible ? Settings.revealDuration : Settings.hideDuration) * distance))
+        visibilityAnim.duration = Math.max(1, Math.round((requestedVisible ? Settings.revealDuration : Settings.hideDuration)
+                                                        * root.visibilityDurationScale * distance))
         visibilityAnim.start()
     }
     function fmtTime(value) {
@@ -475,10 +478,11 @@ Item {
         Rectangle { x: 0; y: 0; width: 1; height: root.s(11); color: Theme.a1 }
         Rectangle { x: parent.width - width; y: parent.height - 1; width: root.s(11); height: 1; color: Theme.a1 }
         Rectangle { x: parent.width - 1; y: parent.height - height; width: 1; height: root.s(11); color: Theme.a1 }
-        Rectangle {
+        CurtainSurface {
             id: curtain
             anchors.top: parent.top; anchors.bottom: parent.bottom
-            x: 0; z: 10; color: Settings.curtainColor
+            x: 0; z: 10
+            uiScale: root.sc
             width: root.revealProgress <= 0.58 ? root.pw : root.pw * (1 - (root.revealProgress - 0.58) / 0.42)
         }
     }

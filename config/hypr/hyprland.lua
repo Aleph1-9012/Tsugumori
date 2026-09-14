@@ -118,7 +118,7 @@ if options.vm_software_gl then
     quickshell_command = quickshell_command .. "LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe "
 end
 quickshell_command = quickshell_command
-    .. "QT_MEDIA_BACKEND=ffmpeg QT_QPA_PLATFORM=wayland "
+    .. "QT_QPA_PLATFORM=wayland "
     .. "QT_WAYLAND_DISABLE_WINDOWDECORATION=1 /usr/bin/qs"
 
 hl.on("hyprland.start", function()

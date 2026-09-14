@@ -12,7 +12,6 @@ waybar
 # `quickshell` (for example quickshell-git); otherwise it installs this target.
 quickshell
 qt6-wayland
-qt6-multimedia-ffmpeg
 mpv
 ffmpeg
 

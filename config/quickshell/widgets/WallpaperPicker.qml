@@ -1,17 +1,26 @@
 import QtQuick
-import QtMultimedia
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import "wallpaper"
+import "lockscreen/PhaseArt.js" as Art
 
 ShellRoot {
     id: root
 
     // ── Shared state ──
-    property bool   revealing: false
-    property bool   frozen:    false
-    property bool   hiding:    false
-    property bool   done:      false
+    readonly property bool hiding: motion.closing
+    readonly property bool done: motion.finished
+    property int pendingIndex: -1
+    property string pendingMonitor: ""
+    PickerMotion {
+        id: motion
+        onClosed: {
+            // Unmap the picker after the exit, then finish the queued apply.
+            if (root.pendingIndex >= 0) root.applyWallpaper(root.pendingIndex, root.pendingMonitor)
+            else Qt.quit()
+        }
+    }
 
     // ── Wallpapers ──
     property var    wallpapers:    []
@@ -32,7 +41,8 @@ ShellRoot {
             onStreamFinished: {
                 var n = this.text.trim()
                 if (n !== "") root.activeMonitor = n
-                root.revealing = true
+                else if (Quickshell.screens.length > 0) root.activeMonitor = Quickshell.screens[0].name
+                motion.open()
             }
         }
     }
@@ -58,7 +68,7 @@ ShellRoot {
 
     // ── Apply wallpaper ──
     function applyWallpaper(idx, monitor) {
-        if (root.wallpapers.length === 0) return
+        if (idx < 0 || idx >= root.wallpapers.length) { Qt.quit(); return }
         var file = root.wallpaperDir + "/" + root.wallpapers[idx]
         applyProc.command = [
             root.xdgConfigHome + "/quickshell/setwallpaper.sh",
@@ -72,6 +82,12 @@ ShellRoot {
         id: applyProc
         command: ["true"]
         running: false
+        // A failed process start may not emit exited. Do not leave an invisible picker running.
+        onRunningChanged: if (!running && root.done) Qt.callLater(function() { if (!applyProc.running) Qt.quit() })
+        onExited: function(exitCode) {
+            if (exitCode !== 0) console.error("Wallpaper picker: wallpaper application failed:", exitCode)
+            Qt.quit()
+        }
     }
 
     // ── Hyprland cursor handling ──
@@ -91,24 +107,27 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         PanelWindow {
+            id: pickerWindow
             required property var modelData
             screen: modelData
+            visible: !root.done
             anchors.top:true;anchors.left:true;anchors.right:true;anchors.bottom:true
             exclusionMode: ExclusionMode.Ignore
             color: "transparent"
             implicitWidth: modelData.width; implicitHeight: modelData.height
             WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: (root.frozen && !root.hiding && !root.done
+            WlrLayershell.keyboardFocus: (!root.hiding && !root.done
                                           && modelData.name === root.activeMonitor)
                 ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
 
-            property bool isPrimary: modelData.name === root.activeMonitor
             property bool isActive:  modelData.name === root.activeMonitor
 
             // --- Solid opaque backdrop to stop edge/window bleed-through ---
-            Rectangle {
+            PickerBackdrop {
                 anchors.fill: parent
-                color: "#0c0c0c"
+                progress: motion.progress
+                vertexShaderUrl: "file://" + root.xdgConfigHome + "/quickshell/widgets/lockscreen/shaders/lines.vert.qsb"
+                fragmentShaderUrl: "file://" + root.xdgConfigHome + "/quickshell/widgets/lockscreen/shaders/lines.frag.qsb"
                 z: -2
             }
 
@@ -117,78 +136,17 @@ ShellRoot {
                 anchors.fill: parent
                 z: -1
                 onClicked: {
-                    if (root.activeMonitor !== modelData.name) {
+                    if (!root.hiding && root.activeMonitor !== modelData.name) {
                         root.activeMonitor = modelData.name
                     }
                 }
             }
 
-            // ── Reveal video ──
-            MediaPlayer {
-                id: reveal
-                source: "file://" + root.xdgConfigHome + "/quickshell/videos/wave_reveal.mp4"
-                videoOutput: voReveal
-                audioOutput: null
-                loops: 1; autoPlay: false
-                onPositionChanged: function() {
-                    if (root.hiding || root.done) return
-                    var pos = reveal.position
-                    var dur = reveal.duration
-                    if (dur > 0 && pos >= dur - 34) {
-                        reveal.pause()
-                        root.revealing = false
-                    }
-                }
-            }
-            VideoOutput {
-                id: voReveal
-                anchors.fill: parent
-                visible: !root.done
-            }
-
-            // ── Hide video ──
-            MediaPlayer {
-                id: hide
-                source: "file://" + root.xdgConfigHome + "/quickshell/videos/wave_hide.mp4"
-                videoOutput: voHide
-                audioOutput: null
-                loops: 1; autoPlay: false
-            }
-            VideoOutput {
-                id: voHide
-                anchors.fill: parent; z:1
-                visible: root.hiding || root.done
-                opacity: 1.0
-            }
-
-            Timer {
-                id: hideFadeTimer; interval:800; repeat:false
-                onTriggered: hideFadeAnim.start()
-            }
-            Timer { id:applyDelayTimer; interval:800; repeat:false
-                property int pendingIdx: -1
-                property string pendingMon: ""
-                onTriggered: if (pendingIdx >= 0) root.applyWallpaper(pendingIdx, pendingMon)
-            }
-            NumberAnimation {
-                id: hideFadeAnim
-                target: voHide; property: "opacity"
-                from:1.0; to:0.0; duration:0
-                onFinished: { root.done=true; exitTimer.restart() }
-            }
-            Timer { id:exitTimer; interval:50; repeat:false
-                onTriggered: Qt.quit()
-            }
-            Rectangle { anchors.fill:parent; color:"black"; z:10; visible:root.done }
-
             // ── UI — active screen only ──
             Item {
                 anchors.fill: parent
-                visible: !root.done && isActive
+                visible: !root.done && pickerWindow.isActive
                 z: 2
-
-                property real uiOp: (root.frozen || root.revealing) ? 1 : 0
-                Behavior on uiOp { NumberAnimation { duration:400 } }
 
                 // Mouse scroll across the entire surface.
                 MouseArea {
@@ -198,31 +156,14 @@ ShellRoot {
                     }
                 }
 
-                // Corner decorations.
-                Item {
-                    anchors{top:parent.top;left:parent.left;topMargin:28;leftMargin:30}
-                    z:5; opacity:parent.uiOp
-                    Column { spacing:2
-                        Row { spacing:5
-                            Rectangle { width:5;height:5;radius:3;color:"#9e1010"
-                                anchors.verticalCenter:parent.verticalCenter
-                                SequentialAnimation on opacity { running:root.frozen; loops:Animation.Infinite
-                                    NumberAnimation{to:0.3;duration:900} NumberAnimation{to:1;duration:900} }
-                            }
-                            Text{text:"WALLPAPER SELECT";font.family:"Share Tech Mono";font.pixelSize:9;font.letterSpacing:2;color:"#e8e8e8"}
-                        }
-                        Text{text:"NODE · "+root.activeMonitor;font.family:"Share Tech Mono";font.pixelSize:9;font.letterSpacing:2;color:"#e8e8e8"}
-                    }
-                }
-                Item {
-                    anchors{top:parent.top;right:parent.right;topMargin:28;rightMargin:30}
-                    z:5; opacity:parent.uiOp
-                    Text{text:root.clockFull;font.family:"Share Tech Mono";font.pixelSize:9;font.letterSpacing:2;color:"#e8e8e8"}
-                }
-                Item {
-                    anchors{bottom:parent.bottom;left:parent.left;bottomMargin:28;leftMargin:30}
-                    z:5; opacity:parent.uiOp
-                    Text{text:"↑↓ / SCROLL  NAVIGATE  ·  ESC  QUIT";font.family:"Share Tech Mono";font.pixelSize:9;font.letterSpacing:2;color:"#e8e8e8"}
+                PickerCorners {
+                    anchors.fill: parent
+                    z: 5
+                    progress: motion.progress
+                    live: motion.inputReady && pickerWindow.isActive
+                    hiding: root.hiding
+                    monitorName: root.activeMonitor
+                    clockText: root.clockFull
                 }
 
                 // ── Apply buttons — always visible ──
@@ -234,8 +175,8 @@ ShellRoot {
                     width: 420
                     height: applyCol.implicitHeight + 48
                     z: 7
-                    opacity: root.frozen ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration:300 } }
+                    opacity: Art.ramp(motion.progress, .59, .87)
+                    enabled: motion.inputReady
 
                     Rectangle {
                         anchors.fill: parent
@@ -252,7 +193,7 @@ ShellRoot {
 
                             Text {
                                 text: "APPLY WALLPAPER"
-                                font.family:"Share Tech Mono";font.pixelSize:10;font.letterSpacing:3
+                                font.family:"JetBrainsMono Nerd Font";font.pixelSize:10;font.letterSpacing:3
                                 color:"#cc1515";anchors.horizontalCenter:parent.horizontalCenter
                             }
                             Rectangle { width:parent.width;height:1;color:Qt.rgba(70/255,63/255,46/255,0.22) }
@@ -268,12 +209,12 @@ ShellRoot {
                                         Behavior on width{NumberAnimation{duration:220}} }
                                     Text { anchors.centerIn:parent
                                         text:"THIS SCREEN"
-                                        font.family:"Share Tech Mono";font.pixelSize:10;font.letterSpacing:2
+                                        font.family:"JetBrainsMono Nerd Font";font.pixelSize:10;font.letterSpacing:2
                                         color:ma1.containsMouse?"#c8c8c4":"#cc1515"
                                         Behavior on color{ColorAnimation{duration:200}} }
                                     MouseArea { id:ma1;anchors.fill:parent;hoverEnabled:true
                                         onEntered:fill1.width=parent.width;onExited:fill1.width=0
-                                        onClicked:{ root.doClose(); applyDelayTimer.pendingIdx=root.currentIndex; applyDelayTimer.pendingMon=root.activeMonitor; applyDelayTimer.restart() } }
+                                        onClicked: root.requestApply(root.activeMonitor) }
                                 }
 
                                 // Both-screens button.
@@ -283,12 +224,12 @@ ShellRoot {
                                         Behavior on width{NumberAnimation{duration:220}} }
                                     Text { anchors.centerIn:parent
                                         text:"ALL SCREENS"
-                                        font.family:"Share Tech Mono";font.pixelSize:10;font.letterSpacing:2
+                                        font.family:"JetBrainsMono Nerd Font";font.pixelSize:10;font.letterSpacing:2
                                         color:ma2.containsMouse?"#c8c8c4":"#cc1515"
                                         Behavior on color{ColorAnimation{duration:200}} }
                                     MouseArea { id:ma2;anchors.fill:parent;hoverEnabled:true
                                         onEntered:fill2.width=parent.width;onExited:fill2.width=0
-                                        onClicked:{ root.doClose(); applyDelayTimer.pendingIdx=root.currentIndex; applyDelayTimer.pendingMon="both"; applyDelayTimer.restart() } }
+                                        onClicked: root.requestApply("both") }
                                 }
                             }
                         }
@@ -304,17 +245,17 @@ ShellRoot {
                     width: parent.width
                     height: parent.height - 220
                     z: 6
-                    opacity: root.frozen ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration:300 } }
+                    opacity: Art.ramp(motion.progress, .22, .73)
 
-                    focus: root.frozen && isActive
+                    // Escape can reverse an unfinished entrance. Other input waits.
+                    focus: !root.hiding && pickerWindow.isActive
                     Keys.onEscapePressed: root.doClose()
                     Keys.onLeftPressed:   root.navigate(-1)
                     Keys.onRightPressed:  root.navigate(1)
                     Keys.onUpPressed:     root.navigate(-1)
                     Keys.onDownPressed:   root.navigate(1)
-                    Keys.onReturnPressed:  { root.applyWallpaper(root.currentIndex, "both"); root.doClose() }
-                    Keys.onSpacePressed:  { root.applyWallpaper(root.currentIndex, "both"); root.doClose() }
+                    Keys.onReturnPressed: root.requestApply("both")
+                    Keys.onSpacePressed: root.requestApply("both")
                     readonly property int n: root.wallpapers.length
 
                     // Base dimensions (central thumbnail size at full scale).
@@ -414,7 +355,7 @@ ShellRoot {
                                     Text {
                                         anchors.centerIn: parent
                                         text: root.wallpapers[thumb.wIdx]
-                                        font.family: "Share Tech Mono"
+                                        font.family: "JetBrainsMono Nerd Font"
                                         font.pixelSize: 8
                                         color: "#e8e8e8"
                                     }
@@ -430,40 +371,33 @@ ShellRoot {
                         }
                     }
                 }
-            }
-
-            // ── State connections ──
-            Connections {
-                target: root
-                function onRevealingChanged() {
-                    if (root.revealing) {
-                        root.frozen = true
-                        reveal.position = 0
-                        reveal.play()
-                        panelOpenTimer.restart()
-                    }
-                }
-                function onHidingChanged() {
-                    if (root.hiding) {
-                        reveal.stop()
-                        hide.position = 0
-                        hide.play()
-                        if (isPrimary) hideFadeTimer.restart()
-                    }
+                PickerRegistration {
+                    x: carousel.x + (carousel.width - carousel.baseW) / 2
+                    y: carousel.y + carousel.baselineY - carousel.baseH
+                    width: carousel.baseW; height: carousel.baseH
+                    progress: motion.progress
+                    z: 8
                 }
             }
-            Timer { id:panelOpenTimer; interval:100; repeat:false; onTriggered: carousel.focus=true }
         }
     }
 
     // ── Navigation ──
     function navigate(dir) {
+        if (!motion.inputReady) return
         var n = root.wallpapers.length
         if (n === 0) return
         root.currentIndex = ((root.currentIndex + dir) % n + n) % n
     }
 
     function doClose() {
-        root.hiding = true
+        motion.close()
+    }
+
+    function requestApply(monitor) {
+        if (!motion.inputReady || root.wallpapers.length === 0) return
+        root.pendingIndex = root.currentIndex
+        root.pendingMonitor = monitor
+        motion.close()
     }
 }

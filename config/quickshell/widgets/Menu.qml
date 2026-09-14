@@ -1,6 +1,8 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "../components"
+import "../theme"
 
 Item {
     id: root
@@ -14,7 +16,7 @@ Item {
     property bool   wipeHideRunning: false  // stays true during the closing animation
     property string currentCat: "all"
     property string searchQuery: ""
-    property int    focusIdx:   0
+    property int    focusIdx:   -1
     property string clockStr:   "--:--:--"
 
     implicitWidth:  screenW
@@ -28,6 +30,20 @@ Item {
     readonly property color lineSoft:  Qt.rgba(204/255,21/255,21/255,0.15)
     readonly property color lineVsoft: Qt.rgba(204/255,21/255,21/255,0.08)
     readonly property color accent:    "#9e1010"
+
+    // Keep the app-list typography local to this widget.
+    FontLoader {
+        id: menuRegularFont
+        source: Qt.resolvedUrl("../assets/fonts/ibm-plex-mono/IBMPlexMono-Regular.ttf")
+    }
+    FontLoader {
+        id: menuMediumFont
+        source: Qt.resolvedUrl("../assets/fonts/ibm-plex-mono/IBMPlexMono-Medium.ttf")
+    }
+    readonly property string listFont: menuRegularFont.status === FontLoader.Ready
+                                       ? menuRegularFont.name : Theme.mono
+    readonly property string listNameFont: menuMediumFont.status === FontLoader.Ready
+                                           ? menuMediumFont.name : root.listFont
 
     // Apps
     property var  apps: []
@@ -189,6 +205,7 @@ Item {
     // ── Panel host (clip + wipe) ──
     Item {
         id: panelHost
+        property real closeOffset: 0
         x: (root.screenW - root.lw) / 2
         y: (root.screenH - root.lh) / 2
         width:  root.lw
@@ -200,6 +217,7 @@ Item {
         Rectangle {
             id:     panelContent
             anchors.fill: parent
+            transform: Translate { x: panelHost.closeOffset }
             color:  root.paper
             border.color: root.ink; border.width: 1
 
@@ -239,33 +257,97 @@ Item {
 
             // ── HEADER ──
             Item {
-                id: header; width:parent.width; height:52
+                id: header
+                width: parent.width
+                height: 52
 
                 Row {
-                    anchors { left:parent.left; right:parent.right; verticalCenter:parent.verticalCenter
-                              leftMargin:28; rightMargin:28 }
-                    Row {
-                        spacing:14; anchors.verticalCenter:parent.verticalCenter
-                        Text { text:"SYSTEM"; font.pixelSize:11; font.letterSpacing:3.5; font.weight:Font.Medium; color:root.inkStrong }
-                        Rectangle { width:24; height:1; color:root.inkSoft; anchors.verticalCenter:parent.verticalCenter }
-                        Text { text:"システム"; font.pixelSize:10; font.letterSpacing:2; color:root.inkSoft }
-                    }
-                    Item { width:parent.width - 340; height:1 }
-                    Row {
-                        spacing:14; anchors.verticalCenter:parent.verticalCenter
-                        Item {
-                            width:120; height:16; clip:true
-                            Text {
-                                id:lhTick
-                                text: root.clockStr + " · " + root.apps.length + " APPS · "
-                                font.pixelSize:9; font.letterSpacing:1.5; color:root.inkSoft; y:2
-                                NumberAnimation on x {
-                                    from:120; to:-lhTick.implicitWidth
-                                    duration:12000; loops:Animation.Infinite; running:root.menuOpen
-                                }
-                            }
+                    anchors { left:parent.left; leftMargin:24; verticalCenter:parent.verticalCenter }
+                    spacing: 14
+
+                    Item {
+                        width: systemLabel.implicitWidth + 24
+                        height: 28
+                        Text {
+                            id: systemLabel
+                            anchors.centerIn: parent
+                            text: "SYSTEM"
+                            font.family: Theme.mono
+                            font.pixelSize: 12
+                            font.letterSpacing: 3
+                            font.weight: Font.Medium
+                            color: root.inkStrong
                         }
-                        Text { text:"SESSION 0471"; font.pixelSize:9; font.letterSpacing:2.5; color:root.inkSoft }
+                        Rectangle { x:0; y:0; width:7; height:1; color:root.ink }
+                        Rectangle { x:0; y:0; width:1; height:7; color:root.ink }
+                        Rectangle { x:parent.width-7; y:parent.height-1; width:7; height:1; color:root.ink }
+                        Rectangle { x:parent.width-1; y:parent.height-7; width:1; height:7; color:root.ink }
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "//"
+                        font.family: Theme.mono
+                        font.pixelSize: 11
+                        color: root.ink
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "システム"
+                        font.family: Theme.mono
+                        font.pixelSize: 11
+                        font.letterSpacing: 2
+                        color: "#aaa5a0"
+                    }
+                }
+
+                Row {
+                    anchors { right:parent.right; rightMargin:24; verticalCenter:parent.verticalCenter }
+                    spacing: 18
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "SID0NIA"
+                        font.family: Theme.mono
+                        font.pixelSize: 10
+                        font.letterSpacing: 2
+                        color: root.ink
+                    }
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 1; height: 14
+                        color: Qt.alpha(root.ink, 0.4)
+                    }
+                    Row {
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: 7
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: root.appsLoaded ? String(root.apps.length).padStart(2, "0") : "--"
+                            font.family: Theme.mono
+                            font.pixelSize: 11
+                            color: root.inkStrong
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "APPS"
+                            font.family: Theme.mono
+                            font.pixelSize: 9
+                            font.letterSpacing: 1.5
+                            color: root.inkSoft
+                        }
+                    }
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 1; height: 14
+                        color: Qt.alpha(root.ink, 0.4)
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: root.clockStr
+                        font.family: Theme.mono
+                        font.pixelSize: 11
+                        font.letterSpacing: 1
+                        color: "#b0aba6"
                     }
                 }
                 Rectangle { anchors.bottom:parent.bottom; width:parent.width; height:1; color:root.lineSoft }
@@ -321,7 +403,7 @@ Item {
                                     color: parent.isActive ? Qt.rgba(204/255,21/255,21/255,0.20) : Qt.rgba(204/255,21/255,21/255,0.12)
                                 }
                                 MouseArea { id:catMA; anchors.fill:parent; hoverEnabled:true
-                                    onClicked: { root.currentCat=modelData; root.focusIdx=0; searchInput.forceActiveFocus() } }
+                                    onClicked: { root.currentCat=modelData; root.focusIdx=-1; searchInput.forceActiveFocus() } }
                             }
                         }
 
@@ -330,7 +412,16 @@ Item {
                             Column {
                                 anchors { left:parent.left; leftMargin:22; bottom:parent.bottom; bottomMargin:6 }
                                 spacing:4
-                                Text { text:root.filteredApps.length+"/"+root.apps.length+" NODES"; font.pixelSize:8; font.letterSpacing:2; color:root.inkSoft; opacity:0.6 }
+                                Text {
+                                    text: root.filteredApps.length + "/" + root.apps.length + " NODES"
+                                    font.family: root.listNameFont
+                                    font.pixelSize: 10
+                                    font.weight: Font.Medium
+                                    font.letterSpacing: 1
+                                    font.hintingPreference: Font.PreferFullHinting
+                                    renderType: Text.NativeRendering
+                                    color: root.inkSoft
+                                }
                                 Rectangle {
                                     width:72; height:2; color:root.lineSoft
                                     Rectangle {
@@ -357,11 +448,22 @@ Item {
                         // Search
                         Item {
                             width:parent.width; height:46
+                            Rectangle {
+                                anchors { fill:parent; leftMargin:14; rightMargin:14; topMargin:7; bottomMargin:7 }
+                                color: "transparent"
+                                border.width: 1
+                                border.color: Qt.alpha(root.ink, 0.42)
+                                Rectangle {
+                                    anchors { left:parent.left; top:parent.top; bottom:parent.bottom }
+                                    width: 3
+                                    color: root.ink
+                                }
+                            }
                             Row {
                                 anchors { left:parent.left; right:parent.right; verticalCenter:parent.verticalCenter
                                           leftMargin:24; rightMargin:24 }
                                 spacing:10
-                                Text { anchors.verticalCenter:parent.verticalCenter; text:"▸"; font.pixelSize:12; color:root.accent }
+                                Text { anchors.verticalCenter:parent.verticalCenter; text:"▸"; font.family:root.listFont; font.pixelSize:13; color:root.ink }
                                 FocusScope {
                                     id:searchScope; width:parent.width-60; height:30
                                     anchors.verticalCenter:parent.verticalCenter
@@ -371,7 +473,8 @@ Item {
                                         id:           searchInput
                                         anchors.fill: parent
                                         verticalAlignment: TextInput.AlignVCenter
-                                        font.pixelSize:13; font.letterSpacing:0.5; font.weight:Font.Normal
+                                        font.family:root.listFont
+                                        font.pixelSize:15; font.weight:Font.Normal
                                         color:        root.inkStrong
                                         cursorVisible:activeFocus
                                         focus:        true
@@ -397,9 +500,9 @@ Item {
                                         Text {
                                             visible:parent.text===""
                                             anchors.verticalCenter:parent.verticalCenter
-                                            text:"search application..."
-                                            font.pixelSize:13; font.italic:true; font.weight:Font.Light
-                                            color:root.inkSoft; opacity:0.5
+                                            text:"Search application…"
+                                            font:searchInput.font
+                                            color:"#99928d"
                                         }
                                     }
                                 }
@@ -412,30 +515,35 @@ Item {
                             id:appList; width:parent.width; height:parent.parent.height-46
                             clip:true; model:root.filteredApps; keyNavigationEnabled:false
 
+                            HoverHandler {
+                                parent: appList
+                                // Watch the viewport, not individual rows or the scrolling content.
+                                onHoveredChanged: {
+                                    if (!hovered) root.focusIdx = -1
+                                }
+                            }
+
                             delegate: Item {
                                 id:appDelegate; width:appList.width; height:46
                                 property bool isFocused: index===root.focusIdx
 
                                 Rectangle {
                                     anchors.fill:parent; color:root.ink
-                                    opacity: appMA.containsMouse||parent.isFocused ? 1 : 0
+                                    opacity: appDelegate.isFocused ? 1 : 0
                                     Behavior on opacity { NumberAnimation { duration:120 } }
                                 }
                                 Rectangle {
-                                    anchors { left:parent.left; top:parent.top; bottom:parent.bottom }
-                                    width:2; color:root.accent
-                                    opacity: appMA.containsMouse||parent.isFocused ? 1 : 0
+                                    anchors { fill:parent; leftMargin:6; rightMargin:6; topMargin:5; bottomMargin:5 }
+                                    color: "transparent"
+                                    border.width: 1
+                                    border.color: Qt.rgba(10/255,10/255,10/255,0.38)
+                                    opacity: appDelegate.isFocused ? 1 : 0
                                     Behavior on opacity { NumberAnimation { duration:120 } }
-                                }
-                                Rectangle {
-                                    anchors.bottom:parent.bottom
-                                    visible: index<root.filteredApps.length-1
-                                    x:24; width:parent.width-48; height:1; color:root.lineSoft; opacity:0.5
                                 }
 
                                 Item {
                                     id: appRow
-                                    readonly property bool highlighted: appMA.containsMouse || appDelegate.isFocused
+                                    readonly property bool highlighted: appDelegate.isFocused
                                     anchors {
                                         left: parent.left
                                         right: parent.right
@@ -460,16 +568,17 @@ Item {
                                         }
                                         width: 22
                                         text: modelData.id
-                                        font.pixelSize: 9
-                                        font.letterSpacing: 1.5
+                                        font.family: root.listFont
+                                        font.pixelSize: 11
+                                        font.letterSpacing: 0.4
                                         color: appRow.highlighted
-                                               ? Qt.rgba(10/255,10/255,10/255,0.75)
-                                               : root.inkSoft
+                                               ? "#0a0a0a" : "#b1a8a2"
                                         Behavior on color { ColorAnimation { duration:120 } }
                                     }
 
-                                    Rectangle {
+                                    Item {
                                         id: appIcon
+                                        property color ink: appRow.highlighted ? "#0a0a0a" : root.ink
                                         anchors {
                                             left: appId.right
                                             leftMargin: 14
@@ -477,20 +586,19 @@ Item {
                                         }
                                         width: 28
                                         height: 28
-                                        color: "transparent"
-                                        border.color: appRow.highlighted
-                                                      ? Qt.rgba(10/255,10/255,10/255,0.6)
-                                                      : root.ink
-                                        border.width: 1
-                                        Behavior on border.color { ColorAnimation { duration:120 } }
+                                        Behavior on ink { ColorAnimation { duration:120 } }
+
+                                        Rectangle { x:0; y:0; width:7; height:1; color:appIcon.ink }
+                                        Rectangle { x:0; y:0; width:1; height:7; color:appIcon.ink }
+                                        Rectangle { x:parent.width-7; y:parent.height-1; width:7; height:1; color:appIcon.ink }
+                                        Rectangle { x:parent.width-1; y:parent.height-7; width:1; height:7; color:appIcon.ink }
 
                                         Text {
                                             anchors.centerIn: parent
                                             text: modelData.icon
-                                            font.pixelSize: 12
-                                            color: appRow.highlighted
-                                                   ? "#0a0a0a" : root.ink
-                                            Behavior on color { ColorAnimation { duration:120 } }
+                                            font.family: root.listFont
+                                            font.pixelSize: 16
+                                            color: appIcon.ink
                                         }
                                     }
 
@@ -503,28 +611,32 @@ Item {
                                         spacing: 14
 
                                         Text {
+                                            // Stable per app, including while filtering the list.
+                                            readonly property int labelVariant: (parseInt(modelData.id, 10) || 0) % 9
                                             anchors.verticalCenter: parent.verticalCenter
+                                            anchors.verticalCenterOffset: [-1, -4, 2, 5, -2, 3, -5, 1, 0][labelVariant]
+                                            rightPadding: [0, 30, 9, 44, 18, 4, 36, 13, 24][labelVariant]
                                             text: (root.catLabels[modelData.cat] || modelData.cat).toUpperCase()
                                             font.pixelSize: 9
-                                            font.letterSpacing: 2
+                                            font.letterSpacing: [2.1, 1.1, 2.7, 1.5, 3.1, 1.8, 2.4, 1.3, 2.9][labelVariant]
                                             color: appRow.highlighted
                                                    ? Qt.rgba(10/255,10/255,10/255,0.65)
                                                    : root.inkSoft
                                             Behavior on color { ColorAnimation { duration:120 } }
                                         }
 
-                                        Text {
+                                        Rectangle {
                                             anchors.verticalCenter: parent.verticalCenter
-                                            text: "▸"
-                                            font.pixelSize: 14
-                                            color: root.accent
+                                            width: 6
+                                            height: width
+                                            rotation: 45
+                                            color: "#0a0a0a"
                                             opacity: appRow.highlighted ? 1 : 0
                                             Behavior on opacity { NumberAnimation { duration:120 } }
                                         }
                                     }
 
-                                    Column {
-                                        id: appInfo
+                                    Text {
                                         anchors {
                                             left: appIcon.right
                                             right: appRightInfo.left
@@ -532,33 +644,15 @@ Item {
                                             rightMargin: 20
                                             verticalCenter: parent.verticalCenter
                                         }
-                                        spacing: 2
-
-                                        Text {
-                                            width: parent.width
-                                            text: modelData.name
-                                            elide: Text.ElideRight
-                                            font.pixelSize: 12
-                                            font.letterSpacing: 1.2
-                                            font.weight: Font.Medium
-                                            color: appRow.highlighted
-                                                   ? "#0a0a0a" : root.ink
-                                            Behavior on color { ColorAnimation { duration:120 } }
-                                        }
-
-                                        Text {
-                                            width: parent.width
-                                            text: modelData.meta
-                                            elide: Text.ElideRight
-                                            font.pixelSize: 9
-                                            font.letterSpacing: 1.5
-                                            opacity: appRow.highlighted ? 1 : 0
-                                            color: appRow.highlighted
-                                                   ? Qt.rgba(10/255,10/255,10/255,0.75)
-                                                   : root.inkSoft
-                                            Behavior on opacity { NumberAnimation { duration:120 } }
-                                            Behavior on color { ColorAnimation { duration:120 } }
-                                        }
+                                        text: modelData.name
+                                        elide: Text.ElideRight
+                                        font.family: root.listNameFont
+                                        font.pixelSize: 14
+                                        font.letterSpacing: -0.25
+                                        font.weight: Font.Medium
+                                        color: appRow.highlighted
+                                               ? "#0a0a0a" : root.ink
+                                        Behavior on color { ColorAnimation { duration:120 } }
                                     }
                                 }
 
@@ -581,68 +675,59 @@ Item {
 
             // ── FOOTER ──
             Item {
-                id:footer; anchors.bottom:parent.bottom; width:parent.width; height:44
+                id: footer
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: 44
+                readonly property bool reducedMotion: Quickshell.env("TSUGUMORI_REDUCED_MOTION") === "1"
+                Keys.onEscapePressed: root.closeMenu()
                 Rectangle { anchors.top:parent.top; width:parent.width; height:1; color:root.lineSoft }
+
                 Row {
-                    anchors { left:parent.left; right:parent.right; verticalCenter:parent.verticalCenter
-                              leftMargin:28; rightMargin:28 }
-                    Row {
-                        spacing:0
-                        Repeater {
-                            model:[
-                                {l:"TERMINAL", cmd:"kitty"},
-                                {l:"FILES",    cmd:"kitty -e yazi"},
-                                {l:"LOCK",     cmd:"${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/lock.sh"},
-                                {l:"SHUTDOWN", cmd:"systemctl poweroff", danger:true},
-					{l:"RESTART",  cmd:"systemctl reboot", danger:true}
-                            ]
-                            delegate: Item {
-                                height:44; width:faLbl.implicitWidth+24
-                                Rectangle {
-                                    visible:index>0
-                                    anchors{left:parent.left;top:parent.top;bottom:parent.bottom}
-                                    width:1; color:root.lineSoft
-                                }
-                                Text {
-                                    id:faLbl; anchors.centerIn:parent
-                                    text:modelData.l; font.pixelSize:9; font.letterSpacing:2.5
-                                    color: faMA.containsMouse ? (modelData.danger===true ? root.accent : root.inkStrong) : root.inkSoft
-                                    Behavior on color { ColorAnimation { duration:150 } }
-                                }
-                                Rectangle {
-                                    anchors{bottom:parent.bottom;horizontalCenter:parent.horizontalCenter;bottomMargin:6}
-                                    width:faMA.containsMouse?faLbl.implicitWidth:0; height:1; color:root.accent
-                                    Behavior on width { NumberAnimation { duration:200; easing.type:Easing.OutQuart } }
-                                }
-                                MouseArea { id:faMA; anchors.fill:parent; hoverEnabled:true; onClicked:root.launch(modelData.cmd) }
-                            }
-                        }
+                    id: launchActions
+                    anchors { left:parent.left; leftMargin:24; verticalCenter:parent.verticalCenter }
+                    spacing: 8
+                    MenuFooterButton {
+                        text: "TERMINAL"
+                        reducedMotion: footer.reducedMotion
+                        onClicked: root.launch("kitty")
                     }
-                    Item { width:parent.width-380; height:1 }
-                    Row {
-                        spacing:14; anchors.verticalCenter:parent.verticalCenter
-                        Repeater {
-                            model:[["↑↓","NAV"],["↵","OPEN"],["ESC","CLOSE"]]
-                            Row {
-                                spacing:5; anchors.verticalCenter:parent.verticalCenter
-                                Rectangle {
-                                    width:kbdT.implicitWidth+8; height:16; color:"transparent"
-                                    border.color:root.lineSoft; border.width:1
-                                    Text { id:kbdT; anchors.centerIn:parent; text:modelData[0]; font.pixelSize:9; font.letterSpacing:1; color: root.ink }
-                                }
-                                Text { text:modelData[1]; anchors.verticalCenter:parent.verticalCenter; font.pixelSize:9; font.letterSpacing:2; color: root.inkSoft }
-                            }
-                        }
+                    MenuFooterButton {
+                        text: "FILES"
+                        reducedMotion: footer.reducedMotion
+                        onClicked: root.launch("kitty -e yazi")
+                    }
+                }
+
+                Row {
+                    id: sessionActions
+                    anchors { right:parent.right; rightMargin:24; verticalCenter:parent.verticalCenter }
+                    spacing: 8
+                    MenuFooterButton {
+                        text: "LOCK"
+                        reducedMotion: footer.reducedMotion
+                        onClicked: root.launch("${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/lock.sh")
+                    }
+                    MenuFooterButton {
+                        text: "SHUTDOWN"
+                        reducedMotion: footer.reducedMotion
+                        onClicked: root.launch("systemctl poweroff")
+                    }
+                    MenuFooterButton {
+                        text: "RESTART"
+                        reducedMotion: footer.reducedMotion
+                        onClicked: root.launch("systemctl reboot")
                     }
                 }
             }
         }
 
         // Wipe curtain — sibling of the content.
-        Rectangle {
+        CurtainSurface {
             id:wipeCurtain
             anchors{top:parent.top;bottom:parent.bottom}
-            color:"#e8e8e8"; z:50; width:2; x:root.lw-2
+            transform: Translate { x: panelHost.closeOffset }
+            z:50; width:2; x:root.lw-2
         }
     }
 
@@ -651,6 +736,7 @@ Item {
         id: wipeReveal
         onStarted: {
             panelHost.visible = true
+            panelHost.closeOffset = 0
             panelHost.x       = (root.screenW - root.lw) / 2 + root.lw + 2
             wipeCurtain.x     = 0
             wipeCurtain.width = root.lw
@@ -672,16 +758,30 @@ Item {
         }
     }
 
-    SequentialAnimation {
+    ParallelAnimation {
         id: wipeHide
+        // Match the preview: right-edge cover, then a clipped slide with overlap.
+        // 780 ms total, matching the opening transition.
+        onStarted: wipeCurtain.x = root.lw - wipeCurtain.width
         ParallelAnimation {
-            NumberAnimation { target:wipeCurtain; property:"x";     from:root.lw-2; to:0;       duration:180; easing.type:Easing.InOutQuart }
-            NumberAnimation { target:wipeCurtain; property:"width"; from:2;         to:root.lw; duration:180; easing.type:Easing.InOutQuart }
+            NumberAnimation {
+                target: wipeCurtain; property: "x"; to: 0; duration: 420
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: [0.76, 0, 0.24, 1, 1, 1]
+            }
+            NumberAnimation {
+                target: wipeCurtain; property: "width"; to: root.lw; duration: 420
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: [0.76, 0, 0.24, 1, 1, 1]
+            }
         }
-        NumberAnimation {
-            target:panelHost; property:"x"
-            from:(root.screenW-root.lw)/2; to:(root.screenW-root.lw)/2+root.lw+2
-            duration:340; easing.type:Easing.InExpo
+        SequentialAnimation {
+            PauseAnimation { duration: 270 }
+            NumberAnimation {
+                target: panelHost; property: "closeOffset"; to: root.lw * 1.02; duration: 510
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: [0.76, 0, 0.24, 1, 1, 1]
+            }
         }
         onFinished: { panelHost.visible=false; root.wipeHideRunning=false }
     }
@@ -691,7 +791,7 @@ Item {
         if (menuOpen) return
         menuOpen    = true
         searchQuery = ""
-        focusIdx    = 0
+        focusIdx    = -1
         currentCat  = "all"
         // Sync TextInput text with the empty property.
         searchInput.text = ""

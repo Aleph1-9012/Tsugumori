@@ -71,6 +71,7 @@ Scope {
         togglePending = false
         monitorTimeout.stop()
         root.store.flush()
+        editor.resetCopyFeedback()
         if (!opened) return
         opened = false
         recoveryConfirm = false
@@ -199,10 +200,10 @@ Scope {
             clip: true
             enabled: root.opened
 
-            Rectangle {
+            CurtainSurface {
                 anchors { top: parent.top; bottom: parent.bottom; right: parent.right }
                 width: parent.width * root.curtainCover
-                color: Theme.fg
+                uiScale: drawer.s
                 z: 50
                 visible: width > 0
             }
@@ -241,8 +242,30 @@ Scope {
                 anchors.margins: 20 * drawer.s
                 property bool syncing: false
                 property string loadedId: ""
+                property bool copied: false
+                readonly property string copyText: titleField.text && bodyField.text
+                                                   ? titleField.text + "\n\n" + bodyField.text
+                                                   : titleField.text || bodyField.text
+
+                function resetCopyFeedback() {
+                    copied = false
+                    copyFeedback.stop()
+                }
+                function copyNote() {
+                    if (!root.store.ready || root.store.activeIndex < 0 || !copyText.length) return
+                    Quickshell.clipboardText = copyText
+                    copied = true
+                    copyFeedback.restart()
+                }
+                onCopyTextChanged: resetCopyFeedback()
+                Timer {
+                    id: copyFeedback
+                    interval: 1600
+                    onTriggered: editor.copied = false
+                }
 
                 function syncNote() {
+                    resetCopyFeedback()
                     syncing = true
                     loadedId = root.store.activeId
                     const index = root.store.find(loadedId)
@@ -385,6 +408,16 @@ Scope {
                         Layout.fillWidth: true
                         NotesButton { id: newButton; text: "+ NEW NOTE"; enabled: root.store.ready; onClicked: root.store.createNote() }
                         Item { Layout.fillWidth: true }
+                        NotesButton {
+                            text: editor.copied ? "COPIED" : "COPY"
+                            Layout.preferredWidth: newButton.implicitWidth
+                            Layout.preferredHeight: newButton.implicitHeight
+                            visible: root.store.ready && root.store.activeIndex >= 0
+                            enabled: root.store.ready && root.store.activeIndex >= 0 && editor.copyText.length > 0
+                            Accessible.name: editor.copied ? "Note copied" : "Copy note"
+                            Accessible.description: "Copy the selected note's title and contents to the clipboard"
+                            onClicked: editor.copyNote()
+                        }
                         Text { text: root.store.status; font.family: Theme.mono; font.pixelSize: 11 * drawer.s; color: root.store.errorCode ? Theme.a1 : "#909090" }
                     }
                     RowLayout {

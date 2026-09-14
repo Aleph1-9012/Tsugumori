@@ -3,10 +3,11 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import "../services"
+import "../components/controlcenter"
 
 // ═════════════════════════════════════════════════════════════════════
 //   Knights of Sidonia Control Center — Quickshell module
-//   1:1 port of the HTML v4 mockup
+//   Live services with the approved B2 control-center presentation
 //   IPC : qs ipc call ctrl toggle
 // ═════════════════════════════════════════════════════════════════════
 
@@ -18,27 +19,11 @@ ShellRoot {
     property string xdgConfigHome: Quickshell.env("XDG_CONFIG_HOME") || (home + "/.config")
     readonly property string runtimeBase: Quickshell.env("XDG_RUNTIME_DIR") || (home + "/.cache/tsugumori/runtime")
     readonly property string runtimeDir: runtimeBase + (Quickshell.env("XDG_RUNTIME_DIR") ? "/tsugumori" : "")
-    property bool runtimeReady: false
     Process {
         id: runtimeInitProc
         command: ["install", "-d", "-m", "700", root.runtimeDir]
         running: true
-        onExited: exitCode => { root.runtimeReady = exitCode === 0 }
     }
-
-    // ── Sidonia palette ──
-    readonly property color colCard:     "#111111"
-    readonly property color colCardSoft: Qt.rgba(17/255, 17/255, 17/255, 0.4)
-    readonly property color colInk:      "#e8e8e8"
-    readonly property color colInkSoft:  "#909090"
-    readonly property color colHi:       "#cc1515"
-    readonly property color colLight:    "#e8e8e8"
-
-    // ── Layout ──
-    readonly property int  slotGapV: 150
-    readonly property int  slotGapH: 350
-    readonly property int  panShiftV: 320   // vertical (top/bottom): centers the sub-menu and settings
-    readonly property int  panShiftH: 700   // horizontal (left/right): sub-menu crosses the screen
 
     // ── State ──
     property bool   open:    false
@@ -47,6 +32,9 @@ ShellRoot {
     property string slot:    "center"
     property string sub:     ""
     property string action:  ""
+    property bool keyboardNavigation: false
+    property bool reducedMotion: false
+    property var lastSubs: ({})
 
     // ── Data ──
     readonly property var subs: ({
@@ -85,21 +73,35 @@ ShellRoot {
     function detailKey() { return slot + "." + sub }
     function subList(s)  { return root.subs[s] || [] }
 
+    function summaryForSlot(key) {
+        if (key === "top") return [
+            wifiEnabled ? (wifiCurrentSSID || "Wi-Fi enabled") : "Wi-Fi disabled",
+            "WI-FI " + (wifiEnabled ? "ON" : "OFF"), "BT " + (btEnabled ? "ON" : "OFF")]
+        if (key === "bottom") {
+            var sink = audioSinks.find(function(item) { return item.isDefault })
+            return [sink ? sink.description : audioDefaultSink || "No output",
+                "VOL " + (audioMuted ? "MUTE" : Math.round(audioVolume * 100) + "%"),
+                "BRT " + (brightnessAvailable ? Math.round(brightnessLevel * 100) + "%" : "—")]
+        }
+        if (key === "right") return [notifications.length + " notifications", "HISTORY", "DND " + (dndEnabled ? "ON" : "OFF")]
+        if (key === "left") return [qshareUrl ? "Transfer active" : "Send / receive", qshareUrl ? "ACTIVE" : "READY", qshareTunnel ? "INTERNET" : "LOCAL"]
+        return ["", "", ""]
+    }
+
     // ── Build the action list dynamically for the focused sub-menu ──
     function actList() {
         var key = detailKey()
         // Wi-Fi: toggle plus one button per scanned network.
         if (key === "top.wifi") {
-            var acts = [{key:"toggle", label: wifiEnabled ? "Disable Wi-Fi" : "Enable Wi-Fi"}]
+            var acts = [{key:"toggle", label: wifiEnabled ? "Disable Wi-Fi" : "Enable Wi-Fi", primary:true}]
             if (wifiEnabled) {
                 for (var i = 0; i < wifiNetworks.length; i++) {
                     var n = wifiNetworks[i]
-                    var prefix = n.active ? "✓ " : "  "
-                    var sigBars = n.signal >= 75 ? "▰▰▰" : n.signal >= 50 ? "▰▰▱" : n.signal >= 25 ? "▰▱▱" : "▱▱▱"
-                    var lock = (n.security && n.security !== "" && n.security !== "--") ? " ⚿" : "  "
                     acts.push({
                         key: "connect:" + n.ssid,
-                        label: prefix + n.ssid + "  " + sigBars + lock
+                        label: n.ssid, kind:"row", selected:!!n.active,
+                        signalBars:n.signal >= 75 ? 3 : n.signal >= 50 ? 2 : n.signal >= 25 ? 1 : 0,
+                        secured:!!n.security && n.security !== "--"
                     })
                 }
             }
@@ -107,20 +109,19 @@ ShellRoot {
         }
         // Bluetooth
         if (key === "top.bluetooth") {
-            var acts2 = [{key:"toggle", label: btEnabled ? "Disable Bluetooth" : "Enable Bluetooth"}]
+            var acts2 = [{key:"toggle", label: btEnabled ? "Disable Bluetooth" : "Enable Bluetooth", primary:true}]
             if (btEnabled) {
-                acts2.push({key: "scan", label: btScanning ? "◉ Scanning… (tap to stop)" : "⌕ Scan for new devices"})
+                acts2.push({key: "scan", label: btScanning ? "Stop scanning" : "Scan for devices"})
                 for (var j = 0; j < btDevices.length; j++) {
                     var d = btDevices[j]
-                    var prefix = d.connected ? "✓ " : (d.paired ? "· " : "+ ")
-                    var label = prefix + d.name
                     var aKey
                     if (d.connected)      aKey = "disconnect:" + d.mac
                     else if (d.paired)    aKey = "connect:"    + d.mac
                     else                  aKey = "pair:"       + d.mac
-                    acts2.push({key: aKey, label: label})
+                    acts2.push({key: aKey, identity:"device:" + d.mac, label:d.name, kind:"row", selected:!!d.connected,
+                        metadata:d.connected ? "LINKED" : d.paired ? "PAIRED" : "NEW"})
                     if (d.paired) {
-                        acts2.push({key: "remove:" + d.mac, label: "    × Remove " + d.name})
+                        acts2.push({key: "remove:" + d.mac, label: "Remove " + d.name})
                     }
                 }
             }
@@ -131,31 +132,30 @@ ShellRoot {
             var acts3 = []
             for (var k = 0; k < audioSinks.length; k++) {
                 var s = audioSinks[k]
-                var pre = s.isDefault ? "✓ " : "  "
-                acts3.push({key: "set-sink:" + s.name, label: pre + s.description})
+                acts3.push({key: "set-sink:" + s.name, label: s.description, kind:"row", selected:!!s.isDefault})
             }
             if (acts3.length === 0) acts3.push({key:"none", label:"No outputs found"})
             return acts3
         }
         // Audio volume: no list, only the separately rendered slider.
         if (key === "bottom.volume") {
-            return [{key:"mute-toggle", label: audioMuted ? "Unmute" : "Mute"}]
+            return [{key:"mute-toggle", label: audioMuted ? "Unmute audio" : "Mute audio", primary:true}]
         }
         // Quickshare Send (qshare.py)
         if (key === "left.send") {
             var acts4 = []
             acts4.push({key:"pick-file", label: pendingFilePath
-                ? "✓ " + pendingFilePath.split("/").pop()
-                : "⌕ Pick file with Yazi"})
+                ? pendingFilePath.split("/").pop()
+                : "Pick file with Yazi", primary:true})
             if (pendingFilePath !== "") {
-                acts4.push({key:"clear-file", label: "× Cancel selection"})
+                acts4.push({key:"clear-file", label: "Cancel selection"})
             }
             acts4.push({key:"toggle-tunnel",
-                label: qshareTunnel ? "[✓] Tunnel (Internet)" : "[ ] Tunnel (Internet)"})
+                label:"Internet tunnel", metadata:qshareTunnel ? "ON" : "OFF"})
             acts4.push({key:"toggle-keepalive",
-                label: qshareKeepAlive ? "[✓] Keep alive" : "[ ] Keep alive"})
+                label:"Keep alive", metadata:qshareKeepAlive ? "ON" : "OFF"})
             if (pendingFilePath !== "") {
-                acts4.push({key:"start-send", label: "→ Generate QR"})
+                acts4.push({key:"start-send", label: "Generate QR", primary:true})
             }
             return acts4
         }
@@ -163,12 +163,12 @@ ShellRoot {
         if (key === "left.receive") {
             var acts5 = []
             var dirShort = qshareOutputDir.replace(home, "~")
-            acts5.push({key:"cycle-output", label: "Output: " + dirShort + " ▸"})
+            acts5.push({key:"cycle-output", label: "Output: " + dirShort})
             acts5.push({key:"toggle-tunnel",
-                label: qshareTunnel ? "[✓] Tunnel (Internet)" : "[ ] Tunnel (Internet)"})
+                label:"Internet tunnel", metadata:qshareTunnel ? "ON" : "OFF"})
             acts5.push({key:"toggle-keepalive",
-                label: qshareKeepAlive ? "[✓] Keep alive" : "[ ] Keep alive"})
-            acts5.push({key:"start-recv", label: "→ Open receiver"})
+                label:"Keep alive", metadata:qshareKeepAlive ? "ON" : "OFF"})
+            acts5.push({key:"start-recv", label: "Open receiver", primary:true})
             return acts5
         }
         // Notifications History
@@ -178,6 +178,7 @@ ShellRoot {
                 var n2 = notifications[p]
                 acts6.push({
                     key: "notif:" + p,
+                    identity:"notification:" + (n2.id === undefined ? p : n2.id),
                     label: n2.summary || "(empty)",
                     body: n2.body || "",
                     app: n2.app || "",
@@ -194,7 +195,7 @@ ShellRoot {
         }
         // Notifications DND
         if (key === "right.dnd") {
-            return [{key:"toggle-dnd", label: dndEnabled ? "Disable DND" : "Enable DND"}]
+            return [{key:"toggle-dnd", label: dndEnabled ? "Disable do not disturb" : "Enable do not disturb", primary:true}]
         }
         // Other slots: static actions from the details dictionary.
         var dd = root.details[key]
@@ -287,7 +288,7 @@ ShellRoot {
     WifiService {
         id: wifiService
         helperPath: root.networkScriptPath
-        active: root.open && root.slot === "top"
+        active: root.open
 
         onPasswordConnectionFinished: success => {
             if (success) {
@@ -310,9 +311,10 @@ ShellRoot {
     property string audioDefaultSink: ""
     property real   audioVolume: 0.5      // 0.0 - 1.0
     property bool   audioMuted: false
+    property int pendingAudioPercent: -1
 
     Timer {
-        interval: 1500; running: root.open && root.slot === "bottom"; repeat: true; triggeredOnStart: true
+        interval: 1500; running: root.open; repeat: true; triggeredOnStart: true
         onTriggered: pollAudio.running = true
     }
     Process {
@@ -338,7 +340,8 @@ ShellRoot {
                         root.audioDefaultSink = line.substring(8).trim()
                     } else if (line.indexOf("VOLUME:") === 0) {
                         var v = parseInt(line.substring(7))
-                        if (!isNaN(v)) root.audioVolume = v / 100
+                        if (!isNaN(v) && root.pendingAudioPercent < 0 && !volumeWriteTimer.running && !setVolumeProc.running)
+                            root.audioVolume = v / 100
                     } else if (line.indexOf("MUTE:") === 0) {
                         root.audioMuted = line.substring(5).trim() === "yes"
                     } else if (line.indexOf("SINK:") === 0) {
@@ -359,9 +362,35 @@ ShellRoot {
         }
     }
 
+    // Keep the last slider value even while a previous write is still running.
+    function setAudioPercent(value) {
+        var percent = Math.max(0, Math.min(100, Math.round(value)))
+        audioVolume = percent / 100
+        pendingAudioPercent = percent
+        if (!volumeWriteTimer.running) volumeWriteTimer.start()
+    }
+    function flushVolume() {
+        if (setVolumeProc.running || pendingAudioPercent < 0) return
+        var percent = pendingAudioPercent
+        pendingAudioPercent = -1
+        setVolumeProc.command = ["pactl", "set-sink-volume", "@DEFAULT_SINK@", percent + "%"]
+        setVolumeProc.running = true
+    }
+    Timer { id: volumeWriteTimer; interval: 60; onTriggered: root.flushVolume() }
+    Process {
+        id: setVolumeProc
+        running: false
+        onExited: exitCode => {
+            if (exitCode !== 0) console.warn("ControlCenter: volume update failed")
+            if (root.pendingAudioPercent >= 0) root.flushVolume()
+            else pollAudio.running = true
+        }
+    }
+
     // ── System data: Display brightness ──
     property real   brightnessLevel: 1.0
     property bool   brightnessAvailable: false
+    property string brightnessLoadingMonitor: ""
     property int    brightnessRequestedPercent: 100
     property int    brightnessPendingPercent: -1
     property string brightnessPendingMonitor: ""
@@ -379,17 +408,48 @@ ShellRoot {
             next[key] = brightnessByMonitor[key]
         next[name] = Math.max(0.01, Math.min(1.0, value))
         brightnessByMonitor = next
-        if (name === activeMonitor) syncBrightnessSlider()
     }
 
     function brightnessStatePath(name) {
         return runtimeDir + "/brightness-" + name
     }
 
-    function syncBrightnessSlider() {
-        brightnessAvailable = brightnessByMonitor[activeMonitor] !== undefined
-        brightnessLevel = monitorBrightness(activeMonitor)
-        brightnessRequestedPercent = Math.round(brightnessLevel * 100)
+    function loadBrightness() {
+        if (setBrightnessProc.running || brightnessPendingPercent >= 0
+                || loadBrightnessProc.running)
+            return
+
+        var monitor = activeMonitor
+        if (monitor === "") return
+
+        brightnessLoadingMonitor = monitor
+        loadBrightnessProc.command = ["sh", "-c",
+            "if [ -r \"$1\" ]; then cat -- \"$1\"; else printf '100\\n'; fi",
+            "brightness-state", brightnessStatePath(monitor)]
+        loadBrightnessProc.running = true
+    }
+
+    Process {
+        id: loadBrightnessProc
+        command: []
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                // Do not let a load overwrite a drag that is being applied.
+                if (root.brightnessPendingPercent >= 0 || setBrightnessProc.running)
+                    return
+                root.brightnessAvailable = false
+
+                var percent = parseInt(this.text.trim())
+                if (isNaN(percent)) return
+                percent = Math.max(1, Math.min(100, percent))
+                root.brightnessLevel = percent / 100
+                root.brightnessRequestedPercent = percent
+                root.rememberMonitorBrightness(root.brightnessLoadingMonitor,
+                    root.brightnessLevel)
+                root.brightnessAvailable = true
+            }
+        }
     }
 
     Process {
@@ -422,7 +482,9 @@ ShellRoot {
         var monitor = monitorName || activeMonitor
         if (monitor === "") return
         var percent = Math.max(1, Math.min(100, Math.round(value)))
-        rememberMonitorBrightness(monitor, percent / 100)
+        brightnessRequestedPercent = percent
+        brightnessLevel = percent / 100
+        rememberMonitorBrightness(monitor, brightnessLevel)
         brightnessPendingPercent = percent
         brightnessPendingMonitor = monitor
         if (!setBrightnessProc.running)
@@ -458,7 +520,7 @@ ShellRoot {
     // Poll notification history from the Notifications.qml daemon via IPC.
     Timer {
         interval: 1500
-        running: root.open && root.slot === "right"
+        running: root.open
         repeat: true
         triggeredOnStart: true
         onTriggered: {
@@ -506,11 +568,13 @@ ShellRoot {
         var list = root.notifications.slice()
         list.splice(idx, 1)
         root.notifications = list
+        root.expandedNotifIdx = -1
     }
     function dismissAllNotifs() {
         notifActProc.command = ["sh","-c","qs ipc call notifs clearAll"]
         notifActProc.running = true
         root.notifications = []
+        root.expandedNotifIdx = -1
     }
     function invokeNotif(idx) {
         // The daemon invokes and dismisses in one call.
@@ -716,7 +780,7 @@ ShellRoot {
     }
 
     Timer {
-        interval: 3000; running: root.open && root.slot === "top"; repeat: true; triggeredOnStart: true
+        interval: 3000; running: root.open; repeat: true; triggeredOnStart: true
         onTriggered: pollBt.running = true
     }
     Process {
@@ -796,16 +860,26 @@ ShellRoot {
         if (slot === "top")    { wifiService.refresh(); pollBt.running = true }
         if (slot === "bottom") {
             pollAudio.running = true
-            root.syncBrightnessSlider()
+            root.loadBrightness()
         }
         if (slot === "right")  {
             pollNotifsHistory.running = true
             pollNotifsDnd.running = true
         }
     }
-    onSubChanged: cancelWifiPrompt()
+    onSubChanged: {
+        cancelWifiPrompt()
+        if (sub && slot !== "center") {
+            var next = Object.assign({}, lastSubs)
+            next[slot] = sub
+            lastSubs = next
+        }
+    }
     onLevelChanged: { if (level !== 3) cancelWifiPrompt() }
-    onOpenChanged:  { if (!open) cancelWifiPrompt() }
+    onOpenChanged: {
+        if (!open) cancelWifiPrompt()
+        else { loadBrightness(); keyboardNavigation = false }
+    }
 
     // Cancel the Wi-Fi prompt cleanly (close TextInput and reset key-handler focus).
     function cancelWifiPrompt() {
@@ -815,7 +889,7 @@ ShellRoot {
         wifiError = ""
     }
 
-    function firstSub(s) { var l = subList(s); return l.length ? l[0].key : "" }
+    function firstSub(s) { var l = subList(s); return lastSubs[s] || (l.length ? l[0].key : "") }
     function firstAction() { var l = actList(); return l.length ? l[0].key : "" }
 
     // ── Button action dispatcher ──
@@ -903,7 +977,8 @@ ShellRoot {
                 cmd = "pactl set-sink-mute @DEFAULT_SINK@ toggle"
             } else if (actionKey.indexOf("set-volume:") === 0) {
                 var vol = actionKey.substring(11)
-                cmd = "pactl set-sink-volume @DEFAULT_SINK@ " + vol + "%"
+                root.setAudioPercent(Number(vol))
+                return
             }
         }
         // ── Quickshare Send (qshare.py) ──
@@ -1004,6 +1079,10 @@ ShellRoot {
     }
 
     function activateCurrent() {
+        if (level === 1 && slot !== "center") {
+            sub = firstSub(slot); level = 3; action = firstAction()
+            return
+        }
         if (level === 3 && action) {
             // Notification special case: first Enter expands, second invokes.
             if (slot === "right" && sub === "history" && action.indexOf("notif:") === 0) {
@@ -1036,7 +1115,7 @@ ShellRoot {
         closeTimer.start()
     }
     function back()  {
-        if (level === 3) { level = 1; sub = ""; action = ""; slot = "center" }
+        if (level === 3) { level = 1; sub = ""; action = "" }
         else close()
     }
 
@@ -1061,6 +1140,7 @@ ShellRoot {
 
     // ── Navigation ──
     function navigate(dir) {
+        keyboardNavigation = true
         if (level === 1) {
             if (slot === "center") {
                 var t = ({up:"top",down:"bottom",left:"left",right:"right"})[dir]
@@ -1081,6 +1161,11 @@ ShellRoot {
             if (t2 && t2 !== slot) slot = t2
         }
         else if (level === 3) {
+            if (slot === "bottom" && sub === "volume"
+                    && (dir === "left" || dir === "right")) {
+                setAudioPercent(audioVolume * 100 + (dir === "right" ? 5 : -5))
+                return
+            }
             if (slot === "bottom" && sub === "brightness"
                     && (dir === "left" || dir === "right")) {
                 var brightnessStep = dir === "right" ? 5 : -5
@@ -1103,7 +1188,7 @@ ShellRoot {
                     else                              { level = 1; sub = ""; action = ""; slot = "center" }
                 }
             } else if (dir === "left" || dir === "right") {
-                var towardsDetail = (slot === "left") ? "left" : "right"
+                var towardsDetail = "right"
                 if (dir === towardsDetail) {
                     if (actIdx < actKeys.length - 1) action = actKeys[actIdx + 1]
                 } else {
@@ -1116,7 +1201,11 @@ ShellRoot {
 
     // ── Active screen detection ──
     property string activeMonitor: ""
-    onActiveMonitorChanged: syncBrightnessSlider()
+    onActiveMonitorChanged: {
+        root.brightnessAvailable = false
+        if (root.open)
+            root.loadBrightness()
+    }
     Process {
         id: getMonitorProc
         running: root.open
@@ -1133,6 +1222,36 @@ ShellRoot {
     //   PANEL
     // ═══════════════════════════════════
 
+    // The available hardware brightness interfaces do not visibly affect both
+    // panels, so each screen gets the same input-transparent dimming surface.
+    Variants {
+        model: Quickshell.screens
+        PanelWindow {
+            required property var modelData
+            screen: modelData
+            anchors.top: true
+            anchors.bottom: true
+            anchors.left: true
+            anchors.right: true
+            exclusionMode: ExclusionMode.Ignore
+            color: "transparent"
+            visible: root.monitorBrightness(modelData.name) < 0.999
+            implicitWidth: modelData.width
+            implicitHeight: modelData.height
+            WlrLayershell.layer: WlrLayer.Top
+            WlrLayershell.namespace: "tsugumori-brightness-dimmer"
+            WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+            mask: Region { width: 0; height: 0 }
+
+            Rectangle {
+                anchors.fill: parent
+                color: "#000000"
+                opacity: 1.0 - root.monitorBrightness(modelData.name)
+            }
+        }
+    }
+
     Variants {
         model: Quickshell.screens
         PanelWindow {
@@ -1145,41 +1264,10 @@ ShellRoot {
             implicitWidth: modelData.width
             implicitHeight: modelData.height
             WlrLayershell.layer: WlrLayer.Overlay
-            WlrLayershell.keyboardFocus: (root.open && !root.closing && isActive)
+            WlrLayershell.keyboardFocus: (root.open && modelData.name === root.activeMonitor)
                 ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
-            visible: root.open || root.closing || root.monitorBrightness(modelData.name) < 0.999
+            visible: root.open || root.closing
             readonly property bool isActive: modelData.name === root.activeMonitor
-
-            mask: Region {
-                width: root.open && !root.closing ? controlPanel.width : 0
-                height: root.open && !root.closing ? controlPanel.height : 0
-            }
-
-            // Restore every connected screen, even while the controls are closed.
-            Process {
-                running: root.runtimeReady
-                command: ["sh", "-c",
-                    "if [ -r \"$1\" ]; then cat -- \"$1\"; else printf '100\\n'; fi",
-                    "brightness-state", root.brightnessStatePath(controlPanel.modelData.name)]
-                stdout: StdioCollector {
-                    onStreamFinished: {
-                        var monitor = controlPanel.modelData.name
-                        // A late startup read must not replace a newer adjustment.
-                        if (root.brightnessByMonitor[monitor] !== undefined) return
-                        var percent = parseInt(this.text.trim())
-                        if (isNaN(percent)) return
-                        root.rememberMonitorBrightness(monitor,
-                            Math.max(1, Math.min(100, percent)) / 100)
-                    }
-                }
-            }
-
-            // Share the Overlay window so fullscreen apps dim beneath the controls.
-            Rectangle {
-                anchors.fill: parent
-                color: "#000000"
-                opacity: 1.0 - root.monitorBrightness(controlPanel.modelData.name)
-            }
 
             // Dim background.
             Rectangle {
@@ -1212,6 +1300,11 @@ ShellRoot {
 
                 Keys.onPressed: function(e) {
                     var k = e.key
+                    if (root.qshareUrl !== "" || qrOverlay.blocking) {
+                        if (k === Qt.Key_Escape && root.qshareUrl !== "") root.stopQshare()
+                        e.accepted = true
+                        return
+                    }
                     if (k === Qt.Key_Escape)                          { root.back();          e.accepted = true }
                     else if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) {
                         root.activateCurrent(); e.accepted = true
@@ -1222,1651 +1315,33 @@ ShellRoot {
                     else if (k === Qt.Key_D || k === Qt.Key_Right)    { root.navigate("right"); e.accepted = true }
                 }
 
-                // ── Cross with pan ──
-                Item {
-                    id: cross
+                ControlCenterView {
+                    id: controlView
+                    controller: root
+                    enabled: !qrOverlay.blocking
+                    width: Math.max(280, Math.min(936, parent.width - 80))
+                    height: implicitHeight
+                    availableHeight: parent.height - 80
+                    reducedMotion: root.reducedMotion
                     anchors.centerIn: parent
-                    width: 1; height: 1
-
-                // Global pan: slide the cross to bring the focused slot to center.
-                    anchors.horizontalCenterOffset: {
-                        if (root.level !== 3) return 0
-                        if (root.slot === "left")  return  root.panShiftH
-                        if (root.slot === "right") return -root.panShiftH
-                        return 0
-                    }
-                    anchors.verticalCenterOffset: {
-                        if (root.level !== 3) return 0
-                        if (root.slot === "top")    return  root.panShiftV
-                        if (root.slot === "bottom") return -root.panShiftV
-                        return 0
-                    }
-                    Behavior on anchors.horizontalCenterOffset {
-                        NumberAnimation { duration: 480; easing.type: Easing.OutCubic }
-                    }
-                    Behavior on anchors.verticalCenterOffset {
-                        NumberAnimation { duration: 480; easing.type: Easing.OutCubic }
-                    }
-
-                    TsugumoriArrow { axis: "top" }
-                    TsugumoriArrow { axis: "bottom" }
-                    TsugumoriArrow { axis: "left" }
-                    TsugumoriArrow { axis: "right" }
-
-                    Slot {
-                        slotKey: "center"
-                        title: "MENU"
-                        subtitle: "CONTROL CENTER"
-                        anchors.centerIn: parent
-                        isCenter: true
-                    }
-                    Slot {
-                        slotKey: "top"
-                        title: "Connection"
-                        subtitle: "Wi-Fi · Bluetooth"
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.verticalCenterOffset: (root.open && !root.closing) ? -root.slotGapV : 0
-                        Behavior on anchors.verticalCenterOffset {
-                            NumberAnimation { duration: 250; easing.type: Easing.InCirc; }
-                        }
-                    }
-                    Slot {
-                        slotKey: "bottom"
-                        title: "Audio / Display"
-                        subtitle: "Output · Volume · Brightness"
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.verticalCenterOffset: (root.open && !root.closing) ? root.slotGapV : 0
-                        Behavior on anchors.verticalCenterOffset {
-                            NumberAnimation { duration: 250; easing.type: Easing.InCirc; }
-                        }
-                    }
-                    Slot {
-                        slotKey: "left"
-                        title: "Quickshare"
-                        subtitle: "File transfer"
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.horizontalCenterOffset: (root.open && !root.closing) ? -root.slotGapH : 0
-                        Behavior on anchors.horizontalCenterOffset {
-                            NumberAnimation { duration: 250; easing.type: Easing.InCirc; }
-                        }
-                    }
-                    Slot {
-                        slotKey: "right"
-                        title: "Notifications"
-                        subtitle: "History · DND"
-                        anchors.verticalCenter: parent.verticalCenter
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.horizontalCenterOffset: (root.open && !root.closing) ? root.slotGapH : 0
-                        Behavior on anchors.horizontalCenterOffset {
-                            NumberAnimation { duration: 250; easing.type: Easing.InCirc; }
-                        }
-                    }
                 }
 
                 // ═══════════════════════════════════════════════════════
                 //   qshare QR modal (visible when qshareUrl !== "")
                 // ═══════════════════════════════════════════════════════
-                Rectangle {
-                    id: qrBackdrop
+                QuickshareOverlay {
+                    id: qrOverlay
+                    controller: root
                     anchors.fill: parent
-                    color: "#000000"
-                    opacity: (root.qshareUrl !== "" && isActive) ? 0.55 : 0
-                    visible: opacity > 0
                     z: 100
-                    Behavior on opacity { NumberAnimation { duration: 280 } }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: root.stopQshare()
-                        enabled: root.qshareUrl !== ""
-                    }
-                }
-
-                Item {
-                    id: qrModal
-                    anchors.centerIn: parent
-                    width: 380; height: 500
-                    z: 101
-                    opacity: (root.qshareUrl !== "" && isActive) ? 1 : 0
-                    visible: opacity > 0
-                    scale: (root.qshareUrl !== "" && isActive) ? 1.0 : 0.92
-                    Behavior on opacity { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
-                    Behavior on scale   { NumberAnimation { duration: 280; easing.type: Easing.OutCubic } }
-
-                    // Card background.
-                    Rectangle {
-                        anchors.fill: parent
-                        color: root.colCard
-                        border.color: root.colInk
-                        border.width: 1
-                    }
-                    // Offset inner border.
-                    Rectangle {
-                        anchors.fill: parent
-                        anchors.margins: 4
-                        color: "transparent"
-                        border.color: root.colInk
-                        border.width: 1
-                        opacity: 0.35
-                    }
-                            // L-shaped corner markers.
-                    Repeater {
-                        model: 4
-                        Item {
-                            width: 8; height: 8
-                            x: (index === 0 || index === 2) ? 6 : (qrModal.width - 8)
-                            y: (index < 2) ? -2 : (qrModal.height - 8 + 2)
-                            z: 3
-                            Rectangle { width: 8; height: 2; color: root.colInk; y: (index < 2) ? 0 : 6 }
-                            Rectangle { width: 2; height: 8; color: root.colInk; x: (index === 0 || index === 2) ? 0 : 6 }
-                        }
-                    }
-
-                    Column {
-                        anchors.fill: parent
-                        anchors.margins: 24
-                        spacing: 12
-
-                        // Header
-                        Text {
-                            text: "QSHARE"
-                            font.family: "Inter"
-                            font.pixelSize: 11
-                            font.letterSpacing: 5
-                            font.weight: Font.Medium
-                            color: root.colInk
-                            opacity: 0.6
-                        }
-                        Rectangle { width: 36; height: 1; color: root.colInk; opacity: 0.5 }
-
-                        Item { width: 1; height: 4 }
-
-                        // Label (sending/receiving).
-                        Text {
-                            width: parent.width
-                            text: root.qshareLabel
-                            font.family: "Inter"
-                            font.pixelSize: 12
-                            font.weight: Font.Medium
-                            color: root.colInk
-                            elide: Text.ElideMiddle
-                        }
-
-                        // QR area
-                        Item {
-                            width: parent.width
-                            height: 280
-                            Rectangle {
-                                anchors.centerIn: parent
-                                width: 280; height: 280
-                                color: root.colHi
-                                Image {
-                                    anchors.fill: parent
-                                    anchors.margins: 8
-                                    source: root.qshareQrPath !== ""
-                                            ? "file://" + root.qshareQrPath + "?t=" + Date.now()
-                                            : ""
-                                    fillMode: Image.PreserveAspectFit
-                                    smooth: false
-                                    cache: false
-                                    asynchronous: true
-                                }
-                                // Loading state
-                                Text {
-                                    anchors.centerIn: parent
-                                    visible: root.qshareQrPath === ""
-                                    text: "GENERATING…"
-                                    font.family: "Inter"
-                                    font.pixelSize: 10
-                                    font.letterSpacing: 3
-                                    color: root.colCard
-                                    opacity: 0.6
-                                }
-                            }
-                        }
-
-                        // Small URL text.
-                        Text {
-                            width: parent.width
-                            text: root.qshareUrl
-                            font.family: "Iosevka"
-                            font.pixelSize: 9
-                            color: root.colInk
-                            opacity: 0.55
-                            elide: Text.ElideMiddle
-                            horizontalAlignment: Text.AlignHCenter
-                        }
-
-                        // Tick / Status
-                        Text {
-                            width: parent.width
-                            text: root.qshareLastTick !== ""
-                                  ? "✓ " + root.qshareLastTick
-                                  : "Scan with phone…"
-                            font.family: "Inter"
-                            font.pixelSize: 10
-                            font.letterSpacing: 1.5
-                            color: root.colInk
-                            opacity: 0.7
-                            horizontalAlignment: Text.AlignHCenter
-                        }
-                    }
-
-                    // Cancel/Stop button at the bottom right.
-                    Rectangle {
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        anchors.margins: 14
-                        width: 90; height: 26
-                        color: cancelMA.containsMouse ? root.colInk : "transparent"
-                        border.color: root.colInk
-                        border.width: 1
-                        Behavior on color { ColorAnimation { duration: 180 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.qshareKeepAlive ? "× STOP" : "× CANCEL"
-                            font.family: "Inter"
-                            font.pixelSize: 10
-                            font.letterSpacing: 2.5
-                            font.weight: Font.Medium
-                            color: cancelMA.containsMouse ? root.colCard : root.colInk
-                            Behavior on color { ColorAnimation { duration: 180 } }
-                        }
-                        MouseArea {
-                            id: cancelMA
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.stopQshare()
-                        }
+                    requestedOpen: root.qshareUrl !== "" && controlPanel.isActive && root.open && !root.closing
+                    onBlockingChanged: {
+                        if (!blocking && root.open && !root.closing && controlPanel.isActive && root.wifiPromptSSID === "")
+                            keyHandler.forceActiveFocus()
                     }
                 }
             }
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    //   COMPONENTS
-    // ═══════════════════════════════════════════════════════════════════
-
-    // ── Sidonia arrow ──
-    component TsugumoriArrow: Item {
-        id: ar
-        property string axis: "top"
-        width: 36; height: 36
-
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.verticalCenter:   parent.verticalCenter
-        anchors.horizontalCenterOffset: {
-            if (axis === "left")  return -root.slotGapH / 2
-            if (axis === "right") return  root.slotGapH / 2
-            return 0
-        }
-        anchors.verticalCenterOffset: {
-            if (axis === "top")    return -root.slotGapV / 2
-            if (axis === "bottom") return  root.slotGapV / 2
-            return 0
-        }
-
-        readonly property bool isFocused:
-              (root.slot === axis) && (root.level === 1 || root.level === 3)
-
-        readonly property real restRotation:
-              axis === "top"    ? 180 :
-              axis === "bottom" ? 0   :
-              axis === "left"   ? 90  : -90
-        readonly property real focusRotation:
-              axis === "top"    ? 0   :
-              axis === "bottom" ? 180 :
-              axis === "left"   ? -90 : 90
-
-        Canvas {
-            id: arrowCanvas
-            anchors.fill: parent
-            rotation: ar.isFocused ? ar.focusRotation : ar.restRotation
-
-            // Code-native rendering of the directional silhouette.
-            onPaint: {
-                var ctx = getContext("2d")
-                ctx.clearRect(0, 0, width, height)
-                ctx.fillStyle = root.colCard
-                ctx.strokeStyle = Qt.rgba(232/255, 232/255, 232/255, 0.35)
-                ctx.lineWidth = 0.6
-                ctx.beginPath()
-                ctx.moveTo(width * 0.08, height * 0.32)
-                ctx.lineTo(width * 0.18, height * 0.22)
-                ctx.lineTo(width * 0.37, height * 0.39)
-                ctx.lineTo(width * 0.50, height * 0.27)
-                ctx.lineTo(width * 0.63, height * 0.39)
-                ctx.lineTo(width * 0.82, height * 0.22)
-                ctx.lineTo(width * 0.92, height * 0.32)
-                ctx.lineTo(width * 0.68, height * 0.51)
-                ctx.lineTo(width * 0.50, height * 0.94)
-                ctx.lineTo(width * 0.32, height * 0.51)
-                ctx.closePath()
-                ctx.fill()
-                ctx.stroke()
-            }
-            Component.onCompleted: requestPaint()
-            onWidthChanged: requestPaint()
-            onHeightChanged: requestPaint()
-        }
-
-        opacity: {
-            if (!root.open && !root.closing) return 0
-            if (root.closing) return 0.55  // All slots rest during closing.
-            if (isFocused)  return 1.0
-            if (root.level >= 2) return 0.18
-            return 0.55
-        }
-        Behavior on opacity { NumberAnimation { duration: 320 } }
-    }
-
-    // ── Slot ──
-    component Slot: Item {
-        id: sl
-        property string slotKey: ""
-        property string title: ""
-        property string subtitle: ""
-        property bool   isCenter: false
-
-        readonly property bool isFocus:    root.slot === slotKey
-        readonly property bool isOpposite: !isCenter && (
-              (slotKey === "top"    && root.slot === "bottom") ||
-              (slotKey === "bottom" && root.slot === "top")    ||
-              (slotKey === "left"   && root.slot === "right")  ||
-              (slotKey === "right"  && root.slot === "left"))
-        readonly property bool isInL3: isFocus && root.level === 3
-
-        width: 280; height: 56
-        z: isFocus ? 5 : 2
-
-        opacity: {
-            if (!root.open && !root.closing) return 0
-            if (root.level === 3) {
-                if (isFocus) return 1.0
-                if (isCenter) return 0.4
-                return 0.28
-            }
-            // L1 (and closing): all slots are bright.
-            return 1.0
-        }
-        Behavior on opacity { NumberAnimation { duration: 320 } }
-
-        // Focus marker on the left.
-        Item {
-            id: focusMark
-            width: 18; height: 18
-            anchors.right: boxWrap.left
-            anchors.rightMargin: 14
-            anchors.verticalCenter: boxWrap.verticalCenter
-            opacity: (sl.isFocus && !sl.isInL3 && !sl.isCenter) ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 220 } }
-
-            Rectangle {
-                width: 8; height: 8; rotation: 45
-                color: root.colInk
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-            }
-            Canvas {
-                anchors.left: parent.left
-                anchors.leftMargin: 12
-                width: 8; height: 12
-                anchors.verticalCenter: parent.verticalCenter
-                onPaint: {
-                    var ctx = getContext("2d"); ctx.reset()
-                    ctx.strokeStyle = root.colInk
-                    ctx.lineWidth = 1.4
-                    ctx.beginPath()
-                    ctx.moveTo(0, 1)
-                    ctx.lineTo(width-1, height/2)
-                    ctx.lineTo(0, height-1)
-                    ctx.stroke()
-                }
-            }
-        }
-
-        // ── Box wrapper ──
-        Item {
-            id: boxWrap
-            anchors.fill: parent
-            opacity: sl.isInL3 ? 0 : 1
-            transform: Translate {
-                x: sl.isFocus && !sl.isCenter ? 8 : 0
-                Behavior on x { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-            }
-            Behavior on opacity { NumberAnimation { duration: 240 } }
-
-            Rectangle {
-                id: box
-                anchors.fill: parent
-                color: root.colCard
-                border.color: root.colInk
-                border.width: 1
-
-        // Asymmetric tab.
-                Rectangle {
-                    visible: !sl.isCenter
-                    anchors.left: parent.left
-                    anchors.top: parent.top
-                    anchors.bottom: parent.bottom
-                    width: 4
-                    color: sl.isFocus ? root.colHi : root.colInk
-                    Behavior on color { ColorAnimation { duration: 220 } }
-                    z: 2
-                }
-
-                // Inner border.
-                Rectangle {
-                    anchors.fill: parent
-                    anchors.margins: 4
-                    color: "transparent"
-                    border.color: root.colInk
-                    border.width: 1
-                    opacity: sl.isFocus ? 0.6 : (sl.isCenter ? 0.5 : 0.35)
-                    Behavior on opacity { NumberAnimation { duration: 220 } }
-                    z: 2
-                }
-
-                // L-shaped corner markers.
-                Repeater {
-                    model: sl.isCenter ? 0 : 4
-                    Item {
-                        width: 8; height: 8
-                        x: (index === 0 || index === 2) ? 6 : (box.width - 8)
-                        y: (index < 2) ? -2 : (box.height - 8 + 2)
-                        z: 3
-                        Rectangle {
-                            width: 8; height: 2
-                            color: root.colInk
-                            y: (index < 2) ? 0 : 6
-                        }
-                        Rectangle {
-                            width: 2; height: 8
-                            color: root.colInk
-                            x: (index === 0 || index === 2) ? 0 : 6
-                        }
-                    }
-                }
-
-                // Curtain wipe
-                Rectangle {
-                    id: curtain
-                    anchors.fill: parent
-                    color: root.colCard
-                    transform: Scale {
-                        origin.x: 0; origin.y: 0
-                        xScale: sl.isFocus && !sl.isCenter ? 1 : 0
-                        yScale: 1
-                        Behavior on xScale {
-                            NumberAnimation { duration: 380; easing.type: Easing.InOutQuint }
-                        }
-                    }
-                    z: 1
-                    visible: !sl.isCenter
-                }
-
-        // Indicator (dark square on the left).
-                Rectangle {
-                    visible: !sl.isCenter
-                    width: 14; height: 14
-                    anchors.left: parent.left
-                    anchors.leftMargin: 16
-                    anchors.verticalCenter: parent.verticalCenter
-                    color: root.colInk
-                    opacity: sl.isFocus ? 0 : 0.85
-                    transform: Scale {
-                        origin.x: 7; origin.y: 7
-                        xScale: sl.isFocus ? 0 : 1
-                        yScale: sl.isFocus ? 0 : 1
-                        Behavior on xScale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                        Behavior on yScale { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-                    }
-                    Behavior on opacity { NumberAnimation { duration: 200 } }
-                    z: 3
-                }
-
-                // Label
-                Column {
-                    anchors.left: parent.left
-                    anchors.leftMargin: sl.isCenter ? 0 : 42
-                    anchors.right: parent.right
-                    anchors.rightMargin: sl.isCenter ? 0 : 16
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: 2
-                    z: 4
-                    Text {
-                        text: sl.title
-                        font.family: "Inter"
-                        font.pixelSize: sl.isCenter ? 15 : 13
-                        font.weight: Font.Medium
-                        font.letterSpacing: sl.isCenter ? 6 : 0.3
-                        color: root.colInk
-                        horizontalAlignment: sl.isCenter ? Text.AlignHCenter : Text.AlignLeft
-                        anchors.horizontalCenter: sl.isCenter ? parent.horizontalCenter : undefined
-                    }
-                    Text {
-                        text: sl.subtitle
-                        font.family: "Inter"
-                        font.pixelSize: sl.isCenter ? 9 : 10
-                        color: root.colInkSoft
-                        font.letterSpacing: sl.isCenter ? 1 : 0.2
-                        horizontalAlignment: sl.isCenter ? Text.AlignHCenter : Text.AlignLeft
-                        anchors.horizontalCenter: sl.isCenter ? parent.horizontalCenter : undefined
-                    }
-                }
-            }
-        }
-
-        // Diamonds at the center corners.
-        Repeater {
-            model: sl.isCenter ? 4 : 0
-            Rectangle {
-                width: 5; height: 5
-                color: root.colInk
-                rotation: 45
-                x: (index === 0 || index === 2) ? -3 : (sl.width - 3)
-                y: (index < 2) ? -3 : (sl.height - 3)
-                z: 6
-                opacity: sl.isFocus ? 1 : 0
-                transform: Scale {
-                    origin.x: 2.5; origin.y: 2.5
-                    xScale: sl.isFocus ? 1 : 0
-                    yScale: sl.isFocus ? 1 : 0
-                    Behavior on xScale { NumberAnimation { duration: 220; easing.type: Easing.OutBack } }
-                    Behavior on yScale { NumberAnimation { duration: 220; easing.type: Easing.OutBack } }
-                }
-                Behavior on opacity { NumberAnimation { duration: 220 } }
-            }
-        }
-
-        // Sub-items
-        Column {
-            anchors.centerIn: parent
-            spacing: 12
-            opacity: sl.isInL3 ? 1 : 0
-            visible: opacity > 0.01
-            Behavior on opacity { NumberAnimation { duration: 280 } }
-
-            Repeater {
-                model: sl.isInL3 ? root.subList(sl.slotKey) : []
-                SubItem {
-                    subItem: modelData
-                    parentSlot: sl.slotKey
-                    enterDelay: 280 + index * 80
-                }
-            }
-        }
-
-        // Details.
-        Item {
-            id: detailsItem
-            visible: sl.isInL3 && (root.detailKey() in root.details)
-            opacity: visible ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 280 } }
-
-            anchors.left: sl.slotKey === "left" ? undefined : parent.right
-            anchors.right: sl.slotKey === "left" ? parent.left : undefined
-            anchors.leftMargin: 30
-            anchors.rightMargin: 30
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: {
-                if (sl.slotKey === "top")    return -200
-                if (sl.slotKey === "bottom") return  100
-                return 0
-            }
-            width: 300
-            height: detailsCol.implicitHeight + 36
-
-            // Sidonia cassette-futurist box (opaque fill + border + tab).
-            Rectangle {
-                anchors.fill: parent
-                color: root.colCard
-                border.color: root.colInk
-                border.width: 1
-            }
-            // Offset inner border.
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: 4
-                color: "transparent"
-                border.color: root.colInk
-                border.width: 1
-                opacity: 0.35
-            }
-            // L-shaped corner markers.
-            Repeater {
-                model: 4
-                Item {
-                    width: 8; height: 8
-                    x: (index === 0 || index === 2) ? 6 : (detailsItem.width - 8)
-                    y: (index < 2) ? -2 : (detailsItem.height - 8 + 2)
-                    z: 3
-                    Rectangle { width: 8; height: 2; color: root.colInk; y: (index < 2) ? 0 : 6 }
-                    Rectangle { width: 2; height: 8; color: root.colInk; x: (index === 0 || index === 2) ? 0 : 6 }
-                }
-            }
-
-            Column {
-                id: detailsCol
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.top: parent.top
-                anchors.leftMargin: 18
-                anchors.rightMargin: 18
-                anchors.topMargin: 18
-                spacing: 0
-
-                Text {
-                    id: detailH3
-                    property string targetText: root.detailH3().toUpperCase()
-                    text: targetText
-                    onTargetTextChanged: scrambleH3.start()
-                    font.family: "Inter"
-                    font.pixelSize: 11
-                    font.letterSpacing: 5
-                    font.weight: Font.Medium
-                    color: root.colInk
-                    opacity: 0.7
-
-                    ScrambleAnim {
-                        id: scrambleH3
-                        target: detailH3
-                        duration: 320
-                    }
-                }
-
-                Item { width: 1; height: 8 }
-
-                Rectangle {
-                    width: 36
-                    height: 1
-                    color: root.colInk
-                    opacity: 0.5
-                }
-
-                Item { width: 1; height: 14 }
-
-                Row {
-                    spacing: 10
-                    Rectangle {
-                        width: 8; height: 8; radius: 4
-                        anchors.verticalCenter: parent.verticalCenter
-                        color: root.detailOn() ? root.colHi : root.colInkSoft
-                        SequentialAnimation on opacity {
-                            running: root.detailOn()
-                            loops: Animation.Infinite
-                            NumberAnimation { to: 0.4; duration: 1100 }
-                            NumberAnimation { to: 1.0; duration: 1100 }
-                        }
-                    }
-                    Text {
-                        id: detailStatus
-                        property string targetText: root.detailStatus()
-                        text: targetText
-                        onTargetTextChanged: scrambleStatus.start()
-                        font.family: "Inter"
-                        font.pixelSize: 12
-                        color: root.colInk
-                        anchors.verticalCenter: parent.verticalCenter
-                        // Maximum width: total panel minus dot and margin.
-                        width: detailsCol.width - 26
-                        elide: Text.ElideRight
-                        wrapMode: Text.NoWrap
-
-                        ScrambleAnim {
-                            id: scrambleStatus
-                            target: detailStatus
-                            duration: 380
-                        }
-                    }
-                }
-
-                Item { width: 1; height: 14 }
-
-                // Scrollable action list.
-                // For notifications (right.history): expandable NotifBtn.
-                // For everything else: standard ActionBtn.
-                Item {
-                    id: actListContainer
-                    width: parent.width
-                    property bool isNotifList: sl.slotKey === "right" && root.sub === "history"
-                    property int actCount: root.actList().length
-                    // Adaptive height with up to 8 visible items; expanded notifications need more space.
-                    height: isNotifList
-                        ? Math.min(actCount === 0 ? 1 : Math.max(actCount, 1), 5) * 56 + (root.expandedNotifIdx >= 0 ? 90 : 0)
-                        : Math.min(actCount, 8) * 40
-                    visible: actCount > 0 || isNotifList   // Always visible for notifications, including empty messages.
-
-                    // Message for an empty notification list.
-                    Text {
-                        anchors.centerIn: parent
-                        visible: actListContainer.isNotifList && actListContainer.actCount === 0
-                        text: "No notifications"
-                        font.family: "Inter"
-                        font.pixelSize: 11
-                        color: root.colInkSoft
-                        font.letterSpacing: 1
-                    }
-
-                    Flickable {
-                        id: actFlick
-                        anchors.fill: parent
-                        contentWidth: width
-                        contentHeight: actCol.implicitHeight
-                        clip: true
-                        boundsBehavior: Flickable.StopAtBounds
-
-                        // Auto-scroll to the focused notification.
-                        function scrollToFocus() {
-                            var acts = root.actList()
-                            for (var i = 0; i < acts.length; i++) {
-                                if (acts[i].key === root.action) {
-                                    var itemH = actListContainer.isNotifList ? 56 : 40
-                                    var itemY = i * (itemH + 8)
-                                    if (itemY < contentY) {
-                                        contentY = Math.max(0, itemY - 4)
-                                    } else if (itemY + itemH > contentY + height) {
-                                        contentY = Math.min(contentHeight - height, itemY + itemH - height + 4)
-                                    }
-                                    return
-                                }
-                            }
-                        }
-
-                        Connections {
-                            target: root
-                            function onActionChanged() { actFlick.scrollToFocus() }
-                        }
-
-                        Column {
-                            id: actCol
-                            width: parent.width
-                            spacing: 8
-                            Repeater {
-                                model: sl.isInL3 ? root.actList() : []
-                                Loader {
-                                    width: actCol.width
-                                    sourceComponent: actListContainer.isNotifList ? notifBtnComp : actionBtnComp
-                                    property var actionData: modelData
-                                    property bool isFocus: root.action === modelData.key
-                                    property int enterDelay: 200 + Math.min(index, 5) * 60
-                                }
-                            }
-                        }
-                    }
-
-                        // Visible scroll indicator (track + thumb).
-                    Rectangle {
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.bottom: parent.bottom
-                        width: 2
-                        color: root.colInk
-                        opacity: 0.15
-                        visible: actFlick.contentHeight > actFlick.height
-
-                        Rectangle {
-                            x: 0
-                            width: 2
-                            color: root.colInk
-                            opacity: 0.7
-                            y: actFlick.contentHeight > 0
-                                ? (actFlick.contentY / actFlick.contentHeight) * parent.height
-                                : 0
-                            height: actFlick.contentHeight > 0
-                                ? Math.max(20, (actFlick.height / actFlick.contentHeight) * parent.height)
-                                : 0
-                        }
-                    }
-                }
-
-                // ── Pinned footer: "Clear All" for notifications (visible when count > 0) ──
-                Item {
-                    width: parent.width
-                    visible: sl.slotKey === "right" && root.sub === "history" && root.notifications.length > 0
-                    height: visible ? 48 : 0
-
-                    Item { width: 1; height: 14 }
-
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.topMargin: 14
-                        height: 32
-                        color: clearAllMA.containsMouse ? root.colInk : "transparent"
-                        border.color: root.colInk
-                        border.width: 1
-                        Behavior on color { ColorAnimation { duration: 200 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "× CLEAR ALL"
-                            font.family: "Inter"
-                            font.pixelSize: 11
-                            font.letterSpacing: 2.5
-                            font.weight: Font.Medium
-                            color: clearAllMA.containsMouse ? root.colCard : root.colInk
-                            Behavior on color { ColorAnimation { duration: 200 } }
-                        }
-
-                        MouseArea {
-                            id: clearAllMA
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.dismissAllNotifs()
-                        }
-                    }
-                }
-
-                // ── List components ──
-                Component {
-                    id: actionBtnComp
-                    ActionBtn {
-                        actionData: parent.actionData
-                        isFocus: parent.isFocus
-                        enterDelay: parent.enterDelay
-                    }
-                }
-                Component {
-                    id: notifBtnComp
-                    NotifBtn {
-                        notifData: parent.actionData
-                        isFocus: parent.isFocus
-                        enterDelay: parent.enterDelay
-                    }
-                }
-
-                // ── Volume slider (visible when bottom.volume) ──
-                Item {
-                    width: parent.width
-                    visible: sl.slotKey === "bottom" && root.sub === "volume"
-                    height: visible ? 60 : 0
-
-                    Item { width: 1; height: 14 }
-
-                    Column {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.topMargin: 14
-                        spacing: 6
-
-                        // Track + thumb
-                        Rectangle {
-                            id: volTrack
-                            width: parent.width
-                            height: 24
-                            color: "transparent"
-                            border.color: root.colInk
-                            border.width: 1
-
-                            // Inner border.
-                            Rectangle {
-                                anchors.fill: parent
-                                anchors.margins: 3
-                                color: "transparent"
-                                border.color: root.colInk
-                                border.width: 1
-                                opacity: 0.35
-                            }
-
-                            // Fill (current volume).
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                anchors.margins: 3
-                                width: (parent.width - 6) * (root.audioMuted ? 0 : root.audioVolume)
-                                color: root.colInk
-                                opacity: root.audioMuted ? 0.3 : 1.0
-                                Behavior on width { NumberAnimation { duration: 120 } }
-                                Behavior on opacity { NumberAnimation { duration: 200 } }
-                            }
-
-                            // MouseArea: click toggles mute, drag sets volume.
-                            MouseArea {
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                                property bool dragging: false
-                                property real lastX: 0
-
-                                onPressed: function(e) {
-                                    if (e.button === Qt.RightButton) {
-                                        root.dispatchAction("bottom","volume","mute-toggle")
-                                        return
-                                    }
-                                    dragging = true
-                                    lastX = e.x
-                                    setVol(e.x)
-                                }
-                                onReleased: dragging = false
-                                onPositionChanged: function(e) {
-                                    if (dragging) setVol(e.x)
-                                }
-                                onClicked: function(e) {
-                                    // A click without dragging toggles mute on the cell right of the current line.
-                                    // Otherwise set the volume.
-                                    if (Math.abs(e.x - lastX) < 3) {
-                                        // It was only a click; setVol was already called.
-                                    }
-                                }
-                                onWheel: function(e) {
-                                    var delta = e.angleDelta.y > 0 ? 5 : -5
-                                    var newVol = Math.max(0, Math.min(100, Math.round(root.audioVolume * 100) + delta))
-                                    root.dispatchAction("bottom","volume","set-volume:" + newVol)
-                                }
-
-                                function setVol(x) {
-                                    var w = volTrack.width - 6
-                                    var v = Math.max(0, Math.min(1, (x - 3) / w))
-                                    var pct = Math.round(v * 100)
-                                    root.dispatchAction("bottom","volume","set-volume:" + pct)
-                                }
-                            }
-                        }
-
-                        // Clickable mute indicator.
-                        Text {
-                            text: root.audioMuted ? "Muted · Click track to unmute" : "Right-click track to mute · Scroll to adjust"
-                            font.family: "Inter"
-                            font.pixelSize: 9
-                            color: root.colInk
-                            opacity: 0.5
-                            font.letterSpacing: 1
-                        }
-                    }
-                }
-
-                // ── Brightness slider (visible when bottom.brightness) ──
-                Item {
-                    width: parent.width
-                    visible: sl.slotKey === "bottom" && root.sub === "brightness"
-                    height: visible ? 60 : 0
-
-                    Item { width: 1; height: 14 }
-
-                    Column {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.topMargin: 14
-                        spacing: 6
-
-                        Rectangle {
-                            id: brightnessTrack
-                            width: parent.width
-                            height: 24
-                            color: "transparent"
-                            border.color: root.colInk
-                            border.width: 1
-                            opacity: root.brightnessAvailable ? 1 : 0.35
-                            Behavior on opacity { NumberAnimation { duration: 200 } }
-
-                            Rectangle {
-                                anchors.fill: parent
-                                anchors.margins: 3
-                                color: "transparent"
-                                border.color: root.colInk
-                                border.width: 1
-                                opacity: 0.35
-                            }
-
-                            Rectangle {
-                                anchors.left: parent.left
-                                anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                anchors.margins: 3
-                                width: (parent.width - 6) * root.brightnessLevel
-                                color: root.colInk
-                                Behavior on width { NumberAnimation { duration: 120 } }
-                            }
-
-                            MouseArea {
-                                anchors.fill: parent
-                                enabled: root.brightnessAvailable
-                                hoverEnabled: true
-                                acceptedButtons: Qt.LeftButton
-                                property bool dragging: false
-
-                                onPressed: function(e) {
-                                    dragging = true
-                                    setBrightness(e.x)
-                                }
-                                onReleased: dragging = false
-                                onCanceled: dragging = false
-                                onPositionChanged: function(e) {
-                                    if (dragging) setBrightness(e.x)
-                                }
-                                onWheel: function(e) {
-                                    var delta = e.angleDelta.y > 0 ? 5 : -5
-                                    root.setBrightnessPercent(
-                                        root.brightnessRequestedPercent + delta,
-                                        controlPanel.modelData.name)
-                                }
-
-                                function setBrightness(x) {
-                                    var usableWidth = brightnessTrack.width - 6
-                                    var ratio = Math.max(0.01, Math.min(1, (x - 3) / usableWidth))
-                                    root.setBrightnessPercent(Math.round(ratio * 100),
-                                        controlPanel.modelData.name)
-                                }
-                            }
-                        }
-
-                        Text {
-                            text: root.brightnessAvailable
-                                ? "Drag or scroll to adjust"
-                                : "Brightness control unavailable"
-                            font.family: "Inter"
-                            font.pixelSize: 9
-                            color: root.colInk
-                            opacity: 0.5
-                            font.letterSpacing: 1
-                        }
-                    }
-                }
-
-                // ── Wi-Fi password prompt (visible when wifiPromptSSID is set) ──
-                Item {
-                    width: parent.width
-                    visible: sl.slotKey === "top" && root.sub === "wifi" && root.wifiPromptSSID !== ""
-                    height: visible ? 110 : 0
-
-                    Item { width: 1; height: 14 }
-
-                    Column {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.topMargin: 14
-                        spacing: 8
-
-                        Text {
-                            text: "PASSWORD · " + root.wifiPromptSSID
-                            font.family: "Inter"
-                            font.pixelSize: 10
-                            font.letterSpacing: 3
-                            font.weight: Font.Medium
-                            color: root.colInk
-                            opacity: 0.7
-                        }
-
-                        Rectangle {
-                            width: parent.width
-                            height: 32
-                            color: root.colCard
-                            border.color: root.colInk
-                            border.width: 1
-
-                            TextInput {
-                                id: pwInput
-                                anchors.fill: parent
-                                anchors.leftMargin: 10
-                                anchors.rightMargin: 10
-                                verticalAlignment: TextInput.AlignVCenter
-                                color: root.colInk
-                                font.family: "Inter"
-                                font.pixelSize: 13
-                                echoMode: TextInput.Password
-                                clip: true
-                                activeFocusOnTab: true
-                                focus: root.wifiPromptSSID !== ""
-                                onTextChanged: root.wifiPasswordInput = text
-                                onAccepted: root.dispatchAction("top","wifi","submit-password")
-                                Keys.onEscapePressed: root.dispatchAction("top","wifi","cancel-prompt")
-
-                                // Timer to force focus after the widget is rendered.
-                                // Immediate focus is stolen by the parent key handler.
-                                Timer {
-                                    id: pwFocusTimer
-                                    interval: 50
-                                    repeat: false
-                                    onTriggered: {
-                                        if (root.wifiPromptSSID !== "") {
-                                            pwInput.text = ""
-                                            pwInput.forceActiveFocus()
-                                        }
-                                    }
-                                }
-                                Connections {
-                                    target: root
-                                    function onWifiPromptSSIDChanged() {
-                                        if (root.wifiPromptSSID !== "") {
-                                            pwFocusTimer.restart()
-                                        }
-                                    }
-                                    function onWifiPasswordClearSerialChanged() {
-                                        pwInput.text = ""
-                                    }
-                                }
-                                // Handle the widget becoming visible before the property changes.
-                                onVisibleChanged: {
-                                    if (visible && root.wifiPromptSSID !== "") {
-                                        pwFocusTimer.restart()
-                                    }
-                                }
-                            }
-                        }
-
-                        // Error, when applicable.
-                        Text {
-                            visible: root.wifiError !== ""
-                            text: root.wifiError
-                            font.family: "Inter"
-                            font.pixelSize: 10
-                            color: "#cc1515"
-                        }
-
-                        // Connect / Cancel buttons.
-                        Row {
-                            spacing: 8
-                            Rectangle {
-                                width: 110; height: 28
-                                color: root.colInk
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "CONNECT"
-                                    font.family: "Inter"
-                                    font.pixelSize: 10
-                                    font.letterSpacing: 2
-                                    font.weight: Font.Medium
-                                    color: root.colCard
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: root.dispatchAction("top","wifi","submit-password")
-                                }
-                            }
-                            Rectangle {
-                                width: 80; height: 28
-                                color: "transparent"
-                                border.color: root.colInk
-                                border.width: 1
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "CANCEL"
-                                    font.family: "Inter"
-                                    font.pixelSize: 10
-                                    font.letterSpacing: 2
-                                    font.weight: Font.Medium
-                                    color: root.colInk
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: root.dispatchAction("top","wifi","cancel-prompt")
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Hover / click on the box.
-        MouseArea {
-            anchors.fill: boxWrap
-            hoverEnabled: true
-            onEntered: if (root.level === 1) root.slot = sl.slotKey
-            onClicked: {
-                if (root.level === 1) {
-                    root.slot = sl.slotKey
-                    if (!sl.isCenter) {
-                        root.level = 3
-                        root.sub = root.firstSub(sl.slotKey)
-                        root.action = root.firstAction()
-                    }
-                }
-            }
-            visible: !sl.isInL3
-        }
-    }
-
-    // ── Sub-item ──
-    component SubItem: Item {
-        id: si
-        property var    subItem
-        property string parentSlot: ""
-        property int    enterDelay: 0
-
-        readonly property bool isFocus: root.sub === subItem.key
-
-        width: 220
-        height: 36
-
-        opacity: 0
-        transform: Translate { id: subT; x: -12 }
-        Component.onCompleted: enterAnim.start()
-        SequentialAnimation {
-            id: enterAnim
-            PauseAnimation { duration: si.enterDelay }
-            ParallelAnimation {
-                NumberAnimation { target: si; property: "opacity"; to: 1; duration: 380; easing.type: Easing.InOutQuint }
-                NumberAnimation { target: subT; property: "x"; to: 0; duration: 380; easing.type: Easing.OutCubic }
-            }
-        }
-
-        // Permanent opaque background.
-        Rectangle {
-            anchors.fill: parent
-            color: root.colCard
-            z: 0
-        }
-
-        // Border: thin at rest, thick when focused.
-        Rectangle {
-            anchors.fill: parent
-            color: "transparent"
-            border.color: root.colInk
-            border.width: si.isFocus ? 2 : 1
-            opacity: si.isFocus ? 1.0 : 0.55
-            Behavior on border.width { NumberAnimation { duration: 180 } }
-            Behavior on opacity { NumberAnimation { duration: 180 } }
-            z: 1
-        }
-
-        Rectangle {
-            width: 6; height: 6
-            color: root.colInk
-            rotation: 45
-            anchors.left: parent.left
-            anchors.leftMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            opacity: si.isFocus ? 1 : 0
-            transform: Scale {
-                origin.x: 3; origin.y: 3
-                xScale: si.isFocus ? 1 : 0
-                yScale: si.isFocus ? 1 : 0
-                Behavior on xScale { NumberAnimation { duration: 220; easing.type: Easing.OutBack } }
-                Behavior on yScale { NumberAnimation { duration: 220; easing.type: Easing.OutBack } }
-            }
-            Behavior on opacity { NumberAnimation { duration: 200 } }
-            z: 3
-        }
-
-        Text {
-            id: subTxt
-            property string targetText: si.subItem.label
-            text: targetText
-            onTargetTextChanged: subScramble.start()
-            anchors.centerIn: parent
-            font.family: "Inter"
-            font.pixelSize: 13
-            font.weight: Font.Medium
-            color: root.colInk
-            z: 2
-
-            ScrambleAnim {
-                id: subScramble
-                target: subTxt
-                duration: 280
-            }
-        }
-
-        // Re-scramble when focused.
-        onIsFocusChanged: if (isFocus) subScramble.start()
-
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            onEntered: {
-                if (root.level >= 2 && root.slot === si.parentSlot) {
-                    root.sub = si.subItem.key
-                    root.level = 3
-                    root.action = root.firstAction()
-                }
-            }
-        }
-    }
-
-    // ── Action button ──
-    component ActionBtn: Item {
-        id: btn
-        property var    actionData
-        property bool   isFocus: false
-        property int    enterDelay: 0
-
-        height: 32
-
-        opacity: 0
-        transform: Translate { id: btnT; x: -8 }
-        Component.onCompleted: enterAnim2.start()
-        SequentialAnimation {
-            id: enterAnim2
-            PauseAnimation { duration: btn.enterDelay }
-            ParallelAnimation {
-                NumberAnimation { target: btn; property: "opacity"; to: 1; duration: 380; easing.type: Easing.InOutQuint }
-                NumberAnimation { target: btnT; property: "x"; to: 0; duration: 380; easing.type: Easing.OutCubic }
-            }
-            ScriptAction { script: btnScramble.start() }
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            color: btn.isFocus ? root.colInk : "transparent"
-            border.color: root.colInk
-            border.width: 1
-            opacity: btn.isFocus ? 1 : 0.5
-            Behavior on color { ColorAnimation { duration: 220 } }
-            Behavior on opacity { NumberAnimation { duration: 220 } }
-        }
-
-        // Curtain on focus.
-        Rectangle {
-            anchors.fill: parent
-            color: root.colInk
-            transform: Scale {
-                origin.x: 0; origin.y: 0
-                xScale: btn.isFocus ? 1 : 0
-                yScale: 1
-                Behavior on xScale { NumberAnimation { duration: 280; easing.type: Easing.InOutQuint } }
-            }
-            z: 1
-        }
-
-        // Diamond marker on the left when focused.
-        Rectangle {
-            width: 6; height: 6; rotation: 45
-            color: root.colCard
-            anchors.left: parent.left
-            anchors.leftMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            opacity: btn.isFocus ? 1 : 0
-            transform: Scale {
-                origin.x: 3; origin.y: 3
-                xScale: btn.isFocus ? 1 : 0
-                yScale: btn.isFocus ? 1 : 0
-                Behavior on xScale { NumberAnimation { duration: 220; easing.type: Easing.OutBack } }
-                Behavior on yScale { NumberAnimation { duration: 220; easing.type: Easing.OutBack } }
-            }
-            Behavior on opacity { NumberAnimation { duration: 200 } }
-            z: 3
-        }
-
-        Text {
-            id: btnTxt
-            property string targetText: btn.actionData.label.toUpperCase()
-            text: targetText
-            onTargetTextChanged: btnScramble.start()
-            anchors.left: parent.left
-            anchors.leftMargin: 22
-            anchors.verticalCenter: parent.verticalCenter
-            font.family: "Inter"
-            font.pixelSize: 11
-            font.weight: Font.Medium
-            font.letterSpacing: 2.5
-            color: btn.isFocus ? root.colCard : root.colInk
-            Behavior on color { ColorAnimation { duration: 200 } }
-            z: 2
-
-            ScrambleAnim {
-                id: btnScramble
-                target: btnTxt
-                duration: 280
-            }
-        }
-
-        // Re-scramble when focused.
-        onIsFocusChanged: if (isFocus) btnScramble.start()
-
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            onEntered: if (root.level === 3) root.action = btn.actionData.key
-            onClicked: {
-                root.action = btn.actionData.key
-                root.dispatchAction(root.slot, root.sub, btn.actionData.key)
-            }
-        }
-    }
-
-    // ── Notification button (with expand/collapse) ──
-    component NotifBtn: Item {
-        id: nbtn
-        property var notifData
-        property bool isFocus: false
-        property int enterDelay: 0
-        readonly property bool expanded: root.expandedNotifIdx === notifData.notifIdx
-
-        height: 48
-
-        opacity: 0
-        transform: Translate { id: nbtnT; x: -8 }
-        Component.onCompleted: nbtnEnter.start()
-        SequentialAnimation {
-            id: nbtnEnter
-            PauseAnimation { duration: nbtn.enterDelay }
-            ParallelAnimation {
-                NumberAnimation { target: nbtn; property: "opacity"; to: 1; duration: 380; easing.type: Easing.InOutQuint }
-                NumberAnimation { target: nbtnT; property: "x"; to: 0; duration: 380; easing.type: Easing.OutCubic }
-            }
-        }
-
-        // Border.
-        Rectangle {
-            anchors.fill: parent
-            color: nbtn.isFocus ? root.colInk : "transparent"
-            border.color: root.colInk
-            border.width: 1
-            opacity: nbtn.isFocus ? 1 : 0.5
-            Behavior on color { ColorAnimation { duration: 220 } }
-            Behavior on opacity { NumberAnimation { duration: 220 } }
-        }
-
-        // Curtain
-        Rectangle {
-            anchors.fill: parent
-            color: root.colInk
-            transform: Scale {
-                origin.x: 0; origin.y: 0
-                xScale: nbtn.isFocus ? 1 : 0
-                yScale: 1
-                Behavior on xScale { NumberAnimation { duration: 280; easing.type: Easing.InOutQuint } }
-            }
-            z: 1
-        }
-
-        // Diamond focus marker.
-        Rectangle {
-            width: 5; height: 5; rotation: 45
-            color: root.colCard
-            anchors.left: parent.left
-            anchors.leftMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            opacity: nbtn.isFocus ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 200 } }
-            z: 3
-        }
-
-        // Content.
-        Item {
-            anchors.fill: parent
-            anchors.leftMargin: 18
-            anchors.rightMargin: 36   // room for the expand button
-            anchors.topMargin: 6
-            anchors.bottomMargin: 6
-            z: 2
-
-            // App name (small, at the top).
-            Text {
-                id: appLabel
-                anchors.top: parent.top
-                anchors.left: parent.left
-                text: nbtn.notifData.app ? nbtn.notifData.app.toUpperCase() : ""
-                font.family: "Inter"
-                font.pixelSize: 8
-                font.letterSpacing: 1.5
-                color: nbtn.isFocus ? root.colCard : root.colInk
-                opacity: 0.6
-                visible: text !== ""
-            }
-
-            // Summary
-            Text {
-                id: summaryLabel
-                anchors.top: appLabel.visible ? appLabel.bottom : parent.top
-                anchors.topMargin: appLabel.visible ? 1 : 0
-                anchors.left: parent.left
-                anchors.right: parent.right
-                text: nbtn.notifData.label
-                font.family: "Inter"
-                font.pixelSize: 11
-                font.weight: Font.Medium
-                color: nbtn.isFocus ? root.colCard : root.colInk
-                elide: Text.ElideRight
-                wrapMode: Text.NoWrap
-            }
-
-            // Body (visible when expanded).
-            Text {
-                id: bodyLabel
-                anchors.top: summaryLabel.bottom
-                anchors.topMargin: 4
-                anchors.left: parent.left
-                anchors.right: parent.right
-                visible: nbtn.expanded && text !== ""
-                text: nbtn.notifData.body
-                font.family: "Inter"
-                font.pixelSize: 10
-                color: nbtn.isFocus ? root.colCard : root.colInk
-                opacity: 0.85
-                wrapMode: Text.WordWrap
-                maximumLineCount: 4
-                elide: Text.ElideRight
-            }
-
-            // Metadata (visible when expanded): urgency, category, timeout, actions.
-            Text {
-                anchors.top: bodyLabel.visible ? bodyLabel.bottom : summaryLabel.bottom
-                anchors.topMargin: 4
-                anchors.left: parent.left
-                anchors.right: parent.right
-                visible: nbtn.expanded
-                text: {
-                    var bits = []
-                    var d = nbtn.notifData
-                    if (d.urgency && d.urgency !== "normal") bits.push(d.urgency.toUpperCase())
-                    if (d.category) bits.push("cat:" + d.category)
-                    if (d.timeout > 0) bits.push((d.timeout/1000) + "s")
-                    if (d.desktopEntry) bits.push(d.desktopEntry)
-                    if (d.actions && d.actions.length > 0) {
-                        bits.push(d.actions.length + " action" + (d.actions.length > 1 ? "s" : ""))
-                    }
-                    return bits.join(" · ")
-                }
-                font.family: "Inter"
-                font.pixelSize: 8
-                font.letterSpacing: 1
-                color: nbtn.isFocus ? root.colCard : root.colInk
-                opacity: 0.55
-                wrapMode: Text.WordWrap
-            }
-        }
-
-        // Expand button ▸ / ▾.
-        Item {
-            id: expandBtn
-            width: 24; height: parent.height
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            z: 4
-
-            Text {
-                anchors.centerIn: parent
-                text: nbtn.expanded ? "▾" : "▸"
-                font.family: "Inter"
-                font.pixelSize: 12
-                color: nbtn.isFocus ? root.colCard : root.colInk
-                opacity: 0.8
-            }
-
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    if (nbtn.expanded) root.expandedNotifIdx = -1
-                    else root.expandedNotifIdx = nbtn.notifData.notifIdx
-                }
-            }
-        }
-
-        // Body MouseArea: first click expands, second click invokes.
-        MouseArea {
-            anchors.fill: parent
-            anchors.rightMargin: 24   // Do not cover the expand button.
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            z: 0
-            onEntered: root.action = nbtn.notifData.key
-            onClicked: {
-                if (nbtn.expanded) {
-                    // Already expanded → invoke the source.
-                    root.invokeNotif(nbtn.notifData.notifIdx)
-                } else {
-                    // Not expanded yet → expand.
-                    root.expandedNotifIdx = nbtn.notifData.notifIdx
-                }
-            }
-        }
-
-        // Increase the height when expanded.
-        states: State {
-            name: "expanded"
-            when: nbtn.expanded
-            PropertyChanges { target: nbtn; height: 140 }
-        }
-        Behavior on height { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-    }
-
-
-    component ScrambleAnim: QtObject {
-        id: anim
-        property Item target: null   // Must have a "targetText" property.
-        property int duration: 280
-        property string chars: "▸◆▪▫░▒▓█/\\|-_=+*"
-        property int _elapsed: 0
-        property int _step: 16
-
-        property var _timer: Timer {
-            interval: anim._step
-            repeat: true
-            running: false
-            onTriggered: {
-                if (!anim.target) { running = false; return }
-                anim._elapsed += anim._step
-                var t = Math.min(1, anim._elapsed / anim.duration)
-                var finalText = anim.target.targetText
-                var len = finalText.length
-                var result = ""
-                for (var i = 0; i < len; i++) {
-                    var reveal = i / len
-                    if (t > reveal + 0.15) {
-                        result += finalText[i]
-                    } else if (t > reveal) {
-                        result += anim.chars[Math.floor(Math.random() * anim.chars.length)]
-                    } else {
-                        result += "\u00A0"
-                    }
-                }
-                anim.target.text = result
-                if (t >= 1) {
-                    anim.target.text = finalText
-                    running = false
-                }
-            }
-        }
-
-        function start() {
-            if (!target) return
-            _elapsed = 0
-            _timer.running = true
-        }
-    }
 }

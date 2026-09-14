@@ -13,10 +13,8 @@ Scope {
     required property ClipboardService store
     property bool opened: false
     property bool clearPending: false
-    property real xOffset: -40 * s
-    property real xShake: 0
-    property real cardOpacity: 0
-    property real scanProgress: 0
+    property real reveal: 0
+    property real curtainCover: 1
     property bool openPending: false
     property bool togglePending: false
     property string monitorResult: ""
@@ -64,15 +62,15 @@ Scope {
         opened = true
         now = Date.now()
         root.store.send("sync")
-        exitAnimation.stop()
-        enterAnimation.stop()
+        wipeHide.stop()
+        wipeReveal.stop()
         if (reducedMotion) {
-            xOffset = 0; xShake = 0; cardOpacity = 1; scanProgress = 1
+            reveal = 1
+            curtainCover = 0
             Qt.callLater(root.focusSearch)
         } else {
-            if (cardOpacity <= 0) xOffset = -40 * s
-            scanProgress = 0
-            enterAnimation.start()
+            if (reveal <= 0) curtainCover = 1
+            wipeReveal.start()
         }
     }
     function focusSearch() {
@@ -86,9 +84,9 @@ Scope {
         monitorTimeout.stop()
         if (!opened) return
         opened = false
-        enterAnimation.stop(); exitAnimation.stop()
-        if (reducedMotion) { cardOpacity = 0; xOffset = 30 * s; xShake = 0; scanProgress = 1 }
-        else exitAnimation.start()
+        wipeReveal.stop(); wipeHide.stop()
+        if (reducedMotion) { reveal = 0; curtainCover = 1 }
+        else wipeHide.start()
     }
     function age(seconds) {
         const minutes = Math.max(0, Math.floor((now / 1000 - seconds) / 60))
@@ -100,24 +98,29 @@ Scope {
     function sizeLabel(bytes) {
         return bytes < 1024 ? bytes + " B" : bytes < 1048576 ? Math.round(bytes / 1024) + " KB" : (bytes / 1048576).toFixed(1) + " MB"
     }
-    // Match Notifications.qml: slide/fade with a scan, then shake and fade out.
-    // Start from current values so a rapid toggle can reverse an in-flight close.
-    ParallelAnimation {
-        id: enterAnimation
-        NumberAnimation { target: root; property: "xOffset"; to: 0; duration: 360; easing.type: Easing.OutCubic }
-        NumberAnimation { target: root; property: "cardOpacity"; to: 1; duration: 240 }
-        NumberAnimation { target: root; property: "xShake"; to: 0; duration: 150 }
-        NumberAnimation { target: root; property: "scanProgress"; to: 1; duration: 550; easing.type: Easing.OutQuad }
-        onFinished: root.focusSearch()
+    // Match Quick Notes, mirrored for the clipboard's left-side placement.
+    // Animate from current values so rapid toggles do not reset the geometry.
+    SequentialAnimation {
+        id: wipeReveal
+        NumberAnimation {
+            target: root; property: "reveal"; to: 1
+            duration: 440; easing.type: Easing.OutExpo
+        }
+        NumberAnimation {
+            target: root; property: "curtainCover"; to: 0
+            duration: 340; easing.type: Easing.OutExpo
+        }
+        onFinished: if (root.opened) Qt.callLater(root.focusSearch)
     }
     SequentialAnimation {
-        id: exitAnimation
-        NumberAnimation { target: root; property: "xShake"; to: 6 * root.s; duration: 50 }
-        NumberAnimation { target: root; property: "xShake"; to: -4 * root.s; duration: 50 }
-        NumberAnimation { target: root; property: "xShake"; to: 0; duration: 50 }
-        ParallelAnimation {
-            NumberAnimation { target: root; property: "xOffset"; to: 30 * root.s; duration: 280; easing.type: Easing.InCubic }
-            NumberAnimation { target: root; property: "cardOpacity"; to: 0; duration: 280 }
+        id: wipeHide
+        NumberAnimation {
+            target: root; property: "curtainCover"; to: 1
+            duration: 180; easing.type: Easing.InOutQuart
+        }
+        NumberAnimation {
+            target: root; property: "reveal"; to: 0
+            duration: 340; easing.type: Easing.InExpo
         }
     }
     Process {
@@ -193,7 +196,7 @@ Scope {
         anchors { top: true; bottom: true; left: true; right: true }
         color: "transparent"
         exclusionMode: ExclusionMode.Ignore
-        visible: root.opened || enterAnimation.running || exitAnimation.running || root.cardOpacity > 0
+        visible: root.opened || wipeReveal.running || wipeHide.running || root.reveal > 0
         WlrLayershell.namespace: "tsugumori-clipboard"
         WlrLayershell.layer: WlrLayer.Overlay
         WlrLayershell.keyboardFocus: root.opened ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.None
@@ -207,25 +210,31 @@ Scope {
             readonly property bool narrow: width < 550 * root.s
             width: Math.max(1, Math.min(690 * root.s, panel.width - margin * 2))
             height: Math.max(1, Math.min((narrow ? 720 : 520) * root.s, panel.height - topInset - margin))
-            x: margin + root.xOffset + root.xShake
+            x: margin - (width + margin) * (1 - root.reveal)
             // Halfway from top alignment to vertical-centre alignment.
             y: topInset + Math.max(0, panel.height - topInset - margin - height) * 0.25
-            opacity: root.cardOpacity
             color: root.paper; border.color: root.line
             clip: true; enabled: root.opened
             MouseArea { anchors.fill: parent }
             Item {
-                anchors.fill: parent; clip: true
+                id: contentGridBackground
+                // Keep the original grid alignment, but only draw behind the content.
+                x: clipboardContent.x
+                y: clipboardContent.y + contentArea.y
+                width: clipboardContent.width
+                height: contentArea.height
+                clip: true
                 Repeater {
                     model: Math.ceil(drawer.width / (24 * root.s))
-                    Rectangle { required property int index; x: index * 24 * root.s; width: 1; height: drawer.height; color: Qt.alpha(root.accent, root.dark ? 0.18 : 0.16) }
+                    Rectangle { required property int index; x: index * 24 * root.s - contentGridBackground.x; width: 1; height: contentGridBackground.height; color: Qt.alpha(root.accent, root.dark ? 0.18 : 0.16) }
                 }
                 Repeater {
-                    model: Math.ceil(drawer.height / (24 * root.s))
-                    Rectangle { required property int index; y: index * 24 * root.s; height: 1; width: drawer.width; color: Qt.alpha(root.accent, root.dark ? 0.18 : 0.16) }
+                    model: Math.ceil(contentGridBackground.height / (24 * root.s)) + 1
+                    Rectangle { required property int index; y: index * 24 * root.s - contentGridBackground.y % (24 * root.s); height: 1; width: contentGridBackground.width; color: Qt.alpha(root.accent, root.dark ? 0.18 : 0.16) }
                 }
             }
             FocusScope {
+                id: clipboardContent
                 anchors.fill: parent; anchors.margins: 1
                 Keys.priority: Keys.BeforeItem
                 Keys.onEscapePressed: event => {
@@ -296,6 +305,7 @@ Scope {
                     }
                     Divider {}
                     GridLayout {
+                        id: contentArea
                         Layout.fillWidth: true; Layout.fillHeight: true
                         enabled: !root.clearPending
                         columns: drawer.narrow ? 1 : 3
@@ -503,18 +513,12 @@ Scope {
             }
             Rectangle { anchors.top: parent.top; width: parent.width; height: 1; color: root.accent }
             Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: root.accent }
-            Rectangle {
-                x: root.scanProgress * parent.width - 40 * root.s
-                y: 0; width: 80 * root.s; height: parent.height
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0; color: "transparent" }
-                    GradientStop { position: 0.5; color: "#406e2a2a" }
-                    GradientStop { position: 1; color: "transparent" }
-                }
-                opacity: root.scanProgress > 0 && root.scanProgress < 1 ? 1 : 0
-                Behavior on opacity { enabled: !root.reducedMotion; NumberAnimation { duration: 100 } }
+            CurtainSurface {
+                anchors { top: parent.top; bottom: parent.bottom; left: parent.left }
+                width: parent.width * root.curtainCover
+                uiScale: root.s
                 z: 50
+                visible: width > 0
             }
         }
     }

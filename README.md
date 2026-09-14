@@ -43,8 +43,8 @@ To see the available installer options without changing your system:
 bash <(curl -fsSL https://raw.githubusercontent.com/Aleph1-9012/Tsugumori/main/install.sh) --help
 ```
 
-Tsugumori uses official Arch packages. Share Tech Mono and its license are
-included in the repository, so the installer does not need an AUR helper.
+Tsugumori uses official Arch packages. IBM Plex Mono and Share Tech Mono ship
+with their licenses, so the installer does not need an AUR helper.
 
 ## What you get
 
@@ -56,7 +56,10 @@ included in the repository, so the installer does not need an AUR helper.
 - Clipboard history on `SUPER + J`, with search, image previews, pins, and deletion Undo
 - Compact music player with an artwork glyph matrix, hover colour reveal, and local track drawer
 - Waybar and Kitty configurations
-- Animated transitions and bundled wallpapers
+- Native Phase lock and wallpaper-picker transitions, shared red curtains, and bundled wallpapers
+
+See [desktop design and runtime notes](docs/native-desktop.md) for the terminal,
+widgets, fonts, and native animation details. The lock no longer uses MP4 assets.
 
 ## Change the basics
 

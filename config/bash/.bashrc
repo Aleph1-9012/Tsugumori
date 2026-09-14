@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════
-# Unit-3 default .bashrc
+# Tsugumori default .bashrc
 # Personal overrides go in ~/.bashrc.local — never touched by updates.
 # ═══════════════════════════════════════════════════════════════════
 
@@ -13,21 +13,19 @@
 alias ls='ls --color=auto'
 alias grep='grep --color=auto'
 
-# ─── Tsugumori-themed prompt ──────────────────────────────────────
-PS1='\[\033[38;2;110;42;42m\]▸\[\033[0m\] \[\033[38;2;70;63;46m\]\w\[\033[0m\] \[\033[38;2;50;45;36m\]·\[\033[0m\] '
-
-# Animated cursor color (Tsugumori aesthetic)
-_tsugumori_prompt_cmd() {
-    printf '\033]12;#6e2a2a\007'
-    sleep 0.06
-    printf '\033]12;#c8b89a\007'
-}
-PROMPT_COMMAND='_tsugumori_prompt_cmd'
-
-# ─── Welcome banner (only on first interactive shell) ──────────────
-if [[ -x ~/.config/quickshell/tsugumori-welcome.sh ]]; then
-    ~/.config/quickshell/tsugumori-welcome.sh
+# ─── Tsugumori terminal ────────────────────────────────────────────
+_tsugumori_shell_dir="${XDG_CONFIG_HOME:-$HOME/.config}/quickshell"
+if [[ -r "$_tsugumori_shell_dir/tsugumori-prompt.sh" ]]; then
+    . "$_tsugumori_shell_dir/tsugumori-prompt.sh"
 fi
+
+# Show the header once per interactive Bash process, including new windows.
+if [[ -x "$_tsugumori_shell_dir/tsugumori-welcome.sh" && ${_tsugumori_welcome_pid-} != "$BASHPID" ]]; then
+    _tsugumori_welcome_pid=$BASHPID
+    "$_tsugumori_shell_dir/tsugumori-welcome.sh"
+fi
+unset _tsugumori_shell_dir
+
 # ─── User-specific overrides ───────────────────────────────────────
 [ -f ~/.bashrc.local ] && . ~/.bashrc.local
 

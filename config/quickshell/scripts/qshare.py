@@ -36,6 +36,7 @@ from urllib.parse import parse_qs, quote, urlsplit
 
 try:
     import qrcode
+    from qrcode.util import pattern_position
     from PIL import Image, ImageDraw
 except ImportError:
     sys.exit("Missing dependency: pacman -S python-qrcode  (or pip install qrcode[pil])")
@@ -65,13 +66,12 @@ QSHARE_PANEL = "#111111"
 QSHARE_FG = "#e8e8e8"
 QSHARE_MUTED = "#909090"
 QSHARE_ACCENT = "#cc1515"
-QR_BACKGROUND = "#ffffff"
-QR_STEEL = "#263b4a"
-QR_DEEP_STEEL = "#172b3a"
-QR_SPACE_NAVY = "#0b1f33"
-QR_SENSOR_RED = "#751018"
+QR_BACKGROUND = QSHARE_PANEL
+QR_INK = QSHARE_FG
+QR_ACCENT = QSHARE_ACCENT
+QR_LINE = "#494643"
 QR_BORDER = 4
-QR_BOX_SIZE = 10
+QR_BOX_SIZE = 20
 ANSI_FG = "\033[38;2;232;232;232m"
 ANSI_DIM = "\033[38;2;144;144;144m"
 ANSI_RESET = "\033[0m"
@@ -315,75 +315,71 @@ def print_qr(url: str) -> None:
     qr.print_ascii(invert=True)
 
 
-def _qr_finder_origins(size: int) -> tuple[tuple[int, int], ...]:
-    return (
-        (QR_BORDER, QR_BORDER),
-        (size - QR_BORDER - 7, QR_BORDER),
-        (QR_BORDER, size - QR_BORDER - 7),
+def _qr_protected(x: int, y: int, count: int, version: int,
+                  alignment: list[int]) -> bool:
+    """Leave detection patterns, metadata and the quiet zone unstyled."""
+    x -= QR_BORDER
+    y -= QR_BORDER
+    if not (0 <= x < count and 0 <= y < count):
+        return True
+    if ((x <= 8 and y <= 8) or (x >= count - 8 and y <= 8)
+            or (x <= 8 and y >= count - 8)):
+        return True
+    if x in (6, 8) or y in (6, 8):
+        return True
+    if any(abs(x - cx) <= 2 and abs(y - cy) <= 2
+           for cx in alignment for cy in alignment):
+        return True
+    return version >= 7 and (
+        (x >= count - 11 and y < 6) or (y >= count - 11 and x < 6)
     )
-
-
-def _qr_in_finder(x: int, y: int, size: int) -> bool:
-    return any(
-        start_x <= x < start_x + 7 and start_y <= y < start_y + 7
-        for start_x, start_y in _qr_finder_origins(size)
-    )
-
-
-def _qr_in_finder_core(x: int, y: int, size: int) -> bool:
-    return any(
-        start_x + 2 <= x < start_x + 5 and start_y + 2 <= y < start_y + 5
-        for start_x, start_y in _qr_finder_origins(size)
-    )
-
-
-def _qr_module_color(x: int, y: int, size: int) -> str:
-    """Choose a dark Sidonia armor color without changing the QR matrix."""
-    if _qr_in_finder_core(x, y, size):
-        return QR_SENSOR_RED
-    if _qr_in_finder(x, y, size):
-        return QR_SPACE_NAVY
-
-    center = (size - 1) / 2
-    upper_right = x > center + 2 and y < center - 3 and x - y > 9
-    lower_left = x < center - 3 and y > center + 3 and y - x > 11
-    center_keel = abs(x - center) <= 3 and y > center + 1
-    if upper_right or lower_left or center_keel:
-        return QR_DEEP_STEEL
-    return QR_STEEL
 
 
 def write_qr_png(url: str, path: Path) -> None:
-    """Write a high-contrast QR with Sidonia-inspired armor coloring."""
+    """Render the inverted C glyph map with the live rice's red accent."""
     qr = qrcode.QRCode(
         border=QR_BORDER,
         box_size=QR_BOX_SIZE,
-        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
     )
     qr.add_data(url)
     qr.make(fit=True)
 
     matrix = qr.get_matrix()
     size = len(matrix)
+    alignment = pattern_position(qr.version)
     img = Image.new(
         "RGB",
         (size * QR_BOX_SIZE, size * QR_BOX_SIZE),
         QR_BACKGROUND,
     )
     draw = ImageDraw.Draw(img)
+
+    def rect(x: float, y: float, w: float, h: float, color: str) -> None:
+        draw.rectangle((round(x * QR_BOX_SIZE), round(y * QR_BOX_SIZE),
+                        round((x + w) * QR_BOX_SIZE) - 1,
+                        round((y + h) * QR_BOX_SIZE) - 1), fill=color)
+
     for y, row in enumerate(matrix):
         for x, dark in enumerate(row):
-            if not dark:
+            if _qr_protected(x, y, qr.modules_count, qr.version, alignment):
+                if dark:
+                    rect(x, y, 1, 1, QR_INK)
                 continue
-            draw.rectangle(
-                (
-                    x * QR_BOX_SIZE,
-                    y * QR_BOX_SIZE,
-                    (x + 1) * QR_BOX_SIZE - 1,
-                    (y + 1) * QR_BOX_SIZE - 1,
-                ),
-                fill=_qr_module_color(x, y, size),
-            )
+            if not dark:
+                if (x + y) % 2:
+                    rect(x + 0.06, y + 0.06, 0.74, 0.13, QR_LINE)
+                    rect(x + 0.06, y + 0.06, 0.13, 0.74, QR_LINE)
+                else:
+                    rect(x + 0.2, y + 0.8, 0.74, 0.13, QR_LINE)
+                    rect(x + 0.8, y + 0.2, 0.13, 0.74, QR_LINE)
+                continue
+            color = QR_ACCENT if (x // 4 + y // 5) % 5 == 0 else QR_INK
+            turn = (x * 3 + y * 7) % 4
+            rect(x + 0.1, y + (0.1 if turn < 2 else 0.72), 0.8, 0.18, color)
+            rect(x + (0.1 if turn in (0, 3) else 0.72), y + 0.1, 0.18, 0.8, color)
+            # Red alone is too dark on charcoal. Keep every data-cell center light.
+            rect(x + 0.2, y + 0.2, 0.6, 0.6, QR_INK)
 
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(path)

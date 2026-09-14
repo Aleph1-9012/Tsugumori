@@ -1,6 +1,5 @@
 pragma Singleton
 import QtQuick
-import Quickshell
 
 // ╔══════════════════════════════════════════════════════════════╗
 // ║  SETTINGS — Tsugumori shell configuration options            ║
@@ -17,17 +16,6 @@ QtObject {
 
     // Clipboard palette: false matches the notification white; true uses charcoal.
     readonly property bool clipboardDark: false
-
-    // Main screen dimensions (equivalent to 100vw / 100vh).
-    readonly property real screenW: Quickshell.screens.length > 0
-                                    ? Quickshell.screens[0].width  : 1920
-    readonly property real screenH: Quickshell.screens.length > 0
-                                    ? Quickshell.screens[0].height : 1080
-
-    // Relative units — Settings.vw(5) = 5% of the screen width.
-    // CSS equivalent: 5vw.
-    function vw(pct) { return Math.round(screenW * pct / 100) }
-    function vh(pct) { return Math.round(screenH * pct / 100) }
 
     // Scaled unit — applies scale to the base size.
     // Usage: Settings.s(320) = 320 * scale.
@@ -50,21 +38,9 @@ QtObject {
     // Player width in pixels (scaled automatically).
     readonly property int playerWidth: s(680)
 
-    // ── GLOBAL COLORS ───────────────────────────────────────────
-
-    // Sidonia sepia palette (change only when changing the theme).
-    readonly property color fg:   "#e8e8e8"      // Primary text.
-    readonly property color bg:   "#0a0a0a"      // Main background.
-    readonly property color a1:   "#c87060"      // Red accent.
-    readonly property color a2:   "#60a880"      // Green accent.
-    readonly property color a3:   "#6090c8"      // Blue accent.
-    readonly property color a4:   "#9e1010"      // Gold accent.
-    readonly property color ln:   Qt.rgba(232/255, 232/255, 232/255, 0.12)  // Thin border.
-    readonly property color lnm:  Qt.rgba(232/255, 232/255, 232/255, 0.22) // Medium border.
-    readonly property color curtainColor: "#e8e8e8"  // Wipe curtain color.
-
-
     // ── ANIMATIONS ──────────────────────────────────────────────
+
+    readonly property color curtainColor: "#cc1515"  // Red stencil curtain.
 
     // Reveal duration (ms).
     readonly property int revealDuration: 460

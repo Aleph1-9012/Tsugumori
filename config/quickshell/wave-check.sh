@@ -1,30 +1,41 @@
 #!/usr/bin/env bash
-# Verify the committed lock-animation assets at session startup.
+# Verify native lockscreen and picker assets at session startup.
+# Keep this entry point for the existing Hyprland startup command.
 set -uo pipefail
 
 readonly config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 readonly cache_home="${XDG_CACHE_HOME:-$HOME/.cache}"
-readonly videos_dir="$config_home/quickshell/videos"
+readonly shell_dir="$config_home/quickshell"
 readonly log_dir="$cache_home/quickshell"
 readonly log_file="$log_dir/wave-check.log"
 readonly assets=(
-    "$videos_dir/wave_reveal.mp4"
-    "$videos_dir/wave_hide.mp4"
-    "$videos_dir/wave_last_frame.png"
+    widgets/lockscreen.qml
+    widgets/lockscreen/PhaseLockView.qml
+    widgets/lockscreen/PhaseArt.js
+    widgets/lockscreen/PhaseLines.qml
+    widgets/lockscreen/PhaseCpuFallback.qml
+    widgets/lockscreen/FormationCorner.qml
+    widgets/lockscreen/shaders/lines.vert.qsb
+    widgets/lockscreen/shaders/lines.frag.qsb
+    widgets/WallpaperPicker.qml
+    widgets/wallpaper/PickerMotion.qml
+    widgets/wallpaper/PickerBackdrop.qml
+    widgets/wallpaper/PickerRegistration.qml
+    widgets/wallpaper/PickerCorners.qml
 )
 
-mkdir -p -- "$log_dir"
+mkdir -p -- "$log_dir" || exit 1
 
 missing=()
 for asset in "${assets[@]}"; do
-    [[ -s "$asset" ]] || missing+=("${asset##*/}")
+    [[ -s "$shell_dir/$asset" ]] || missing+=("$asset")
 done
 
 if (( ${#missing[@]} > 0 )); then
-    printf '[%s] ERROR: missing or empty lock-animation asset(s): %s\n' \
+    printf '[%s] ERROR: missing or empty native animation assets: %s\n' \
         "$(date --iso-8601=seconds)" "${missing[*]}" >> "$log_file"
     exit 1
 fi
 
-printf '[%s] Lock-animation assets verified.\n' \
+printf '[%s] Native lockscreen and picker assets verified.\n' \
     "$(date --iso-8601=seconds)" >> "$log_file"
