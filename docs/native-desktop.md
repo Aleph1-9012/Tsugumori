@@ -17,13 +17,16 @@ and footer plain, and stops keyboard selection at the list boundaries.
 
 The application menu has a redesigned header, search field, selection markers,
 and animated footer buttons. IBM Plex Mono is bundled for the menu and Waybar.
-The installer also retains Share Tech Mono, which the unchanged volume popup
-still uses. Font licenses stay beside their respective font files.
+Share Tech Mono remains bundled as an optional font. Font licenses stay beside
+their respective font files.
 
 The B2 Control Center uses separate components, summary cards, remembered
 submenus, queued slider writes, and less background polling. Per-monitor
 brightness is software dimming. It does not change a panel's backlight or save
 backlight power. Runtime state remains outside the repository.
+
+Volume and mute are available in the Control Center and through the volume
+keys. There is no separate left-edge volume popup or hover area.
 
 Quickshare uses a charcoal, light, and red glyph-style QR image. Tests check
 module centres and protected QR regions. These checks do not replace scanning

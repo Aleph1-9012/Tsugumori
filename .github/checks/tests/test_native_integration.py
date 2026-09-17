@@ -81,6 +81,16 @@ class NativeIntegrationTests(unittest.TestCase):
         self.assertIn("Layout.preferredWidth: newButton.implicitWidth", source)
         self.assertIn("onCopyTextChanged: resetCopyFeedback()", source)
 
+    def test_left_volume_popup_is_removed_but_audio_controls_remain(self) -> None:
+        self.assertFalse((SHELL / "widgets/VolumeBar.qml").exists())
+        self.assertNotIn("VolumeBar", (SHELL / "shell.qml").read_text())
+        self.assertNotIn("VolumeBar", (SHELL / "widgets/qmldir").read_text())
+        controller = (SHELL / "widgets/ControlCenter.qml").read_text()
+        self.assertIn('"set-sink-volume"', controller)
+        bindings = (REPO / "config/hypr/hyprland.lua").read_text()
+        for key in ("XF86AudioRaiseVolume", "XF86AudioLowerVolume", "XF86AudioMute"):
+            self.assertIn(key, bindings)
+
     def test_terminal_noninteractive_use_is_silent(self) -> None:
         for name in ("tsugumori-welcome.sh", "tsugumori-prompt.sh"):
             result = subprocess.run(["bash", str(SHELL / name)], capture_output=True, text=True)

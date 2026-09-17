@@ -17,9 +17,6 @@ ShellRoot {
     // ── CONTROLCENTER ──
     ControlCenter {}
 
-    // ── VOLUMEBAR ──
-    VolumeBar {}
-
     // Standalone notes drawer, separate from the Control Center.
     NotesService { id: notesService }
     QuickNotes { id: quickNotes; store: notesService }
