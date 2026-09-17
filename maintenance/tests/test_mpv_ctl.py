@@ -227,7 +227,7 @@ class MpvCtlBridgeTests(unittest.TestCase):
                 self.assertFalse(playing["eofReached"])
 
                 clear = {"event": "property-change", "name": "path"}
-                end = {"event": "end-file", "reason": "eof"}
+                end = {"event": "end-file", "reason": "eof", "playlist_entry_id": 7}
                 server.send_events(
                     ([clear, end] if clear_before_end else [end, clear])
                     + [
@@ -243,6 +243,9 @@ class MpvCtlBridgeTests(unittest.TestCase):
                 self.assertTrue(completed["idleActive"])
                 self.assertTrue(completed["eofReached"])
                 self.assertEqual(completed["duration"], 3)
+                self.assertEqual(bridge.wait_for("track-ended"), {
+                    "type": "track-ended", "path": path, "reason": "eof", "entryId": 7,
+                })
 
                 # No property reset may overwrite completion before this new start.
                 next_file = bridge.wait_for("state")
@@ -250,6 +253,27 @@ class MpvCtlBridgeTests(unittest.TestCase):
                 self.assertFalse(next_file["idleActive"])
                 self.assertFalse(next_file["eofReached"])
                 self.assertEqual(next_file["duration"], 0)
+
+    def test_non_eof_reasons_and_duplicate_completion(self) -> None:
+        server = self.server()
+        bridge = self.bridge()
+        server.accept()
+        bridge.wait_for("ready")
+        for entry, reason in enumerate(("stop", "error", "quit", "redirect")):
+            with self.subTest(reason=reason):
+                path = f"/music/track-{entry}.wav"
+                end = {"event": "end-file", "reason": reason, "playlist_entry_id": entry}
+                server.send_events([
+                    {"event": "start-file"},
+                    {"event": "property-change", "name": "path", "data": path},
+                    end, end,
+                ])
+                self.assertEqual(bridge.wait_for("track-ended"), {
+                    "type": "track-ended", "path": path, "reason": reason, "entryId": entry,
+                })
+                # A new start is a fence: no duplicate end may appear before it.
+                server.send_events([{"event": "start-file"}])
+                self.assertEqual(bridge.messages.get(timeout=2)["type"], "state")
 
     def test_commands_queued_before_socket_exists_forward_after_connect(self) -> None:
         self.assertFalse(self.socket_path.exists())

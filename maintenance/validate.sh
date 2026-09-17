@@ -56,6 +56,9 @@ for path in paths:
 print(f"Python syntax: OK ({count} files)")
 PY
 
+if ! command -v mpv >/dev/null 2>&1; then
+    missing_optional_tool "mpv playback tests"
+fi
 python3 -B -m unittest discover -s maintenance/tests -p 'test_*.py'
 printf 'Python unit tests: OK\n'
 
@@ -324,6 +327,9 @@ if [[ -x /usr/lib/qt6/bin/qmltestrunner ]]; then
         QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_SCALE_FACTOR=1.25 \
             /usr/lib/qt6/bin/qmltestrunner -input "maintenance/qmltests/$suite" -o -,txt
     done
+    QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_SCALE_FACTOR=1.25 \
+        /usr/lib/qt6/bin/qmltestrunner -import maintenance/qmltests/player/stubs \
+            -input maintenance/qmltests/player/tst_PlayerClose.qml -o -,txt
 else
     missing_optional_tool "Qt presentation tests"
 fi

@@ -505,7 +505,7 @@ ShellRoot {
 
     Process {
         id: mpvProc
-        command: ["mpv", "--idle=yes", "--no-video", "--no-terminal",
+        command: ["mpv", "--idle=yes", "--no-video", "--no-terminal", "--keep-open=no",
                   "--reset-on-next-file=pause", "--input-ipc-server=" + root.mpvSocket]
         running: false
         onExited: function(exitCode, exitStatus) {
@@ -539,6 +539,7 @@ ShellRoot {
     }
 
     property bool mpvReady: false
+    property var lastMpvEndEntry: -1
     property var mpvCommandQueue: []
     onRuntimeReadyChanged: if (runtimeReady && mpvCommandQueue.length > 0) startMpvIfNeeded()
 
@@ -563,11 +564,24 @@ ShellRoot {
 
         if (message.type === "ready") {
             root.mpvReady = true
+            root.lastMpvEndEntry = -1
             root.flushMpvCommands()
             return
         }
         if (message.type === "disconnected") {
             root.mpvReady = false
+            return
+        }
+        if (message.type === "track-ended") {
+            // Only natural completion advances the library, never a stop,
+            // failed load, or an event from a file replaced by a manual skip.
+            var entry = message.entryId
+            if (root.localMode && message.reason === "eof" && message.path
+                    && message.path === root.localTrackPath
+                    && Number.isInteger(entry) && entry >= 0 && entry !== root.lastMpvEndEntry) {
+                root.lastMpvEndEntry = entry
+                root.nextLocalTrack()
+            }
             return
         }
         if (message.type !== "state") return

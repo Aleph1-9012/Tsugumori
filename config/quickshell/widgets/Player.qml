@@ -54,6 +54,7 @@ Item {
     property bool requestedVisible: false
     property bool componentReady: false
     property real revealProgress: 0
+    property bool waitingForDrawerClose: false
     readonly property int currentInputX: wipeHost.visible
         ? Math.max(0, Math.min(pw, Math.round(Math.max(wipeHost.x, curtain.width)))) : pw
     readonly property int currentInputWidth: wipeHost.visible ? Math.max(0, pw - currentInputX) : 0
@@ -76,6 +77,13 @@ Item {
     function animateVisibility() {
         if (!componentReady) return
         visibilityAnim.stop()
+        if (!requestedVisible) {
+            waitingForDrawerClose = true
+            showTrackList = false
+            // Hold the player in place until the drawer has fully collapsed.
+            if (drawer.height > 0) return
+        }
+        waitingForDrawerClose = false
         var target = requestedVisible ? 1 : 0
         if (requestedVisible) wipeHost.visible = true
         var distance = Math.abs(target - revealProgress)
@@ -407,6 +415,8 @@ Item {
 
             Button {
                 id: libraryToggle
+                objectName: "libraryToggle"
+                enabled: root.requestedVisible
                 width: parent.width; implicitHeight: root.s(40)
                 leftPadding: root.s(16); rightPadding: root.s(16)
                 topPadding: root.s(8); bottomPadding: root.s(8)
@@ -445,8 +455,14 @@ Item {
 
             Item {
                 id: drawer
+                objectName: "trackDrawer"
+                enabled: root.requestedVisible
                 width: parent.width; height: root.showTrackList ? root.drawerNaturalHeight : 0
                 clip: true; visible: height > 0
+                onHeightChanged: {
+                    if (height === 0 && root.waitingForDrawerClose)
+                        Qt.callLater(root.animateVisibility)
+                }
                 Behavior on height { NumberAnimation { duration: root.reducedMotion ? 0 : 220; easing.type: Easing.OutCubic } }
                 Rectangle { width: parent.width; height: 1; color: root.lineColor }
                 ListView {

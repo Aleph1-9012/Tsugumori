@@ -224,6 +224,8 @@ def main() -> int:
                             metadata_snapshot.clear()
                             publish_state(state)
                         elif message.get("event") == "end-file":
+                            if file_ended:
+                                continue
                             # Keep completion attached to the file QML is displaying.
                             # Late property resets must not turn it back into playback.
                             file_ended = True
@@ -232,6 +234,9 @@ def main() -> int:
                             metadata_pending.clear()
                             metadata_snapshot.clear()
                             publish_state(state)
+                            emit({"type": "track-ended", "path": state.get("path") or "",
+                                  "reason": message.get("reason"),
+                                  "entryId": message.get("playlist_entry_id")})
                         elif message.get("event") == "file-loaded":
                             request_metadata()
                         name = message.get("name")
