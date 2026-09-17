@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+REPO_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 cd "$REPO_ROOT"
 
 REQUIRE_INTEGRATION=${TSUGUMORI_REQUIRE_INTEGRATION:-0}
@@ -15,7 +15,7 @@ missing_optional_tool() {
     printf '%s: skipped (not installed)\n' "$label"
 }
 
-mapfile -d '' SHELL_FILES < <(rg --files -0 -g '*.sh')
+mapfile -d '' SHELL_FILES < <(rg --files --hidden -0 -g '!.git/**' -g '*.sh')
 for file in "${SHELL_FILES[@]}"; do
     bash -n "$file"
 done
@@ -59,7 +59,7 @@ PY
 if ! command -v mpv >/dev/null 2>&1; then
     missing_optional_tool "mpv playback tests"
 fi
-python3 -B -m unittest discover -s maintenance/tests -p 'test_*.py'
+python3 -B -m unittest discover -s .github/checks/tests -p 'test_*.py'
 printf 'Python unit tests: OK\n'
 
 if rg -n 'curl[^[:cntrl:]]*\[[[:space:]]*https?://' README.md; then
@@ -82,18 +82,18 @@ if rg -ni "\\b(p[o]lice|tr[a]it (horizontal|vertical)|optimis[a]tion vectorielle
 fi
 
 if rg -n 'ttf-[g]oogle|INSTALL_A[U]R|bootstrap_aur_[h]elper|pinned-[a]ur|base-[d]evel' \
-    install.sh packages maintenance/update-pins.sh README.md; then
+    install.sh packages README.md; then
     printf 'Legacy AUR or build-tool bootstrap logic remains.\n' >&2
     exit 1
 fi
 
 if rg -n 'session-[s]tart|session_start_[c]ommand|force_renderer_[r]eload|hl[.]dsp[.]d[p]ms' \
-    config maintenance; then
+    config .github/checks; then
     printf 'Monitor-recovery feature code remains mixed into the cleanup branch.\n' >&2
     exit 1
 fi
 
-for retired in config/quickshell/videos maintenance/wave-assets \
+for retired in config/quickshell/videos maintenance \
     config/waybar/scripts/pomodoro.sh config/waybar/scripts/pomodoro_toggle.sh \
     config/quickshell/components/WipeCurtain.qml config/quickshell/components/Scanlines.qml \
     config/quickshell/components/CornerDeco.qml config/quickshell/components/TsugumoriButton.qml; do
@@ -325,11 +325,11 @@ fi
 if [[ -x /usr/lib/qt6/bin/qmltestrunner ]]; then
     for suite in lockscreen wallpaper; do
         QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_SCALE_FACTOR=1.25 \
-            /usr/lib/qt6/bin/qmltestrunner -input "maintenance/qmltests/$suite" -o -,txt
+            /usr/lib/qt6/bin/qmltestrunner -input ".github/checks/qmltests/$suite" -o -,txt
     done
     QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_SCALE_FACTOR=1.25 \
-        /usr/lib/qt6/bin/qmltestrunner -import maintenance/qmltests/player/stubs \
-            -input maintenance/qmltests/player/tst_PlayerClose.qml -o -,txt
+        /usr/lib/qt6/bin/qmltestrunner -import .github/checks/qmltests/player/stubs \
+            -input .github/checks/qmltests/player/tst_PlayerClose.qml -o -,txt
 else
     missing_optional_tool "Qt presentation tests"
 fi

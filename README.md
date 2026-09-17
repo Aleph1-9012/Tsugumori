@@ -107,7 +107,6 @@ restored with Undo during the current shell session.
 - [Common problems and recovery](docs/help.md)
 - [Tested software versions](docs/versions.md)
 - [v0.1.2 release notes](docs/releases/v0.1.2.md)
-- [Files used to maintain the project](maintenance/README.md)
 
 ## Folder guide
 
@@ -117,7 +116,7 @@ restored with Undo during the current shell session.
 | `assets/` | Wallpapers and the bundled font |
 | `packages/` | Applications installed by `install.sh` |
 | `docs/` | Customization, controls, help, and release information |
-| `maintenance/` | Tests and project utilities that normal users can ignore |
+| `.github/` | GitHub checks and issue templates; not installed on the desktop |
 
 ## Credits
 

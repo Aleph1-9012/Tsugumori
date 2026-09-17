@@ -12,7 +12,7 @@ import wave
 
 from test_mpv_ctl import BridgeProcess
 
-SHELL = Path(__file__).parents[2] / "config/quickshell"
+SHELL = Path(__file__).parents[3] / "config/quickshell"
 QML_TEST_RUNNER = "/usr/lib/qt6/bin/qmltestrunner"
 
 

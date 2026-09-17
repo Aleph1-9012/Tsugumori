@@ -1,7 +1,7 @@
 import QtQuick
 import QtTest
-import "../../../config/quickshell/widgets/wallpaper"
-import "../../../config/quickshell/widgets/lockscreen/PhaseArt.js" as Art
+import "../../../../config/quickshell/widgets/wallpaper"
+import "../../../../config/quickshell/widgets/lockscreen/PhaseArt.js" as Art
 
 // Visual-only tests. No real wallpaper selection, process execution, or layers.
 Item {
@@ -10,8 +10,8 @@ Item {
     PickerMotion { id: motion }
     PickerBackdrop {
         id: field; anchors.fill: parent; progress: motion.progress
-        vertexShaderUrl: Qt.resolvedUrl("../../../config/quickshell/widgets/lockscreen/shaders/lines.vert.qsb")
-        fragmentShaderUrl: Qt.resolvedUrl("../../../config/quickshell/widgets/lockscreen/shaders/lines.frag.qsb")
+        vertexShaderUrl: Qt.resolvedUrl("../../../../config/quickshell/widgets/lockscreen/shaders/lines.vert.qsb")
+        fragmentShaderUrl: Qt.resolvedUrl("../../../../config/quickshell/widgets/lockscreen/shaders/lines.frag.qsb")
     }
     PickerCorners {
         id: corners; anchors.fill: parent

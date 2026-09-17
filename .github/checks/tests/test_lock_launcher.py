@@ -11,7 +11,7 @@ import time
 import unittest
 
 
-REPO_ROOT = Path(__file__).parents[2]
+REPO_ROOT = Path(__file__).parents[3]
 LAUNCHER = REPO_ROOT / "config/quickshell/lock.sh"
 HANDSHAKE_HELPER = REPO_ROOT / "config/quickshell/lock-handshake.sh"
 LOCK_QML = REPO_ROOT / "config/quickshell/widgets/lockscreen.qml"

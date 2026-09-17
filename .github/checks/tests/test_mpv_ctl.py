@@ -12,7 +12,7 @@ import time
 import unittest
 
 
-HELPER = Path(__file__).parents[2] / "config/quickshell/scripts/mpv_ctl.py"
+HELPER = Path(__file__).parents[3] / "config/quickshell/scripts/mpv_ctl.py"
 OBSERVE_COMMAND = "observe_property"
 
 

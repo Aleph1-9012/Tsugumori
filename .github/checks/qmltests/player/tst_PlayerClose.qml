@@ -1,7 +1,7 @@
 import QtQuick
 import QtTest
 import Quickshell
-import "../../../config/quickshell/widgets"
+import "../../../../config/quickshell/widgets"
 
 Item {
     width: 800; height: 900

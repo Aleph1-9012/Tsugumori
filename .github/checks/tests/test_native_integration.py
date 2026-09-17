@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 import unittest
 
-REPO = Path(__file__).parents[2]
+REPO = Path(__file__).parents[3]
 SHELL = REPO / "config/quickshell"
 
 

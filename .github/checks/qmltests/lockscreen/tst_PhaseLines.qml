@@ -1,6 +1,6 @@
 import QtQuick
 import QtTest
-import "../../../config/quickshell/widgets/lockscreen"
+import "../../../../config/quickshell/widgets/lockscreen"
 
 Item {
     id: scene

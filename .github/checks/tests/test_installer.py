@@ -9,7 +9,7 @@ import textwrap
 import unittest
 
 
-REPO_ROOT = Path(__file__).parents[2]
+REPO_ROOT = Path(__file__).parents[3]
 INSTALLER = REPO_ROOT / "install.sh"
 
 

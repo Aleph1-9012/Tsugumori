@@ -32,19 +32,6 @@ with the native Lua parser and a Quickshell 0.3 development build. The VM run wa
 headless validation of installation, configuration, and integration behavior;
 it did not replace an interactive GPU/PAM acceptance test on physical hardware.
 
-## Updating this list
-
-After verifying the config works, the maintainer regenerates pinned
-versions with:
-
-```bash
-./maintenance/update-pins.sh
-```
-
-This updates `packages/pinned-pacman.txt`, recording each package's version and
-architecture as `package=version=architecture`. The generated file must be
-reviewed and committed before `--pinned` can be offered to users.
-
 ## How to install pinned versions
 
 Pinned manifests are not currently committed to this branch, so `--pinned`

@@ -8,7 +8,7 @@ import tempfile
 import unittest
 
 
-REPO_ROOT = Path(__file__).parents[2]
+REPO_ROOT = Path(__file__).parents[3]
 SET_WALLPAPER = REPO_ROOT / "config/quickshell/setwallpaper.sh"
 PICKER_QML = REPO_ROOT / "config/quickshell/widgets/WallpaperPicker.qml"
 

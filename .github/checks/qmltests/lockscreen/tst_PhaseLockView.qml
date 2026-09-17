@@ -1,7 +1,7 @@
 import QtQuick
 import QtTest
-import "../../../config/quickshell/widgets/lockscreen"
-import "../../../config/quickshell/widgets/lockscreen/PhaseArt.js" as Art
+import "../../../../config/quickshell/widgets/lockscreen"
+import "../../../../config/quickshell/widgets/lockscreen/PhaseArt.js" as Art
 
 // Run with QT_QPA_PLATFORM=offscreen. This never loads WlSessionLock or PAM.
 Item {
