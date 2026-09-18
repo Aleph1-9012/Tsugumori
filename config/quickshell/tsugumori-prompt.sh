@@ -6,17 +6,21 @@ fi
 
 _tsugumori_prompt() {
     # Capture the command result before any formatting or Git commands run.
-    local status=$? command_number='\#' columns=60 branch
-    _tsugumori_prompt_status=$status
-    printf -v _tsugumori_prompt_number '%03d' "${command_number@P}"
-
-    if [[ ${COLUMNS-} =~ ^[1-9][0-9]*$ ]] && (( COLUMNS <= 60 )); then
-        columns=$((COLUMNS - 1))
+    local status=$? path=$PWD branch width=80 rule_width suffix_width
+    # Byte lengths leave conservative spacing for non-ASCII directory names.
+    local LC_ALL=C
+    if [[ -n ${HOME-} ]]; then
+        case "$path" in
+            "$HOME") path='~' ;;
+            "$HOME/"*) path="~/${path#"$HOME/"}" ;;
+        esac
     fi
-    (( columns < 1 )) && columns=1
-    printf -v _tsugumori_prompt_rule '%*s' "$columns" ''
-    _tsugumori_prompt_rule=${_tsugumori_prompt_rule// /─}
-
+    _tsugumori_prompt_parent=''
+    _tsugumori_prompt_directory=$path
+    if [[ $path == */* && $path != / ]]; then
+        _tsugumori_prompt_parent="${path%/*}/"
+        _tsugumori_prompt_directory=${path##*/}
+    fi
     _tsugumori_prompt_branch=''
     if command -v git >/dev/null 2>&1; then
         if branch=$(command git symbolic-ref --quiet --short HEAD 2>/dev/null); then
@@ -25,18 +29,29 @@ _tsugumori_prompt() {
             _tsugumori_prompt_branch="detached:$branch"
         fi
     fi
+    _tsugumori_prompt_error=''
+    (( status == 0 )) || _tsugumori_prompt_error="exit $status"
+    # Keep the bracket pair visible even when there is no Git branch.
+    suffix_width=$((${#_tsugumori_prompt_branch} + 5))
+    [[ -z $_tsugumori_prompt_error ]] || (( suffix_width += ${#_tsugumori_prompt_error} + 1 ))
+    if [[ ${COLUMNS-} =~ ^[0-9]{1,4}$ ]] && (( 10#$COLUMNS > 0 )); then
+        width=$((10#$COLUMNS))
+    fi
+    rule_width=$((width - ${#path} - suffix_width - 2))
+    (( rule_width >= 3 )) || rule_width=3
+    printf -v _tsugumori_prompt_rule '%*s' "$rule_width" ''
+    _tsugumori_prompt_rule=${_tsugumori_prompt_rule// /─}
 
-    PS1='\n\[\e[38;2;55;51;49m\]${_tsugumori_prompt_rule}\[\e[0m\]\n'
-    PS1+='\[\e[38;2;204;21;21m\]${_tsugumori_prompt_number}//\[\e[0m\] '
-    PS1+='\[\e[38;2;232;232;232m\]\w\[\e[0m\]'
-    if [[ -n $_tsugumori_prompt_branch ]]; then
-        # Expand the value only when Bash renders PS1, never as prompt code.
-        PS1+=' \[\e[38;2;204;21;21m\]// \[\e[38;2;146;144;141m\]${_tsugumori_prompt_branch}\[\e[0m\]'
-    fi
+    # P4: directory, quiet divider, then branch; a red corner starts the command.
+    # Expand values as data at render time, never interpolate them into prompt code.
+    PS1='\n\[\e[38;2;146;144;141m\]${_tsugumori_prompt_parent}'
+    PS1+='\[\e[38;2;232;232;232m\]${_tsugumori_prompt_directory}'
+    PS1+=' \[\e[38;2;69;65;59m\]${_tsugumori_prompt_rule}'
+    PS1+=' \[\e[38;2;204;21;21m\][ \[\e[38;2;146;144;141m\]${_tsugumori_prompt_branch}\[\e[38;2;204;21;21m\] ]'
     if (( status != 0 )); then
-        PS1+=' \[\e[38;2;204;21;21m\]exit ${_tsugumori_prompt_status}\[\e[0m\]'
+        PS1+=' \[\e[38;2;204;21;21m\]${_tsugumori_prompt_error}'
     fi
-    PS1+='\n     \[\e[38;2;204;21;21m\]›\[\e[0m\] '
+    PS1+='\[\e[0m\]\n\[\e[38;2;204;21;21m\]└\[\e[0m\] '
 
     return "$status"
 }

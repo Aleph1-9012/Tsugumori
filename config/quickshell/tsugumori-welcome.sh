@@ -135,7 +135,6 @@ ship_band() {
     fi
     put "$badge_left" "$badge" $' \033[1mSID0NIA\033[22m '
     put "$((right - 1))" "$accent" '//'
-    # Fill the existing gap; PS1 supplies the newline before its top rule.
 }
 
 if (( panel_width >= 36 )); then
@@ -213,4 +212,6 @@ else
 fi
 
 ship_band
+# PS1 adds another newline, leaving one blank row below the header.
+new_line
 printf '%s' "$welcome_output"

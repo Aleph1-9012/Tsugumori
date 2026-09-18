@@ -3,11 +3,14 @@
 ## Terminal and widgets
 
 The terminal uses the R2-A header, a glyph illustration, bold 704 badge, and
-SID0NIA band. Kitty uses JetBrains Mono with a block cursor. The numbered Bash
-prompt includes the current Git branch and command-error status. The welcome
-script uses Kitty's text-sizing protocol where available and normal text
-elsewhere. Neither script prints into pipes or logs, and the prompt hook runs
-only in interactive shells.
+SID0NIA band, separated from the first prompt by one blank line. Kitty uses
+JetBrains Mono with a block cursor. The P4 Bash prompt places the current
+directory beside a thin divider, with red brackets around the Git branch at
+the right. The brackets remain empty outside Git repositories. A red corner
+marks the command line below; failed commands also show their exit status.
+The welcome script uses Kitty's text-sizing protocol where available and
+normal text elsewhere. Neither script prints into pipes or logs, and the
+prompt hook runs only in interactive shells.
 
 Player, Quick Notes, Clipboard, and Quickshare share the red illustrated
 curtain. The player's opening and closing timing is 25% longer. Quick Notes
