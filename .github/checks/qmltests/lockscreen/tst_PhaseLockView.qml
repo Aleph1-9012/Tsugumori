@@ -82,6 +82,9 @@ Item {
             view.password = "xxxx"; wait(300); compare(fieldPaints.count, 0);
         }
         function test_corner_animation_lifecycle() {
+            // Headless font fallback can make the panel taller than on desktop.
+            // Leave room for the corners before checking their animation state.
+            view.parent.height = Math.ceil(view.panelHeight * view.panelScale + 160);
             var corners = [];
             for (var i = 0; i < 4; i++) {
                 corners.push(findChild(view, "formationCorner" + i));
