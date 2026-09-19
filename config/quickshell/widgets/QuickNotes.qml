@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -5,13 +6,12 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import "../components"
-import "../services"
 import "../settings"
 import "../theme"
 
 Scope {
     id: root
-    required property NotesService store
+    readonly property NotesStore store: NotesStore {}
     property bool opened: false
     property real reveal: 0
     property real curtainCover: 1
@@ -452,6 +452,334 @@ Scope {
                     }
                 }
             }
+        }
+    }
+
+    component NotesStore: Scope {
+        id: storeState
+
+        property alias notes: notesModel
+        property string activeId: ""
+        property bool ready: false
+        property bool dirty: false
+        property bool busy: false
+        property bool canRecover: false
+        property string errorCode: ""
+        property int revision: 0
+        property int generation: 0
+        property int sentGeneration: 0
+        property var undoStack: []
+        property var cursors: ({})
+        property string editorField: "body"
+        property string operation: ""
+        property string requestText: ""
+        property bool streamDone: false
+        property bool processDone: false
+        property bool flushPending: false
+        readonly property int activeIndex: {
+            const changed = generation
+            for (let i = 0; i < notesModel.count; ++i)
+                if (notesModel.get(i).noteId === activeId) return i
+            return -1
+        }
+        readonly property string status: errorCode ? (ready ? "SAVE FAILED" : "LOAD FAILED")
+                                        : !ready ? "LOADING" : dirty || busy ? "SAVING" : "SAVED"
+        readonly property string errorMessage: {
+            switch (errorCode) {
+            case "conflict": return "Notes changed on disk. Your draft is kept here. Copy it before restarting."
+            case "invalid": return "The notes file is damaged or uses an unsupported format. It has not been replaced."
+            case "path": return "XDG_DATA_HOME must be an absolute path."
+            case "unsafe": return "The notes path has unsafe ownership or file links."
+            case "busy": return "Another notes writer is busy. Retry when it finishes."
+            case "timeout": return "Storage did not respond. Your draft is kept here."
+            case "": return ""
+            default: return "Cannot access notes storage. Your draft is kept here."
+            }
+        }
+        signal focusTitleRequested()
+
+        ListModel { id: notesModel }
+        Timer { id: debounce; interval: 400; onTriggered: storeState.flush() }
+        Timer { id: maxPending; interval: 2000; onTriggered: storeState.flush() }
+        Timer {
+            id: deadline
+            interval: 10000
+            onTriggered: {
+                storeState.errorCode = "timeout"
+                worker.running = false
+                storeState.busy = false
+                storeState.requestText = ""
+            }
+        }
+
+        function find(id) {
+            for (let i = 0; i < notesModel.count; ++i)
+                if (notesModel.get(i).noteId === id) return i
+            return -1
+        }
+        function noteCopy(index) {
+            const note = notesModel.get(index)
+            return { noteId: note.noteId, title: note.title, body: note.body,
+                     createdAt: note.createdAt, updatedAt: note.updatedAt }
+        }
+        function markDirty(immediate) {
+            generation++
+            dirty = true
+            // Retry is explicit after failures; do not hammer an inaccessible store.
+            if (errorCode) return
+            debounce.restart()
+            if (!maxPending.running) maxPending.start()
+            if (immediate) flush()
+        }
+        function selectNote(id) {
+            if (!ready || id === activeId || find(id) < 0) return
+            activeId = id
+            markDirty(true)
+        }
+        function edit(field, value) {
+            if (!ready || activeIndex < 0 || (field !== "title" && field !== "body")) return
+            if (notesModel.get(activeIndex)[field] === value) return
+            notesModel.setProperty(activeIndex, field, value)
+            notesModel.setProperty(activeIndex, "updatedAt", new Date().toISOString())
+            markDirty(false)
+        }
+        function createNote() {
+            if (!ready) return
+            const now = new Date().toISOString()
+            let id
+            do { id = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2) }
+            while (find(id) >= 0)
+            notesModel.append({ noteId: id, title: "", body: "", createdAt: now, updatedAt: now })
+            activeId = id
+            editorField = "title"
+            markDirty(true)
+            focusTitleRequested()
+        }
+        function removeNote(id) {
+            if (!ready) return
+            const index = find(id)
+            if (index < 0) return
+            undoStack = undoStack.concat([{ note: noteCopy(index), index: index }])
+            notesModel.remove(index)
+            if (activeId === id)
+                activeId = notesModel.count ? notesModel.get(Math.min(index, notesModel.count - 1)).noteId : ""
+            markDirty(true)
+        }
+        function undoDelete() {
+            if (!ready || !undoStack.length) return
+            const entry = undoStack[undoStack.length - 1]
+            undoStack = undoStack.slice(0, -1)
+            notesModel.insert(Math.min(entry.index, notesModel.count), entry.note)
+            activeId = entry.note.noteId
+            markDirty(true)
+        }
+        function rememberCursor(id, field, position) {
+            if (!id) return
+            const key = id + "/" + field
+            cursors[key] = position
+        }
+        function cursorFor(id, field) { return cursors[id + "/" + field] || 0 }
+
+        function startRequest(request) {
+            if (busy || worker.running) return
+            operation = request.operation
+            requestText = JSON.stringify(request) + "\n"
+            streamDone = false
+            processDone = false
+            busy = true
+            deadline.restart()
+            worker.running = true
+        }
+        function load() {
+            if (ready || busy) return
+            errorCode = ""
+            canRecover = false
+            startRequest({ operation: "read" })
+        }
+        function recover() {
+            if (ready || busy || !canRecover) return
+            errorCode = ""
+            startRequest({ operation: "recover" })
+        }
+        function retry() {
+            if (busy || worker.running) return
+            errorCode = ""
+            if (!ready) load()
+            else flush()
+        }
+        function flush() {
+            debounce.stop()
+            maxPending.stop()
+            if (!ready || !dirty || errorCode) return
+            if (busy) { flushPending = true; return }
+            const list = []
+            for (let i = 0; i < notesModel.count; ++i) {
+                const n = notesModel.get(i)
+                list.push({ id: n.noteId, title: n.title, body: n.body,
+                            createdAt: n.createdAt, updatedAt: n.updatedAt })
+            }
+            sentGeneration = generation
+            flushPending = false
+            startRequest({ operation: "write", expectedRevision: revision,
+                document: { schema: 1, revision: revision + 1, activeId: activeId, notes: list } })
+        }
+        function finishRequest() {
+            if (!busy || !streamDone || !processDone) return
+            deadline.stop()
+            busy = false
+            requestText = ""
+            let response
+            try { response = JSON.parse(output.text) }
+            catch (_) { errorCode = "io"; return }
+            if (!response.ok) {
+                errorCode = response.error || "io"
+                canRecover = !ready && !!response.canRecover
+                return
+            }
+            canRecover = false
+            if (operation === "write") {
+                revision = response.revision
+                dirty = generation !== sentGeneration
+                if (dirty && (flushPending || !debounce.running)) Qt.callLater(storeState.flush)
+            } else {
+                // No edits are allowed before this initial read/recovery completes.
+                const doc = response.document
+                notesModel.clear()
+                for (const n of doc.notes)
+                    notesModel.append({ noteId: n.id, title: n.title, body: n.body,
+                                        createdAt: n.createdAt, updatedAt: n.updatedAt })
+                revision = doc.revision
+                activeId = doc.activeId
+                generation++
+                dirty = false
+                ready = true
+            }
+        }
+
+        Process {
+            id: worker
+            command: ["python3", Qt.resolvedUrl("../scripts/notes-store.py").toString().replace("file://", "")]
+            stdinEnabled: true
+            onStarted: write(storeState.requestText)
+            stdout: StdioCollector {
+                id: output
+                onStreamFinished: { storeState.streamDone = true; Qt.callLater(storeState.finishRequest) }
+            }
+            stderr: StdioCollector {} // Do not forward helper errors or note content to shell logs.
+            onExited: { storeState.processDone = true; Qt.callLater(storeState.finishRequest) }
+        }
+        Component.onCompleted: load()
+    }
+
+    component NoteRow: Item {
+        id: rowControl
+
+        property string title: ""
+        property int number: 1
+        property bool selected: false
+        property real uiScale: 1
+        property bool reducedMotion: false
+        readonly property bool highlighted: selected || pointer.hovered || selectButton.activeFocus || deleteButton.activeFocus
+        property real fillProgress: 0
+        signal selectedRequested()
+        signal deleteRequested()
+
+        implicitHeight: 40 * uiScale
+        implicitWidth: 378 * uiScale
+
+        // Keep this fill alive when selection changes. Only hover-out animates;
+        // selecting a row always cancels the animation and pins it fully red.
+        function updateFill() {
+            wipe.stop()
+            if (selected || reducedMotion) {
+                fillProgress = highlighted ? 1 : 0
+            } else {
+                wipe.from = fillProgress
+                wipe.to = highlighted ? 1 : 0
+                wipe.start()
+            }
+        }
+        onHighlightedChanged: updateFill()
+        onSelectedChanged: updateFill()
+        onReducedMotionChanged: updateFill()
+        Component.onCompleted: updateFill()
+
+        NumberAnimation {
+            id: wipe
+            target: rowControl
+            property: "fillProgress"
+            duration: 220
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: [0.76, 0, 0.24, 1, 1, 1]
+        }
+        Rectangle { anchors.fill: parent; color: Theme.bg }
+        Rectangle {
+            width: parent.width * rowControl.fillProgress
+            height: parent.height
+            color: Theme.a1
+        }
+        Rectangle {
+            anchors.fill: parent
+            color: "transparent"
+            border.width: 1
+            border.color: rowControl.selected ? Theme.a1 : Qt.alpha(Theme.a1, 0.55)
+        }
+        HoverHandler { id: pointer }
+        Button {
+            id: selectButton
+            anchors { left: parent.left; top: parent.top; bottom: parent.bottom; right: deleteButton.left }
+            padding: 0
+            focusPolicy: Qt.StrongFocus
+            background: Item {}
+            Accessible.name: rowControl.number.toString().padStart(2, "0") + "// " + (rowControl.title.trim() || "Untitled note")
+            contentItem: Item {
+                Rectangle {
+                    x: 9 * rowControl.uiScale
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 6 * rowControl.uiScale; height: width
+                    rotation: 45
+                    visible: rowControl.selected
+                    color: Theme.bg
+                }
+                Text {
+                    anchors { left: parent.left; leftMargin: 24 * rowControl.uiScale; right: parent.right; rightMargin: 9 * rowControl.uiScale; verticalCenter: parent.verticalCenter }
+                    text: selectButton.Accessible.name
+                    textFormat: Text.PlainText
+                    elide: Text.ElideRight
+                    font.family: Theme.mono
+                    font.pixelSize: 16 * rowControl.uiScale
+                    color: rowControl.highlighted ? Theme.bg : Theme.fg
+                }
+            }
+            onClicked: { forceActiveFocus(); rowControl.selectedRequested() }
+        }
+        Button {
+            id: deleteButton
+            anchors { right: parent.right; top: parent.top; bottom: parent.bottom }
+            width: 34 * rowControl.uiScale
+            padding: 0
+            focusPolicy: Qt.StrongFocus
+            Accessible.name: "Delete " + (rowControl.title.trim() || "Untitled note")
+            background: Rectangle {
+                color: !rowControl.selected && deleteButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent"
+                Rectangle { width: 1; height: parent.height; color: rowControl.highlighted ? Qt.alpha(Theme.bg, 0.25) : Qt.alpha(Theme.a1, 0.3) }
+            }
+            contentItem: Text {
+                text: "×"
+                font.family: Theme.mono
+                font.pixelSize: 21 * rowControl.uiScale
+                color: rowControl.highlighted ? Theme.bg : Theme.fg
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+            onClicked: rowControl.deleteRequested()
+        }
+        Rectangle {
+            anchors.fill: selectButton.activeFocus ? selectButton : deleteButton
+            anchors.margins: 3
+            visible: selectButton.activeFocus || deleteButton.activeFocus
+            color: "transparent"
+            border.color: rowControl.highlighted ? Theme.bg : Theme.fg
         }
     }
 }

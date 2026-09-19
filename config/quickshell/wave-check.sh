@@ -18,12 +18,6 @@ readonly assets=(
     widgets/lockscreen/shaders/lines.vert.qsb
     widgets/lockscreen/shaders/lines.frag.qsb
     widgets/WallpaperPicker.qml
-    widgets/wallpaper/PickerMotion.qml
-    widgets/wallpaper/PickerBackdrop.qml
-    widgets/wallpaper/PickerRegistration.qml
-    widgets/wallpaper/PickerCorners.qml
-    widgets/wallpaper/PickerApplyPanel.qml
-    widgets/wallpaper/PickerPreview.qml
 )
 
 mkdir -p -- "$log_dir" || exit 1

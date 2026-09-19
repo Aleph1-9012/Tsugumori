@@ -1,35 +1,15 @@
 import QtQuick
 import QtTest
-import "../../../../config/quickshell/widgets/wallpaper"
-import "../../../../config/quickshell/widgets/lockscreen/PhaseArt.js" as Art
 
 // Visual-only tests. No real wallpaper selection, process execution, or layers.
 Item {
     id: scene
     width: 1280; height: 800
-    PickerMotion { id: motion }
-    PickerBackdrop {
-        id: field; anchors.fill: parent; progress: motion.progress
-        vertexShaderUrl: Qt.resolvedUrl("../../../../config/quickshell/widgets/lockscreen/shaders/lines.vert.qsb")
-        fragmentShaderUrl: Qt.resolvedUrl("../../../../config/quickshell/widgets/lockscreen/shaders/lines.frag.qsb")
-    }
-    PickerCorners {
-        id: corners; anchors.fill: parent
-        progress: motion.progress; live: motion.inputReady; hiding: motion.closing
-        clockText: "18:24:09"; monitorName: "DP-1"
-    }
-    Rectangle {
-        anchors.centerIn: parent
-        width: 800; height: 500
-        color: "#0f0d0a"; border.color: "#e8e8e8"; border.width: 2
-        opacity: Art.ramp(motion.progress, .22, .73)
-        Text { anchors.centerIn: parent; text: "WALLPAPER PREVIEW"; color: "#e8e8e8"; font.family: "JetBrains Mono" }
-    }
-    PickerRegistration {
-        id: registration
-        anchors.centerIn: parent; width: 800; height: 500
-        progress: motion.progress
-    }
+    property var visuals
+    readonly property var motion: visuals ? visuals.motion : null
+    readonly property var field: visuals ? visuals.field : null
+    readonly property var corners: visuals ? visuals.corners : null
+    readonly property var registration: visuals ? visuals.registration : null
     TestCase {
         id: tests
         name: "PickerPhaseTransition"
@@ -37,6 +17,52 @@ Item {
         SignalSpy { id: closed; target: motion; signalName: "closed" }
         SignalSpy { id: progressSteps; target: motion; signalName: "progressChanged" }
         SignalSpy { id: fieldPaints; target: field; signalName: "paintCountChanged" }
+        function initTestCase() {
+            // Test the actual inline visuals without loading Quickshell's shell,
+            // monitor lookup, wallpaper process, or exclusive keyboard layer.
+            var widgets = Qt.resolvedUrl("../../../../config/quickshell/widgets/").toString();
+            var request = new XMLHttpRequest();
+            request.open("GET", widgets + "WallpaperPicker.qml", false);
+            request.send();
+            var source = request.responseText;
+            var start = source.indexOf("    component PickerMotion:");
+            verify(start >= 0, "Picker inline components must exist in WallpaperPicker.qml");
+            var definitions = source.slice(start, source.lastIndexOf("\n}"));
+            var imports = 'pragma ComponentBehavior: Bound\nimport QtQuick\nimport QtQuick.Window\n'
+                + 'import QtQuick.Controls\nimport QtQuick.Layouts\n'
+                + 'import "' + widgets + 'lockscreen"\n'
+                + 'import "' + widgets + 'lockscreen/PhaseArt.js" as Art\n';
+            scene.visuals = Qt.createQmlObject(imports + `Item {
+                anchors.fill: parent
+                property alias motion: timeline
+                property alias field: backdrop
+                property alias corners: decorations
+                property alias registration: ticks
+                PickerMotion { id: timeline }
+                PickerBackdrop {
+                    id: backdrop; anchors.fill: parent; progress: timeline.progress
+                    vertexShaderUrl: "${widgets}lockscreen/shaders/lines.vert.qsb"
+                    fragmentShaderUrl: "${widgets}lockscreen/shaders/lines.frag.qsb"
+                }
+                PickerCorners {
+                    id: decorations; anchors.fill: parent
+                    progress: timeline.progress; live: timeline.inputReady; hiding: timeline.closing
+                    clockText: "18:24:09"; monitorName: "DP-1"
+                }
+                Rectangle {
+                    anchors.centerIn: parent; width: 800; height: 500
+                    color: "#0f0d0a"; border.color: "#e8e8e8"; border.width: 2
+                    opacity: Art.ramp(timeline.progress, .22, .73)
+                    Text { anchors.centerIn: parent; text: "WALLPAPER PREVIEW"; color: "#e8e8e8"; font.family: "JetBrains Mono" }
+                }
+                PickerRegistration {
+                    id: ticks; anchors.centerIn: parent; width: 800; height: 500
+                    progress: timeline.progress
+                }
+                ${definitions}
+            }`, scene, "PickerVisualTest.qml");
+            verify(scene.visuals !== null);
+        }
         function init() {
             motion.close(); tryCompare(motion, "finished", true, 1600);
             motion.started = false; motion.opening = false; motion.closing = false; motion.finished = false; motion.progress = 0;

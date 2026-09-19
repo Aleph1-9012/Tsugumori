@@ -44,8 +44,6 @@ class NativeIntegrationTests(unittest.TestCase):
             "lockscreen/PhaseLines.qml", "lockscreen/PhaseCpuFallback.qml",
             "lockscreen/FormationCorner.qml", "lockscreen/shaders/lines.vert.qsb",
             "lockscreen/shaders/lines.frag.qsb", "WallpaperPicker.qml",
-            "wallpaper/PickerMotion.qml", "wallpaper/PickerBackdrop.qml",
-            "wallpaper/PickerRegistration.qml", "wallpaper/PickerCorners.qml",
         )
         for asset in assets:
             for empty in (False, True):
@@ -72,7 +70,7 @@ class NativeIntegrationTests(unittest.TestCase):
         self.assertIn("keyNavigationEnabled: false", source)
         self.assertIn("root.store.moveSelection(event.key", source)
         self.assertIn("CurtainSurface {", source)
-        service = (SHELL / "services/ClipboardService.qml").read_text()
+        service = source
         self.assertIn("Math.max(0, Math.min(entriesModel.count - 1, selectedIndex + step))", service)
 
     def test_notes_copy_feedback_and_same_size_button_remain(self) -> None:

@@ -238,8 +238,8 @@ package_set = set(packages)
 duplicates = sorted({package for package in packages if packages.count(package) > 1})
 if duplicates:
     raise SystemExit(f"{manifest}: duplicate packages: {', '.join(duplicates)}")
-if len(packages) != 39:
-    raise SystemExit(f"{manifest}: expected 39 direct packages, found {len(packages)}")
+if len(packages) != 41:
+    raise SystemExit(f"{manifest}: expected 41 direct packages, found {len(packages)}")
 obsolete_manifests = [Path("packages/" "aur.txt"), Path("packages/pinned-" "aur.txt")]
 present_obsolete = [str(path) for path in obsolete_manifests if path.exists()]
 if present_obsolete:
@@ -247,7 +247,7 @@ if present_obsolete:
 
 required_pacman = {
     "awww", "quickshell", "hyprlock", "hypridle",
-    "ttf-jetbrains-mono-nerd",
+    "ttf-jetbrains-mono-nerd", "fastfetch", "btop",
 }
 missing = sorted(required_pacman - package_set)
 if missing:
@@ -324,7 +324,7 @@ fi
 
 if [[ -x /usr/lib/qt6/bin/qmltestrunner ]]; then
     for suite in lockscreen wallpaper; do
-        QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_SCALE_FACTOR=1.25 \
+        QML_XHR_ALLOW_FILE_READ=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_SCALE_FACTOR=1.25 \
             /usr/lib/qt6/bin/qmltestrunner -input ".github/checks/qmltests/$suite" -o -,txt
     done
     QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_SCALE_FACTOR=1.25 \

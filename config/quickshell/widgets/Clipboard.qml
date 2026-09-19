@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -5,12 +6,11 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import "../components"
-import "../services"
 import "../settings"
 
 Scope {
     id: root
-    required property ClipboardService store
+    readonly property ClipboardStore store: ClipboardStore {}
     property bool opened: false
     property bool clearPending: false
     property real reveal: 0
@@ -519,6 +519,228 @@ Scope {
                 uiScale: root.s
                 z: 50
                 visible: width > 0
+            }
+        }
+    }
+
+    component ClipboardStore: Scope {
+        id: storeState
+        property alias entries: entriesModel
+        property string selectedId: ""
+        property string query: ""
+        property bool pinnedOnly: false
+        property bool ready: false
+        property bool busy: false
+        property bool canUndo: false
+        property int total: 0
+        property int clearableCount: 0
+        property int generation: 0
+        property int requestId: 0
+        property string errorCode: ""
+        property string watcherError: ""
+        property var detail: ({ clipId: "", body: "", preview: "", truncated: false })
+        readonly property int selectedIndex: {
+            // Re-evaluate after in-place model updates, even when its count stays the same.
+            const revision = generation
+            for (let i = 0; i < entriesModel.count; ++i)
+                if (entriesModel.get(i).clipId === selectedId) return i
+            return -1
+        }
+        readonly property var selectedEntry: selectedIndex >= 0 ? entriesModel.get(selectedIndex) : null
+        readonly property string errorMessage: {
+            switch (errorCode || watcherError) {
+            case "restore": return "Could not restore this entry. Your clipboard was not replaced."
+            case "missing": return "This entry is no longer in history."
+            case "pin-limit": return "Up to 40 entries can be pinned. Unpin one first."
+            case "watcher": return "Clipboard capture stopped. Retry to reconnect."
+            case "already-running": return "Another clipboard worker is running."
+            case "version": return "Clipboard storage uses a newer format. It has not been replaced."
+            case "unsafe": return "Clipboard storage has unsafe permissions or links."
+            case "path": return "XDG_DATA_HOME must be an absolute path."
+            case "": return ""
+            default: return "Clipboard storage is unavailable. Retry to reconnect."
+            }
+        }
+        signal restored()
+
+        ListModel { id: entriesModel }
+        Timer { id: searchDelay; interval: 130; onTriggered: storeState.send("sync") }
+        Timer {
+            id: deadline
+            interval: 8000
+            onTriggered: { storeState.busy = false; storeState.errorCode = "timeout" }
+        }
+        onQueryChanged: searchDelay.restart()
+        onPinnedOnlyChanged: send("sync")
+
+        function select(id) {
+            if (selectedId === id) return
+            selectedId = id
+            detail = { clipId: "", body: "", preview: "", truncated: false }
+            send("sync")
+        }
+        function moveSelection(step) {
+            if (!entriesModel.count) return
+            const nextIndex = Math.max(0, Math.min(entriesModel.count - 1, selectedIndex + step))
+            select(entriesModel.get(nextIndex).clipId)
+        }
+        function send(operation) {
+            if (!worker.running || !ready) return
+            searchDelay.stop()
+            requestId++
+            errorCode = ""
+            busy = true
+            deadline.restart()
+            worker.write(JSON.stringify({ operation: operation, requestId: requestId,
+                selected: selectedId, query: query, pinnedOnly: pinnedOnly }) + "\n")
+        }
+        function retry() {
+            if (worker.running) worker.running = false
+            restartDelay.restart()
+        }
+        Timer {
+            id: restartDelay
+            interval: 1200
+            onTriggered: {
+                if (worker.running) { restart(); return }
+                storeState.ready = false
+                storeState.errorCode = ""
+                storeState.watcherError = ""
+                storeState.requestId = 0
+                worker.running = true
+            }
+        }
+        function receive(line) {
+            let message
+            try { message = JSON.parse(line) } catch (_) { errorCode = "protocol"; return }
+            if (message.requestId !== undefined && message.requestId < requestId) {
+                if (message.ok && message.restored) restored()
+                return
+            }
+            deadline.stop()
+            busy = false
+            if (!message.ok) { errorCode = message.error || "storage"; return }
+            if (message.event !== "snapshot") return
+            const wasReady = ready
+            ready = true
+            watcherError = message.watcherError || ""
+            total = message.total
+            clearableCount = message.clearableCount || 0
+            canUndo = message.canUndo
+            // Reconcile by ID, keeping existing delegates alive for hover-out wipes.
+            const next = message.entries
+            for (let i = 0; i < next.length; ++i) {
+                let found = -1
+                for (let j = i; j < entriesModel.count; ++j)
+                    if (entriesModel.get(j).clipId === next[i].clipId) { found = j; break }
+                if (found < 0) entriesModel.insert(i, next[i])
+                else {
+                    if (found !== i) entriesModel.move(found, i, 1)
+                    entriesModel.set(i, next[i])
+                }
+            }
+            if (entriesModel.count > next.length) entriesModel.remove(next.length, entriesModel.count - next.length)
+            selectedId = message.selected
+            detail = message.detail
+            generation++
+            if (message.restored) restored()
+            if (!wasReady && (query || pinnedOnly)) send("sync")
+        }
+        Process {
+            id: worker
+            // The helper owns both capture processes and ties their lifetime to this worker.
+            command: ["python3", "-u", Qt.resolvedUrl("../scripts/clipboard-store.py").toString().replace("file://", ""), "serve"]
+            stdinEnabled: true
+            stdout: SplitParser { onRead: data => storeState.receive(data) }
+            stderr: StdioCollector {} // Do not forward clipboard/helper output into shell logs.
+            onExited: {
+                storeState.ready = false
+                storeState.busy = false
+                deadline.stop()
+                if (!restartDelay.running && !storeState.errorCode) storeState.errorCode = "worker"
+            }
+        }
+        Component.onCompleted: worker.running = true
+    }
+
+    component ClipboardRow: Button {
+        id: rowControl
+        property string title: ""
+        property string kind: "TEXT"
+        property string age: ""
+        property bool pinned: false
+        property int number: 1
+        property bool selected: false
+        property bool reducedMotion: false
+        property real uiScale: 1
+        property color ink: "#252424"
+        property color muted: "#62605a"
+        property color line: "#c3bcb2"
+        property color accent: "#d4161c"
+        property real fillProgress: 0
+        readonly property bool rowHighlighted: selected || hovered
+        implicitHeight: 71 * uiScale
+        padding: 0
+        hoverEnabled: true
+        focusPolicy: Qt.StrongFocus
+        Accessible.name: number.toString().padStart(2, "0") + "// " + title + (pinned ? ", pinned" : "")
+        Accessible.description: selected ? "Selected clipboard entry" : "Preview clipboard entry"
+
+        function updateFill() {
+            wipe.stop()
+            if (selected || reducedMotion) fillProgress = rowHighlighted ? 1 : 0
+            else { wipe.from = fillProgress; wipe.to = rowHighlighted ? 1 : 0; wipe.start() }
+        }
+        onRowHighlightedChanged: updateFill()
+        onSelectedChanged: updateFill()
+        onReducedMotionChanged: updateFill()
+        Component.onCompleted: updateFill()
+        NumberAnimation {
+            id: wipe
+            target: rowControl; property: "fillProgress"
+            duration: 280
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: [0.2, 0.7, 0.2, 1, 1, 1]
+        }
+        background: Item {
+            Rectangle { width: parent.width * rowControl.fillProgress; height: parent.height; color: rowControl.accent }
+            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: rowControl.line }
+            Rectangle {
+                anchors.fill: parent; anchors.margins: 3 * rowControl.uiScale
+                visible: rowControl.activeFocus; color: "transparent"
+                border.color: rowControl.rowHighlighted ? "#090909" : rowControl.muted
+            }
+        }
+        contentItem: Item {
+            Text {
+                x: 21 * rowControl.uiScale; y: 16 * rowControl.uiScale
+                text: rowControl.number.toString().padStart(2, "0") + "//"
+                font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11 * rowControl.uiScale
+                color: rowControl.rowHighlighted ? "#090909" : rowControl.muted
+            }
+            Column {
+                x: 63 * rowControl.uiScale; y: 13 * rowControl.uiScale
+                width: Math.max(1, parent.width - x - 36 * rowControl.uiScale)
+                spacing: 7 * rowControl.uiScale
+                Text {
+                    width: parent.width
+                    text: rowControl.title; textFormat: Text.PlainText; elide: Text.ElideRight
+                    font.family: "Inter"; font.pixelSize: 14 * rowControl.uiScale; font.letterSpacing: 0.35 * rowControl.uiScale
+                    color: rowControl.rowHighlighted ? "#090909" : rowControl.ink
+                }
+                Text {
+                    width: parent.width
+                    text: (rowControl.kind === "IMAGE" ? "IMG" : rowControl.kind === "LINK" ? "URL" : "TXT")
+                          + "  " + rowControl.age + (rowControl.pinned ? "  / PIN" : "")
+                    elide: Text.ElideRight
+                    font.family: "JetBrainsMono Nerd Font"; font.pixelSize: 11 * rowControl.uiScale
+                    color: rowControl.rowHighlighted ? "#090909" : rowControl.muted
+                }
+            }
+            Rectangle {
+                anchors { right: parent.right; rightMargin: 19 * rowControl.uiScale; verticalCenter: parent.verticalCenter }
+                width: 6 * rowControl.uiScale; height: width; rotation: 45
+                visible: rowControl.selected; color: "#090909"
             }
         }
     }

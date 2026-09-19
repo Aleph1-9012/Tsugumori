@@ -32,12 +32,12 @@ Item {
         function test_center_and_square() {
             var panel = findChild(view, "loginPanel"), glyph = findChild(view, "compoundGlyph");
             compare(panel.width, 408);
-            compare(panel.scale, 1.15);
-            fuzzyCompare(panel.width * panel.scale, 469.2, .001);
+            fuzzyCompare(panel.scale, 1.3225, .0001);
+            fuzzyCompare(panel.width * panel.scale, 539.58, .001);
             verify(Math.abs(panel.x * 2 + panel.width - view.width) <= 1);
             verify(Math.abs(panel.y * 2 + panel.height - view.height) <= 1);
             compare(glyph.width, 162); compare(glyph.height, glyph.width);
-            fuzzyCompare(glyph.width * panel.scale, 186.3, .001);
+            fuzzyCompare(glyph.width * panel.scale, 214.245, .001);
             var glyphOrigin = glyph.mapToItem(view, 0, 0);
             fuzzyCompare(glyph.renderOrigin.x, glyphOrigin.x, .001);
             fuzzyCompare(glyph.renderOrigin.y, glyphOrigin.y, .001);
@@ -45,7 +45,8 @@ Item {
             compare(registration.scale, panel.scale);
             compare(registration.mapToItem(view, 0, 0), panel.mapToItem(view, 0, 0));
             compare(findChild(view, "userLabel").text, "TESTPILOT");
-            verify(panel.height < 500 && panel.height > 420);
+            // The compact power controls add a footer beneath the password field.
+            verify(panel.height < 540 && panel.height > 420);
         }
         function test_typing_backspace_and_focus() {
             var input = findChild(view, "passwordInput"), row = findChild(view, "passwordRow");

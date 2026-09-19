@@ -18,12 +18,10 @@ ShellRoot {
     ControlCenter {}
 
     // Standalone notes drawer, separate from the Control Center.
-    NotesService { id: notesService }
-    QuickNotes { id: quickNotes; store: notesService }
+    QuickNotes { id: quickNotes }
 
     // Visual clipboard history, separate from the Control Center and notes.
-    ClipboardService { id: clipboardService }
-    Clipboard { id: clipboardDrawer; store: clipboardService }
+    Clipboard { id: clipboardDrawer }
 
     // ── PLAYER STATE ──
     property bool   playerVisible: false
