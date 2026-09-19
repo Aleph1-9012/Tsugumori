@@ -38,7 +38,7 @@ Button {
         }
         Rectangle {
             anchors.fill: parent; anchors.margins: 3 * root.uiScale
-            visible: root.activeFocus; color: "transparent"
+            visible: root.activeFocus && !root.primary; color: "transparent"
             border.width: 1; border.color: Theme.fg
         }
     }
