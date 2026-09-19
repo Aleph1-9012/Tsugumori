@@ -1,9 +1,10 @@
-# Tsugumori
+<h1><samp>TSUGUMORI // 継衛</samp></h1>
 
-Knights of Sidonia-inspired Hyprland desktop for Arch Linux.
+<p><samp>KNIGHTS OF SIDONIA-INSPIRED HYPRLAND DESKTOP // ARCH LINUX</samp></p>
 
-![Hyprland: 0.55.2+](https://img.shields.io/badge/Hyprland-0.55.2%2B-58e1ff)
-![License: MIT](https://img.shields.io/badge/license-MIT-7a7358)
+![Type-17: Sidonia / 704](https://img.shields.io/badge/TYPE--17-SIDONIA%20%2F%20704-cc1515?style=flat-square&labelColor=2a2a2a)
+![Hyprland: 0.55.2+](https://img.shields.io/badge/HYPRLAND-0.55.2%2B-cc1515?style=flat-square&labelColor=2a2a2a)
+![License: MIT](https://img.shields.io/badge/LICENSE-MIT-cc1515?style=flat-square&labelColor=2a2a2a)
 
 https://github.com/user-attachments/assets/0f27254b-d3ef-4ce7-a7c8-903179d5269e
 <p align="center">
