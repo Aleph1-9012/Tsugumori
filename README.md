@@ -5,21 +5,20 @@ Knights of Sidonia-inspired Hyprland desktop for Arch Linux.
 ![Hyprland: 0.55.2+](https://img.shields.io/badge/Hyprland-0.55.2%2B-58e1ff)
 ![License: MIT](https://img.shields.io/badge/license-MIT-7a7358)
 
-https://github.com/user-attachments/assets/34b4f963-c526-4c36-b54b-739372b248d7
-
+https://github.com/user-attachments/assets/0f27254b-d3ef-4ce7-a7c8-903179d5269e
 <p align="center">
-  <a href="https://youtu.be/VwLABphh-E0">Watch the showcase in higher quality on YouTube</a>
+  <a href="https://youtu.be/nO3lfZ2hsdM">Watch the showcase in higher quality on YouTube</a>
 </p>
 
 ## Screenshots
 
 <p align="center">
-  <img width="49%" alt="Tsugumori desktop screenshot 1" src="https://github.com/user-attachments/assets/ae03e598-540b-41f6-8d92-43b77bc7bd2d">
-  <img width="49%" alt="Tsugumori desktop screenshot 2" src="https://github.com/user-attachments/assets/6e290d5f-8628-471e-99d9-90cb58182626">
+  <img width="49%" alt="Tsugumori desktop screenshot 1" src="https://github.com/user-attachments/assets/46133f0e-0af4-4d45-a132-355acf489372">
+  <img width="49%" alt="Tsugumori desktop screenshot 2" src="https://github.com/user-attachments/assets/40c3157f-0e7d-4941-b7ad-318cbc3b7a3e">  
 </p>
 <p align="center">
-  <img width="49%" alt="Tsugumori desktop screenshot 3" src="https://github.com/user-attachments/assets/b63348dc-3717-4faa-b303-193b1c46cb0a">
-  <img width="49%" alt="Tsugumori desktop screenshot 4" src="https://github.com/user-attachments/assets/93c8a56c-46c9-4371-bdd5-331aff5ace7d">
+  <img width="49%" alt="Tsugumori desktop screenshot 3" src="https://github.com/user-attachments/assets/ad4b8e28-9891-4ba5-a0c5-714d9ceb9823">
+  <img width="49%" alt="Tsugumori desktop screenshot 4" src="https://github.com/user-attachments/assets/19deb533-1a98-40b5-b9c5-4b80b84335a3">
 </p>
 
 > [!NOTE]
