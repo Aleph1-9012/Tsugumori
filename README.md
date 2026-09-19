@@ -5,8 +5,6 @@ Knights of Sidonia-inspired Hyprland desktop for Arch Linux.
 ![Hyprland: 0.55.2+](https://img.shields.io/badge/Hyprland-0.55.2%2B-58e1ff)
 ![License: MIT](https://img.shields.io/badge/license-MIT-7a7358)
 
-
-
 https://github.com/user-attachments/assets/34b4f963-c526-4c36-b54b-739372b248d7
 
 <p align="center">
@@ -59,7 +57,7 @@ with their licenses, so the installer does not need an AUR helper.
 - Native Phase lock and wallpaper-picker transitions, shared red curtains, and bundled wallpapers
 
 See [desktop design and runtime notes](docs/native-desktop.md) for the terminal,
-widgets, fonts, and native animation details. The lock no longer uses MP4 assets.
+widgets, fonts, and native animation details.
 
 ## Change the basics
 
@@ -106,7 +104,6 @@ restored with Undo during the current shell session.
 
 - [Common problems and recovery](docs/help.md)
 - [Tested software versions](docs/versions.md)
-- [v0.1.2 release notes](docs/releases/v0.1.2.md)
 
 ## Folder guide
 
@@ -115,7 +112,7 @@ restored with Undo during the current shell session.
 | `config/` | Desktop configuration installed into `~/.config` |
 | `assets/` | Wallpapers and the bundled font |
 | `packages/` | Applications installed by `install.sh` |
-| `docs/` | Customization, controls, help, and release information |
+| `docs/` | Customization, controls, help, and software requirements |
 | `.github/` | GitHub checks and issue templates; not installed on the desktop |
 
 ## Credits
