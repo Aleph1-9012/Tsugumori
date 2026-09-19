@@ -243,9 +243,7 @@ Scope {
                 property bool syncing: false
                 property string loadedId: ""
                 property bool copied: false
-                readonly property string copyText: titleField.text && bodyField.text
-                                                   ? titleField.text + "\n\n" + bodyField.text
-                                                   : titleField.text || bodyField.text
+                readonly property string copyText: bodyField.text
 
                 function resetCopyFeedback() {
                     copied = false
@@ -415,7 +413,7 @@ Scope {
                             visible: root.store.ready && root.store.activeIndex >= 0
                             enabled: root.store.ready && root.store.activeIndex >= 0 && editor.copyText.length > 0
                             Accessible.name: editor.copied ? "Note copied" : "Copy note"
-                            Accessible.description: "Copy the selected note's title and contents to the clipboard"
+                            Accessible.description: "Copy only the selected note's contents to the clipboard"
                             onClicked: editor.copyNote()
                         }
                         Text { text: root.store.status; font.family: Theme.mono; font.pixelSize: 11 * drawer.s; color: root.store.errorCode ? Theme.a1 : "#909090" }

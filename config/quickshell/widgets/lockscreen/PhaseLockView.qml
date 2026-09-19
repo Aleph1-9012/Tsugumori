@@ -16,10 +16,15 @@ FocusScope {
     property bool pending: false
     property bool error: false
     property bool hiding: false
+    property bool powerBusy: false
+    property string powerError: ""
+    property string powerConfirmation: ""
+    readonly property bool controlsReady: inputReady && !pending && !hiding && !powerBusy
     property date now: new Date()
     signal passwordEdited(string value)
     signal submitted()
     signal cleared()
+    signal powerRequested(string action)
 
     property bool shaderFailed: false
     readonly property bool gpuRendering: GraphicsInfo.api !== GraphicsInfo.Software && !shaderFailed
@@ -35,8 +40,8 @@ FocusScope {
     readonly property string mono: "JetBrains Mono"
     readonly property real panelWidth: Math.min(408, Math.max(240, width - 32))
     readonly property real panelHeight: login.implicitHeight + login.contentInset * 2 + 2
-    // Scale the complete vector panel, with a fit guard for small displays.
-    readonly property real panelScale: Math.min(1.15,
+    // Another 15% above the previous 1.15 scale; retain the small-display fit guard.
+    readonly property real panelScale: Math.min(1.15 * 1.15,
         Math.max(1, width - 32) / panelWidth,
         Math.max(1, height - 32) / panelHeight)
     readonly property int folioWidth: compact ? 64 : 106
@@ -44,7 +49,23 @@ FocusScope {
     focus: true
 
     function focusPassword() {
-        if (inputReady && !pending && !hiding) passwordInput.forceActiveFocus();
+        if (controlsReady && powerConfirmation === "") passwordInput.forceActiveFocus();
+    }
+    function choosePower(action) {
+        if (!controlsReady || (action !== "reboot" && action !== "poweroff")) return;
+        if (powerConfirmation === action) {
+            powerConfirmation = "";
+            powerRequested(action);
+        } else if (powerConfirmation !== "") {
+            powerConfirmation = "";
+            focusPassword();
+        } else {
+            powerConfirmation = action;
+        }
+    }
+    function cancelPower() {
+        powerConfirmation = "";
+        focusPassword();
     }
     function useCpuFallback(description) {
         if (shaderFailed) return;
@@ -60,8 +81,15 @@ FocusScope {
         glyphAnimation.start();
     }
     onGlyphLengthChanged: animateGlyph()
-    onInputReadyChanged: focusPassword()
-    onPendingChanged: focusPassword()
+    onControlsReadyChanged: {
+        if (!controlsReady) powerConfirmation = "";
+        focusPassword();
+    }
+    Keys.onEscapePressed: event => {
+        if (powerConfirmation !== "") cancelPower();
+        else cleared();
+        event.accepted = true;
+    }
     Component.onCompleted: { glyphPhase = Math.min(64, glyphLength); focusPassword(); }
 
     NumberAnimation {
@@ -75,7 +103,7 @@ FocusScope {
         property int attempts: 0
         interval: 50
         repeat: true
-        running: view.inputReady && !view.pending && !view.hiding && attempts < 8
+        running: view.controlsReady && view.powerConfirmation === "" && attempts < 8
         onTriggered: { attempts++; view.focusPassword(); }
     }
 
@@ -349,15 +377,19 @@ FocusScope {
                         font { family: view.mono; pixelSize: 16; letterSpacing: 2 }
                         renderType: Text.CurveRendering
                         inputMethodHints: Qt.ImhHiddenText | Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
-                        enabled: view.inputReady && !view.pending && !view.hiding
+                        enabled: view.controlsReady
                         activeFocusOnTab: true
                         focus: true
                         cursorDelegate: Rectangle { width: 2; color: view.red; visible: passwordInput.activeFocus }
                         Accessible.name: "Password"
                         Accessible.role: Accessible.EditableText
                         onTextEdited: view.passwordEdited(text)
-                        onAccepted: if (enabled) view.submitted()
-                        Keys.onEscapePressed: event => { view.cleared(); event.accepted = true; }
+                        onAccepted: if (enabled) { view.cancelPower(); view.submitted(); }
+                        Keys.onEscapePressed: event => {
+                            if (view.powerConfirmation !== "") view.cancelPower();
+                            else view.cleared();
+                            event.accepted = true;
+                        }
                     }
                     Text {
                         x: 12; anchors.verticalCenter: parent.verticalCenter
@@ -371,7 +403,7 @@ FocusScope {
                         objectName: "unlockButton"
                         anchors { right: parent.right; top: parent.top; bottom: parent.bottom; margins: 1 }
                         width: 42; padding: 0
-                        enabled: view.inputReady && !view.pending && !view.hiding
+                        enabled: view.controlsReady
                         Accessible.name: "Unlock"
                         background: Rectangle { color: submitButton.hovered || submitButton.visualFocus ? "#e7282e" : view.red }
                         contentItem: Text {
@@ -380,21 +412,114 @@ FocusScope {
                             font { family: view.mono; pixelSize: 20 }
                             renderType: Text.CurveRendering
                         }
-                        onClicked: view.submitted()
+                        onClicked: { view.cancelPower(); view.submitted(); }
                     }
                 }
                 Text {
                     objectName: "authStatus"
                     width: parent.width
                     height: Math.max(15, implicitHeight)
-                    text: view.error ? "AUTHENTICATION FAILED" : view.pending ? "AUTHENTICATING…" : view.hiding ? "SESSION RELEASE" : "SESSION LOCKED"
+                    text: view.powerBusy ? "POWER REQUEST PENDING…" : view.powerError !== "" ? view.powerError
+                        : view.error ? "AUTHENTICATION FAILED" : view.pending ? "AUTHENTICATING…"
+                        : view.hiding ? "SESSION RELEASE" : "SESSION LOCKED"
                     wrapMode: Text.Wrap
-                    color: view.error ? view.red : view.grey
+                    color: view.error || view.powerError !== "" && !view.powerBusy ? view.red : view.grey
                     font { family: view.mono; pixelSize: 11 }
                     renderType: Text.CurveRendering
                     Accessible.role: Accessible.StaticText
                 }
+                Item {
+                    objectName: "powerFooter"
+                    width: parent.width; height: 44
+                    Rectangle {
+                        width: parent.width; height: 1
+                        color: "#3b3631"
+                    }
+                    Row {
+                        objectName: "powerControls"
+                        anchors { right: parent.right; bottom: parent.bottom }
+                        width: Math.min(180, parent.width); height: 26; spacing: 10
+                        PowerButton {
+                            objectName: "restartButton"
+                            width: (parent.width - parent.spacing) / 2; height: parent.height
+                            text: view.powerConfirmation === "reboot" ? "RESTART?"
+                                : view.powerConfirmation !== "" ? "CANCEL" : "RESTART"
+                            Accessible.name: view.powerConfirmation === "reboot" ? "Confirm restart"
+                                : view.powerConfirmation !== "" ? "Cancel shutdown" : "Restart"
+                            onClicked: view.choosePower("reboot")
+                        }
+                        PowerButton {
+                            objectName: "shutdownButton"
+                            width: (parent.width - parent.spacing) / 2; height: parent.height
+                            text: view.powerConfirmation === "poweroff" ? "SHUT DOWN?"
+                                : view.powerConfirmation !== "" ? "CANCEL" : "SHUT DOWN"
+                            Accessible.name: view.powerConfirmation === "poweroff" ? "Confirm shutdown"
+                                : view.powerConfirmation !== "" ? "Cancel restart" : "Shut down"
+                            onClicked: view.choosePower("poweroff")
+                        }
+                    }
+                }
             }
+        }
+    }
+
+    component PowerButton: Button {
+        id: button
+        // Match MenuFooterButton without adding shell/theme dependencies to the lock.
+        readonly property bool interactionActive: enabled && (hovered || down || activeFocus)
+        property real fillProgress: interactionActive ? 1 : 0
+        padding: 0
+        enabled: view.controlsReady
+        focusPolicy: Qt.StrongFocus
+        hoverEnabled: true
+        opacity: enabled ? 1 : .45
+        Behavior on fillProgress {
+            NumberAnimation {
+                duration: 220
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: [0.76, 0, 0.24, 1, 1, 1]
+            }
+        }
+        HoverHandler { cursorShape: button.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor }
+        background: Item {
+            Rectangle {
+                x: 2; y: 2
+                width: Math.max(0, parent.width - 4) * button.fillProgress
+                height: Math.max(0, parent.height - 4)
+                color: view.red
+            }
+            Repeater {
+                model: 4
+                Item {
+                    id: corner
+                    required property int index
+                    readonly property bool rightEdge: index % 2 === 1
+                    readonly property bool bottomEdge: index >= 2
+                    width: 6; height: 6
+                    x: rightEdge ? parent.width - width : 0
+                    y: bottomEdge ? parent.height - height : 0
+                    opacity: button.interactionActive ? 1 : .6
+                    Rectangle {
+                        width: parent.width; height: 1
+                        y: corner.bottomEdge ? parent.height - height : 0
+                        color: view.red
+                    }
+                    Rectangle {
+                        width: 1; height: parent.height
+                        x: corner.rightEdge ? parent.width - width : 0
+                        color: view.red
+                    }
+                }
+            }
+        }
+        contentItem: Text {
+            text: button.text
+            textFormat: Text.PlainText
+            color: button.interactionActive ? "#090909" : "#b0aba6"
+            horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+            font { family: view.mono; pixelSize: 10; letterSpacing: 1.3 }
+            renderType: Text.CurveRendering
+            Behavior on color { ColorAnimation { duration: 120 } }
         }
     }
 

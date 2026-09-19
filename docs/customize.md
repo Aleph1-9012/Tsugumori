@@ -12,6 +12,8 @@ defaults.
 | Quickshell options | `~/.config/quickshell/settings/Settings.qml` |
 | Quickshell theme | `~/.config/quickshell/theme/Theme.qml` |
 | Kitty | `~/.config/kitty/kitty.conf` |
+| Fastfetch | `~/.config/fastfetch/config.jsonc` |
+| btop | `~/.config/btop/btop.conf` and `~/.config/btop/themes/tsugumori.theme` |
 | Waybar modules | `~/.config/waybar/config.jsonc` |
 | Waybar style | `~/.config/waybar/style.css` |
 | Wallpapers | `~/Pictures/wallpapers/` |

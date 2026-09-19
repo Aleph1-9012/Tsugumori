@@ -1,0 +1,68 @@
+{
+  "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+  // Tsugumori frame record. Native modules only; all readings remain live.
+  "logo": { "type": "none" },
+  "display": {
+    "separator": "  ",
+    "key": { "width": 33 },
+    "color": { "keys": "#92908d", "output": "#e8e8e8" },
+    "brightColor": false,
+    "percent": { "type": 1 },
+    "disableLinewrap": false
+  },
+  "modules": [
+    { "type": "custom", "format": "\u001b[38;2;232;232;232m TSUGUMORI \u001b[38;2;204;21;21m// \u001b[38;2;146;144;141mTYPE-17                            \u001b[1;38;2;10;10;10;48;2;204;21;21m ◆ 704 \u001b[0m" },
+    { "type": "custom", "format": "\u001b[38;2;55;51;49m ───────────────────────────────────────────────────────────────\u001b[0m" },
+    "break",
+    { "type": "custom", "format": "\u001b[38;2;55;51;49m                    │  \u001b[38;2;204;21;21m01 // \u001b[38;2;146;144;141mSYSTEM \u001b[38;2;55;51;49m────────────────────────────\u001b[0m" },
+    {
+      "type": "os",
+      "key": " \u001b[38;2;204;21;21m┌╱·┐\u001b[38;2;101;98;93m│┤╲·├─┬╱│·└┘   \u001b[38;2;55;51;49m│  \u001b[38;2;146;144;141mOS",
+      "format": "{name}"
+    },
+    {
+      "type": "kernel",
+      "key": " \u001b[38;2;101;98;93m│┬╲╱·┼─┤┌·│┘╲┴·┐   \u001b[38;2;55;51;49m│  \u001b[38;2;146;144;141mKERNEL",
+      "format": "{release}"
+    },
+    {
+      "type": "wm",
+      "key": " \u001b[38;2;101;98;93m┴│┌·╱┐├┘─╲·┤┬└│╱   \u001b[38;2;55;51;49m│  \u001b[38;2;146;144;141mWM",
+      "format": "{pretty-name}{?version} {version}{?}"
+    },
+    {
+      "type": "terminal",
+      "key": " \u001b[38;2;101;98;93m╲┤·─┌│┬╱┘├┐·│┴╲┼   \u001b[38;2;55;51;49m│  \u001b[38;2;146;144;141mTERM",
+      "format": "{pretty-name}{?version} {version}{?}"
+    },
+    { "type": "custom", "format": "\u001b[38;2;101;98;93m ┌│╱┬·╲┴┤─┼│\u001b[38;2;204;21;21m└╱┬│┐   \u001b[38;2;55;51;49m│\u001b[0m" },
+    { "type": "custom", "format": "\u001b[38;2;101;98;93m ┼·┐│├╱─┬╲└┤│─┼╲│   \u001b[38;2;55;51;49m│  \u001b[38;2;204;21;21m02 // \u001b[38;2;146;144;141mHARDWARE \u001b[38;2;55;51;49m──────────────────────────\u001b[0m" },
+    {
+      "type": "cpu",
+      "key": " \u001b[38;2;101;98;93m│╲┴┌·┤│┘╱─├┬┬│└╱   \u001b[38;2;55;51;49m│  \u001b[38;2;146;144;141mCPU",
+      "format": "{name} · {cores-physical}C/{cores-logical}T"
+    },
+    {
+      "type": "gpu",
+      "key": " \u001b[38;2;101;98;93m└┬│╱┤·┌─│╲┴┘│╱─┘   \u001b[38;2;55;51;49m│  \u001b[38;2;146;144;141mGPU",
+      "hideType": "integrated",
+      "format": "{name:-31}"
+    },
+    {
+      "type": "memory",
+      "key": "                    \u001b[38;2;55;51;49m│  \u001b[38;2;146;144;141mRAM",
+      "format": "{used} / {total} {#38;2;146;144;141}[ {percentage} ]{#}"
+    },
+    {
+      "type": "disk",
+      "folders": "/",
+      "key": " \u001b[38;2;232;232;232m四騎掌位           \u001b[38;2;55;51;49m│  \u001b[38;2;146;144;141mDISK",
+      "format": "{size-used} / {size-total} {#38;2;146;144;141}[ {size-percentage} ]{#}"
+    },
+    { "type": "custom", "format": "\u001b[38;2;146;144;141m SHŌI LINK          \u001b[38;2;55;51;49m│\u001b[0m" },
+    { "type": "custom", "format": "\u001b[38;2;204;21;21m // \u001b[38;2;146;144;141mSID0NIA        \u001b[38;2;55;51;49m│\u001b[0m" },
+    "break",
+    { "type": "custom", "format": "\u001b[38;2;55;51;49m ───────────────────────────────────────────────────────────────\u001b[0m" },
+    { "type": "uptime", "key": " UPTIME", "keyWidth": 10, "format": "{?days}{days}d {?}{hours}h {minutes}m     {#38;2;146;144;141}01 ── 02 ── 03 ── {#38;2;204;21;21}04 ◆{#}" }
+  ]
+}

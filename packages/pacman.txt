@@ -18,6 +18,8 @@ ffmpeg
 # ─── Terminal ──────────────────────────────────────────
 kitty
 yazi
+fastfetch
+btop
 
 # ─── Audio ─────────────────────────────────────────────
 pipewire

@@ -147,6 +147,7 @@ ShellRoot {
                 anchors.fill: parent
                 visible: !root.done && pickerWindow.isActive
                 z: 2
+                Keys.onEscapePressed: root.doClose()
 
                 // Mouse scroll across the entire surface.
                 MouseArea {
@@ -167,73 +168,19 @@ ShellRoot {
                 }
 
                 // ── Apply buttons — always visible ──
-                Item {
+                PickerApplyPanel {
                     id: applyPanel
                     anchors.bottom: parent.bottom
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.bottomMargin: 60
-                    width: 420
-                    height: applyCol.implicitHeight + 48
+                    width: Math.min(420, parent.width - 32)
+                    height: implicitHeight
                     z: 7
                     opacity: Art.ramp(motion.progress, .59, .87)
                     enabled: motion.inputReady
-
-                    Rectangle {
-                        anchors.fill: parent
-                        color: "#c8c8c4"
-                        border.color: "#cc1515"; border.width: 1
-
-                        Repeater { model:22; Rectangle{x:index*20;y:0;width:1;height:parent.height;color:Qt.rgba(70/255,63/255,46/255,0.06)} }
-
-                        Column {
-                            id: applyCol
-                            width: 348
-                            anchors{top:parent.top;topMargin:20;horizontalCenter:parent.horizontalCenter}
-                            spacing: 10
-
-                            Text {
-                                text: "APPLY WALLPAPER"
-                                font.family:"JetBrainsMono Nerd Font";font.pixelSize:10;font.letterSpacing:3
-                                color:"#cc1515";anchors.horizontalCenter:parent.horizontalCenter
-                            }
-                            Rectangle { width:parent.width;height:1;color:Qt.rgba(70/255,63/255,46/255,0.22) }
-
-                            Row {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                spacing: 12
-
-                                // Active-screen button.
-                                Item { width:162; height:42
-                                    Rectangle { anchors.fill:parent;color:"transparent";border.color:"#cc1515";border.width:1 }
-                                    Rectangle { id:fill1;anchors.left:parent.left;anchors.top:parent.top;anchors.bottom:parent.bottom;color:"#cc1515";width:0
-                                        Behavior on width{NumberAnimation{duration:220}} }
-                                    Text { anchors.centerIn:parent
-                                        text:"THIS SCREEN"
-                                        font.family:"JetBrainsMono Nerd Font";font.pixelSize:10;font.letterSpacing:2
-                                        color:ma1.containsMouse?"#c8c8c4":"#cc1515"
-                                        Behavior on color{ColorAnimation{duration:200}} }
-                                    MouseArea { id:ma1;anchors.fill:parent;hoverEnabled:true
-                                        onEntered:fill1.width=parent.width;onExited:fill1.width=0
-                                        onClicked: root.requestApply(root.activeMonitor) }
-                                }
-
-                                // Both-screens button.
-                                Item { width:162; height:42
-                                    Rectangle { anchors.fill:parent;color:"transparent";border.color:"#cc1515";border.width:1 }
-                                    Rectangle { id:fill2;anchors.left:parent.left;anchors.top:parent.top;anchors.bottom:parent.bottom;color:"#cc1515";width:0
-                                        Behavior on width{NumberAnimation{duration:220}} }
-                                    Text { anchors.centerIn:parent
-                                        text:"ALL SCREENS"
-                                        font.family:"JetBrainsMono Nerd Font";font.pixelSize:10;font.letterSpacing:2
-                                        color:ma2.containsMouse?"#c8c8c4":"#cc1515"
-                                        Behavior on color{ColorAnimation{duration:200}} }
-                                    MouseArea { id:ma2;anchors.fill:parent;hoverEnabled:true
-                                        onEntered:fill2.width=parent.width;onExited:fill2.width=0
-                                        onClicked: root.requestApply("both") }
-                                }
-                            }
-                        }
-                    }
+                    monitorName: root.activeMonitor
+                    fileName: root.wallpapers[root.currentIndex] || ""
+                    onApplyRequested: target => root.requestApply(target)
                 }
 
                 // ── Carousel ──
@@ -243,7 +190,7 @@ ShellRoot {
                     anchors.topMargin: 80
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: parent.width
-                    height: parent.height - 220
+                    height: Math.max(200, applyPanel.y - y - 24)
                     z: 6
                     opacity: Art.ramp(motion.progress, .22, .73)
 
@@ -259,8 +206,8 @@ ShellRoot {
                     readonly property int n: root.wallpapers.length
 
                     // Base dimensions (central thumbnail size at full scale).
-                    readonly property int baseW: 800
-                    readonly property int baseH: 500
+                    readonly property int baseW: Math.min(800, Math.max(280, parent.width - 64))
+                    readonly property int baseH: Math.min(540, Math.max(180, height - 24))
                     // Shared baseline: all thumbnails align their bottom edge here.
                     readonly property int baselineY: height / 2 + baseH / 2
 
@@ -325,41 +272,13 @@ ShellRoot {
                             Behavior on scale   { NumberAnimation { duration:320; easing.type:Easing.OutCubic } }
                             Behavior on opacity { NumberAnimation { duration:320; easing.type:Easing.OutCubic } }
 
-                            Rectangle {
+                            PickerPreview {
                                 anchors.fill: parent
-                                color: "#0f0d0a"
-                                border.color: thumb.absDelta === 0 ? "#e8e8e8" : "#cc1515"
-                                border.width: thumb.absDelta === 0 ? 2 : 1
-                                Behavior on border.color { ColorAnimation { duration:260 } }
-
-                                Image {
-                                    anchors.fill: parent
-                                    anchors.margins: 2
-                                    source: "file://" + root.wallpaperDir + "/" + root.wallpapers[thumb.wIdx]
-                                    fillMode: Image.PreserveAspectCrop
-                                    asynchronous: true
-                                    smooth: true
-                                    cache: true
-                                    sourceSize.width: 800
-                                    sourceSize.height: 500
-                                }
-
-                                // Name banner, visible only on the central thumbnail.
-                                Rectangle {
-                                    anchors.bottom: parent.bottom
-                                    width: parent.width
-                                    height: 24
-                                    color: Qt.rgba(0,0,0,0.6)
-                                    opacity: thumb.absDelta === 0 ? 1 : 0
-                                    Behavior on opacity { NumberAnimation { duration:200 } }
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: root.wallpapers[thumb.wIdx]
-                                        font.family: "JetBrainsMono Nerd Font"
-                                        font.pixelSize: 8
-                                        color: "#e8e8e8"
-                                    }
-                                }
+                                selected: thumb.absDelta === 0
+                                imageSource: "file://" + root.wallpaperDir + "/" + root.wallpapers[thumb.wIdx]
+                                fileName: root.wallpapers[thumb.wIdx]
+                                itemNumber: thumb.wIdx + 1
+                                itemCount: carousel.n
                             }
 
                             MouseArea {

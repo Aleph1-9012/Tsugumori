@@ -34,6 +34,32 @@ ShellRoot {
     property bool pamResponseSent: false
     property bool lockError: false
     property bool lockPending: false
+    property string powerError: ""
+    readonly property bool powerBusy: powerProc.running
+
+    // logind/polkit decides whether the locked user may power off or reboot.
+    // Never release the compositor lock to perform a power action.
+    Process {
+        id: powerProc
+        command: []
+        onExited: function(exitCode) {
+            root.powerError = exitCode === 0 ? "" : "POWER REQUEST FAILED"
+        }
+    }
+
+    function requestPower(action) {
+        if ((action !== "poweroff" && action !== "reboot")
+                || !sessionLock.secure || !root.secureSignalConfirmed
+                || root.presentationProgress < .96 || root.powerBusy
+                || root.lockPending || root.releaseAuthorized || root.hiding
+                || root.releaseRequested || root.done || releaseAuthorizeProc.running) return
+        root.lockInput = ""
+        root.lockError = false
+        // Also covers a failure to start the process, which has no exit status.
+        root.powerError = "POWER REQUEST FAILED"
+        powerProc.command = ["systemctl", "--no-ask-password", action]
+        powerProc.running = true
+    }
 
     // The launcher accepts readiness only after WlSessionLock.secure becomes
     // true. Release authorization is committed before the hide animation can
@@ -139,7 +165,7 @@ ShellRoot {
 
     function doAuth() {
         if (!sessionLock.secure || !root.secureSignalConfirmed
-                || root.lockPending || root.releaseAuthorized || root.hiding
+                || root.lockPending || root.powerBusy || root.releaseAuthorized || root.hiding
                 || releaseAuthorizeProc.running || root.lockInput === "") return
         root.submittedLength = root.lockInput.length
         root.pamResponse = root.lockInput
@@ -275,11 +301,14 @@ ShellRoot {
                     && !releaseAuthorizeProc.running && !root.releaseAuthorized
                 pending: root.lockPending
                 error: root.lockError
+                powerBusy: root.powerBusy
+                powerError: root.powerError
                 hiding: root.hiding
                 now: root.clockDate
-                onPasswordEdited: value => { root.lockInput = value; root.lockError = false }
+                onPasswordEdited: value => { root.lockInput = value; root.lockError = false; root.powerError = "" }
                 onSubmitted: root.doAuth()
-                onCleared: { root.lockInput = ""; root.lockError = false }
+                onCleared: { root.lockInput = ""; root.lockError = false; root.powerError = "" }
+                onPowerRequested: action => root.requestPower(action)
             }
         }
     }

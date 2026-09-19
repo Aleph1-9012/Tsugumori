@@ -12,10 +12,14 @@ The welcome script uses Kitty's text-sizing protocol where available and
 normal text elsewhere. Neither script prints into pipes or logs, and the
 prompt hook runs only in interactive shells.
 
+Fastfetch uses a compact glyph beside native system and hardware readings.
+btop uses charcoal frames, red activity and selection, square corners, and a
+SID0NIA clock label. Its CPU, memory, network, and process panels remain native.
+
 Player, Quick Notes, Clipboard, and Quickshare share the red illustrated
 curtain. The player's opening and closing timing is 25% longer. Quick Notes
 has a COPY/COPIED button beside its save status, sized to match the new-note
-button. Clipboard keeps the grid inside its content area, leaves its header
+button, and copies only the body. Clipboard keeps the grid inside its content area, leaves its header
 and footer plain, and stops keyboard selection at the list boundaries.
 
 The application menu has a redesigned header, search field, selection markers,
@@ -38,8 +42,10 @@ the displayed result with a phone.
 ## Native lock and wallpaper picker
 
 The lock replaces the old video wave with native Phase drawing. It has the K
-glyph's stronger red typing response, a 15% larger panel, and four animated
-corners. The username, clock, date, and password field use the approved layout.
+glyph's stronger red typing response, a panel scaled to 132.25% of its original
+size with a small-screen fit guard, and four animated corners. The username, clock, date, and password field use the approved layout.
+Compact restart and shutdown buttons sit at the panel's bottom right and require
+confirmation. Power requests do not release the compositor lock.
 Opening takes 1450 ms and closing takes 950 ms. The animation targets 60 fps;
 offscreen tests do not measure frame rate on a real GPU.
 
@@ -47,7 +53,9 @@ The lock retains WlSessionLock, PAM authentication, and the supervised Hyprlock
 fallback. The visual tests do not authenticate against a real session. The
 wallpaper picker shares the visual components only, including the Phase motion
 and live corners. It can reverse an early close request and applies a selected
-wallpaper after closing.
+wallpaper after closing. Preview cards fill their image area without letterbox
+padding and show the filename beside the red counter. The dark apply panel
+uses the menu's bracketed buttons; wallpaper files remain unchanged.
 
 GPU drawing uses the compiled shaders in
 `config/quickshell/widgets/lockscreen/shaders/`. The source and build script

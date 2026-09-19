@@ -22,6 +22,8 @@ readonly assets=(
     widgets/wallpaper/PickerBackdrop.qml
     widgets/wallpaper/PickerRegistration.qml
     widgets/wallpaper/PickerCorners.qml
+    widgets/wallpaper/PickerApplyPanel.qml
+    widgets/wallpaper/PickerPreview.qml
 )
 
 mkdir -p -- "$log_dir" || exit 1

@@ -51,9 +51,9 @@ with their licenses, so the installer does not need an AUR helper.
 - Quickshell launcher, lock screen, notifications, player, and wallpaper picker
 - Wi-Fi, Bluetooth, audio, per-monitor brightness, and Quickshare controls
 - Standalone quick notes drawer on `SUPER + N`, with local autosave and deletion Undo
-- Clipboard history on `SUPER + J`, with search, image previews, pins, and deletion Undo
+- Clipboard history on `SUPER + C`, with search, image previews, pins, and deletion Undo
 - Compact music player with an artwork glyph matrix, hover colour reveal, and local track drawer
-- Waybar and Kitty configurations
+- Waybar and Kitty configurations, plus themed Fastfetch and btop
 - Native Phase lock and wallpaper-picker transitions, shared red curtains, and bundled wallpapers
 
 See [desktop design and runtime notes](docs/native-desktop.md) for the terminal,
@@ -67,6 +67,8 @@ widgets, fonts, and native animation details.
 | Colors, fonts, or spacing | [`config/quickshell/theme/Theme.qml`](config/quickshell/theme/Theme.qml) |
 | Quickshell options | [`config/quickshell/settings/Settings.qml`](config/quickshell/settings/Settings.qml) |
 | Terminal appearance | [`config/kitty/kitty.conf`](config/kitty/kitty.conf) |
+| Fastfetch layout | [`config/kitty/fastfetch.jsonc`](config/kitty/fastfetch.jsonc) |
+| btop colors and layout | [`config/kitty/btop.conf`](config/kitty/btop.conf) and [`tsugumori-btop.theme`](config/kitty/tsugumori-btop.theme) |
 | Waybar | [`config/waybar/`](config/waybar) |
 | Installed applications | [`packages/pacman.txt`](packages/pacman.txt) |
 | Wallpapers | [`assets/wallpapers/`](assets/wallpapers) |
@@ -83,7 +85,7 @@ files.
 | `SUPER` | Open the application menu |
 | `SUPER + Tab` | Open the Control Center |
 | `SUPER + N` | Open or close Quick Notes on the focused monitor |
-| `SUPER + J` | Open or close clipboard history on the focused monitor |
+| `SUPER + C` | Open or close clipboard history on the focused monitor |
 | `SUPER + Enter` | Show or hide the music player |
 | `SUPER + L` | Lock the session |
 | `SUPER + T` | Open Kitty |

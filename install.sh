@@ -58,7 +58,7 @@ EOF
 done
 
 # Folders managed by this installer (touched in $CONFIG_HOME)
-readonly MANAGED_DIRS=(hypr quickshell waybar kitty)
+readonly MANAGED_DIRS=(hypr quickshell waybar kitty fastfetch btop)
 
 # Temp dir used to stash preserved user files during install
 PRESERVED_STASH=""
@@ -654,7 +654,16 @@ deploy_configs() {
     for name in "${MANAGED_DIRS[@]}"; do
         local src="$CLONE_DIR/config/$name"
         local dest="$CONFIG_HOME/$name"
-        [[ -d "$src" ]] || { warn "Skipping $name (not in repo)."; continue; }
+        # Terminal app configs share one source folder in the repository.
+        case "$name" in
+            kitty)     src="$CLONE_DIR/config/kitty/kitty.conf" ;;
+            fastfetch) src="$CLONE_DIR/config/kitty/fastfetch.jsonc" ;;
+            btop)      src="$CLONE_DIR/config/kitty/btop.conf" ;;
+        esac
+        [[ -e "$src" ]] || { warn "Skipping $name (not in repo)."; continue; }
+        if [[ "$name" == "btop" && ! -f "$CLONE_DIR/config/kitty/tsugumori-btop.theme" ]]; then
+            fatal "Missing btop theme: config/kitty/tsugumori-btop.theme"
+        fi
 
         if [[ -e "$dest" ]]; then
             if $BACKUP_OLD; then
@@ -667,7 +676,15 @@ deploy_configs() {
             fi
         fi
         log "Installing config: $name"
-        cp -r "$src" "$dest"
+        case "$name" in
+            kitty)     install -Dm644 "$src" "$dest/kitty.conf" ;;
+            fastfetch) install -Dm644 "$src" "$dest/config.jsonc" ;;
+            btop)
+                install -Dm644 "$src" "$dest/btop.conf"
+                install -Dm644 "$CLONE_DIR/config/kitty/tsugumori-btop.theme" "$dest/themes/tsugumori.theme"
+                ;;
+            *) cp -r "$src" "$dest" ;;
+        esac
     done
 
     # 3. Restore preserved user files (overwrites any template the repo provided).

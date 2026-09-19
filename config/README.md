@@ -1,6 +1,6 @@
 # Configuration map
 
-The installer copies these folders into `~/.config`. You do not need to
+The installer places these files into `~/.config`. You do not need to
 understand every file to customize Tsugumori.
 
 | I want to change... | Open... |
@@ -10,11 +10,17 @@ understand every file to customize Tsugumori.
 | Lock and idle timing | `hypr/hypridle.conf` |
 | Emergency lock-screen appearance | `hypr/hyprlock.conf` |
 | Terminal colors and font | `kitty/kitty.conf` |
+| Fastfetch layout | `kitty/fastfetch.jsonc` |
+| btop colors and layout | `kitty/tsugumori-btop.theme` and `kitty/btop.conf` |
 | Quickshell colors, fonts, and spacing | `quickshell/theme/Theme.qml` |
 | Quickshell user options | `quickshell/settings/Settings.qml` |
 | Launcher, Control Center, or panels | `quickshell/widgets/` |
 | Waybar modules | `waybar/config.jsonc` |
 | Waybar appearance | `waybar/style.css` |
+
+Kitty, Fastfetch, and btop files share `kitty/` in the repository. The installer
+puts each file in its application's normal location: `~/.config/kitty/`,
+`~/.config/fastfetch/config.jsonc`, and `~/.config/btop/`.
 
 ## What upgrades preserve
 

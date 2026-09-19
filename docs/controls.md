@@ -7,7 +7,7 @@
 | `SUPER` | Open the application menu |
 | `SUPER + Tab` | Open the Control Center |
 | `SUPER + N` | Open or close quick notes on the focused monitor |
-| `SUPER + J` | Open or close clipboard history on the focused monitor |
+| `SUPER + C` | Open or close clipboard history on the focused monitor |
 | `SUPER + L` | Lock the session |
 | `SUPER + T` | Open Kitty |
 | `SUPER + Return` | Show or hide the player |
@@ -49,7 +49,7 @@ again closes it. From another monitor it moves the same drawer
 there without changing your note. Escape, the top-right × button, or clicking outside
 the drawer closes it.
 
-Opening and closing use the Menu's pale curtain wipe and slide transition.
+Opening and closing use the shared red illustrated curtain.
 The red hover and selection animations inside the note list are independent.
 
 Choose `+ NEW NOTE`, then type a title and body. Rows use `01// title`
@@ -61,6 +61,8 @@ restarts.
 Edits save automatically. `SAVING` means a write is pending; `SAVED` means the
 latest edit has been acknowledged by storage. `SAVE FAILED` keeps your draft
 in memory and offers Retry. Wait for `SAVED` before restarting the shell.
+
+The COPY button beside the save status copies only the note body, not its title.
 
 Notes are stored as private, unencrypted text at
 `$XDG_DATA_HOME/tsugumori/notes.json`, or
@@ -74,7 +76,7 @@ required.
 
 ## Clipboard history
 
-`SUPER + J` opens the clipboard drawer on the focused monitor. Press it again
+`SUPER + C` opens the clipboard drawer on the focused monitor. Press it again
 to close, or use it on another monitor to move the drawer there. Escape and
 the top-right × button also close it.
 
@@ -97,3 +99,10 @@ Set `clipboardDark: true` in `Settings.qml` for the charcoal palette.
 The default is the light notification-style palette. Upgrades preserve your
 existing Settings file, so add `readonly property bool clipboardDark: false`
 if it is missing.
+
+## Lock screen power controls
+
+The bottom-right RESTART and SHUT DOWN buttons require a second press to
+confirm. Choose CANCEL or press Escape to cancel. A failed power request leaves
+the session locked and allows another password attempt. System permissions
+determine whether shutdown or restart is available.
