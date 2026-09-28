@@ -17,10 +17,18 @@ understand every file to customize Tsugumori.
 | Launcher, Control Center, or panels | `quickshell/widgets/` |
 | Waybar modules | `waybar/config.jsonc` |
 | Waybar appearance | `waybar/style.css` |
+| Nautilus appearance | `nautilus/tsugumori/style.css` |
+| GTK file-dialog appearance | `nautilus/tsugumori/filechooser-gtk3.css` and `filechooser-gtk4.css` |
 
 Kitty, Fastfetch, and btop files share `kitty/` in the repository. The installer
 puts each file in its application's normal location: `~/.config/kitty/`,
 `~/.config/fastfetch/config.jsonc`, and `~/.config/btop/`.
+
+The optional Nautilus theme stays together in `nautilus/` in the repository.
+The installer places its extension in the user data directory, copies the theme
+assets into `~/.config/nautilus/tsugumori/`, builds the GTK 3 dialog module, and
+adds the scoped GTK 4 stylesheet import. See the
+[customization guide](../docs/customize.md#nautilus-and-file-dialogs) for details.
 
 ## What upgrades preserve
 

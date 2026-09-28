@@ -1,0 +1,53 @@
+/* Only GTK 4's native file chooser, not other windows or dialogs. */
+window.filechooser {
+  --window-bg-color: #0d0d0e;
+  --window-fg-color: #dededb;
+  --view-bg-color: #0d0d0e;
+  --view-fg-color: #b8b6af;
+  --headerbar-bg-color: #0d0d0e;
+  --headerbar-backdrop-color: #0d0d0e;
+  --headerbar-fg-color: #dededb;
+  --sidebar-bg-color: #0d0d0e;
+  --sidebar-backdrop-color: #0d0d0e;
+  --sidebar-fg-color: #a5a5a3;
+  --popover-bg-color: #0d0d0e;
+  --popover-fg-color: #dedede;
+  --accent-bg-color: #cc1515;
+  --accent-fg-color: #0d0d0e;
+  --accent-color: #ed5555;
+  --focus-border-color: #cc1515;
+  --border-color: #262627;
+  background: #0d0d0e;
+  color: #dededb;
+  font-family: "IBM Plex Sans", "Inter", sans-serif;
+  font-size: 14px;
+  border-radius: 0;
+}
+window.filechooser .view, window.filechooser filechooser,
+window.filechooser .sidebar, window.filechooser list,
+window.filechooser listview, window.filechooser columnview,
+window.filechooser viewport { background: #0d0d0e; color: #b8b6af; }
+window.filechooser headerbar { background: #0d0d0e; color: #dededb; border-bottom: 1px solid #262627; box-shadow: none; min-height: 48px; padding: 6px 12px; }
+window.filechooser headerbar .title { font: 13px "JetBrains Mono"; color: #aaa9a5; }
+window.filechooser button { background: transparent; color: #b2afa5; border: 1px solid transparent; border-radius: 0; box-shadow: none; padding: 5px 10px; }
+window.filechooser button:hover { background: #1a1a1c; color: #e6e2d6; }
+window.filechooser button.suggested-action { background: #cc1515; color: #0d0d0e; padding-left: 22px; padding-right: 22px; }
+window.filechooser button.suggested-action:hover { background: #e32626; }
+window.filechooser button:disabled { background: transparent; color: #606061; }
+window.filechooser button:focus-visible { outline: none; box-shadow: inset 0 -1px #cc1515; }
+window.filechooser .path-bar button { font: 13px "JetBrains Mono"; border: 0; }
+window.filechooser .path-bar button:checked { color: #e6e2d6; box-shadow: inset 0 -1px #cc1515; }
+window.filechooser placessidebar { border-right: 1px solid #262627; }
+window.filechooser placessidebar list { padding: 12px 8px; }
+window.filechooser placessidebar row { min-height: 22px; padding: 7px 8px; margin: 1px 0; border-radius: 0; color: #a5a5a3; }
+window.filechooser placessidebar row:selected { background: #191919; color: #e6e2d6; box-shadow: inset 2px 0 #cc1515; outline: none; }
+window.filechooser row:selected, window.filechooser treeview:selected { background: #191919; color: #e6e2d6; outline: none; }
+window.filechooser columnview > listview > row:selected { box-shadow: inset 2px 0 #cc1515; }
+window.filechooser columnview header button { color: #929295; font: 11px "JetBrains Mono"; border-bottom: 1px solid #262627; }
+window.filechooser entry { background: #121213; color: #dedede; border: 1px solid #262627; border-bottom-color: #cc1515; border-radius: 0; padding: 7px 10px; caret-color: #cc1515; }
+window.filechooser entry:focus-within { outline: none; box-shadow: none; }
+window.filechooser text selection { background: #491717; color: #ededed; }
+window.filechooser separator { background: #262627; }
+window.filechooser popover > contents { background: #0d0d0e; color: #dedede; border: 1px solid #262627; border-radius: 0; box-shadow: none; }
+window.filechooser popover modelbutton:hover { background: #1a1a1c; box-shadow: inset 1px 0 #cc1515; }
+window.filechooser rubberband { background: rgba(204,21,21,0.05); border: 1px solid #cc1515; border-radius: 0; }

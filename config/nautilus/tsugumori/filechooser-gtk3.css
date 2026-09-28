@@ -1,0 +1,77 @@
+/* GTK 3 file dialogs only. The module adds this class to GtkFileChooserDialog. */
+.tsugumori-filechooser {
+  background: #0d0d0e;
+  color: #dededb;
+  font-family: "IBM Plex Sans", "Inter", sans-serif;
+  font-size: 14px;
+  border-radius: 0;
+}
+.tsugumori-filechooser decoration { border-radius: 0; box-shadow: none; border: 1px solid #262627; }
+.tsugumori-filechooser headerbar {
+  background: #0d0d0e;
+  color: #dededb;
+  border: 0;
+  border-bottom: 1px solid #262627;
+  box-shadow: none;
+  min-height: 48px;
+  padding: 6px 12px;
+}
+.tsugumori-filechooser headerbar .title { font: 13px "JetBrains Mono"; color: #aaa9a5; }
+.tsugumori-filechooser filechooser,
+.tsugumori-filechooser .view,
+.tsugumori-filechooser .sidebar,
+.tsugumori-filechooser viewport,
+.tsugumori-filechooser list,
+.tsugumori-filechooser actionbar {
+  background: #0d0d0e;
+  color: #b8b6af;
+  border-radius: 0;
+  box-shadow: none;
+}
+.tsugumori-filechooser filechooser { -gtk-icon-style: symbolic; }
+.tsugumori-filechooser button {
+  background: transparent;
+  color: #b2afa5;
+  border: 1px solid transparent;
+  border-radius: 0;
+  box-shadow: none;
+  text-shadow: none;
+  -gtk-icon-shadow: none;
+  min-height: 24px;
+  padding: 5px 10px;
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+.tsugumori-filechooser button:hover { background: #1a1a1c; color: #e6e2d6; }
+.tsugumori-filechooser button:checked,
+.tsugumori-filechooser button:active { background: #191919; color: #e6e2d6; box-shadow: inset 0 -1px #cc1515; }
+.tsugumori-filechooser button.suggested-action { background: #cc1515; color: #0d0d0e; border-color: #cc1515; padding-left: 22px; padding-right: 22px; }
+.tsugumori-filechooser button.suggested-action:hover { background: #e32626; border-color: #e32626; }
+.tsugumori-filechooser button:disabled { color: #606061; background: transparent; border-color: transparent; }
+.tsugumori-filechooser button:focus,
+.tsugumori-filechooser entry:focus { outline: none; box-shadow: inset 0 -1px #cc1515; }
+.tsugumori-filechooser #pathbarbox { background: #0d0d0e; border-bottom: 1px solid #262627; padding: 6px 8px; }
+.tsugumori-filechooser .path-bar button { font: 13px "JetBrains Mono"; border: 0; }
+.tsugumori-filechooser .path-bar button:checked { background: transparent; color: #e6e2d6; box-shadow: inset 0 -1px #cc1515; }
+.tsugumori-filechooser placessidebar { border: 0; border-right: 1px solid #262627; }
+.tsugumori-filechooser placessidebar list { padding: 12px 8px; }
+.tsugumori-filechooser placessidebar row { min-height: 22px; padding: 7px 8px; margin: 1px 0; border-radius: 0; color: #a5a5a3; }
+.tsugumori-filechooser placessidebar row:selected { background: #191919; color: #e6e2d6; box-shadow: inset 2px 0 #cc1515; outline: none; }
+.tsugumori-filechooser placessidebar row:hover:not(:selected) { background: #161617; }
+.tsugumori-filechooser placessidebar image { color: #8b8b88; }
+.tsugumori-filechooser placessidebar row:selected image { color: #c7c4b9; }
+.tsugumori-filechooser treeview { outline: none; -GtkTreeView-vertical-separator: 12; }
+.tsugumori-filechooser treeview header button { background: #0d0d0e; color: #929295; border: 0; border-bottom: 1px solid #262627; font: 11px "JetBrains Mono"; padding: 7px 8px; }
+.tsugumori-filechooser treeview:selected { background: #191919; color: #e6e2d6; outline: none; border: 0; }
+.tsugumori-filechooser treeview:focus { outline: none; }
+.tsugumori-filechooser treeview:selected:focus { box-shadow: inset 0 -1px #cc1515; }
+.tsugumori-filechooser entry { background: #121213; color: #dedede; border: 1px solid #262627; border-bottom-color: #cc1515; border-radius: 0; padding: 7px 10px; caret-color: #cc1515; }
+.tsugumori-filechooser entry selection { background: #491717; color: #ededed; }
+.tsugumori-filechooser separator { background: #262627; }
+.tsugumori-filechooser paned > separator { min-width: 1px; min-height: 1px; background: #262627; }
+.tsugumori-filechooser scrollbar { background: #0d0d0e; border: 0; }
+.tsugumori-filechooser scrollbar slider { background: #393939; min-width: 3px; min-height: 3px; border: 0; border-radius: 0; }
+.tsugumori-filechooser popover,
+.tsugumori-filechooser menu { background: #0d0d0e; color: #dedede; border: 1px solid #262627; border-radius: 0; box-shadow: none; }
+.tsugumori-filechooser menuitem { background: transparent; color: #dedede; padding: 7px 10px; }
+.tsugumori-filechooser menuitem:hover { background: #1a1a1c; box-shadow: inset 1px 0 #cc1515; }
+.tsugumori-filechooser rubberband { background: rgba(204,21,21,0.05); border: 1px solid #cc1515; border-radius: 0; }

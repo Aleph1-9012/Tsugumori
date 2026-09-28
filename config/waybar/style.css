@@ -69,7 +69,8 @@ window#waybar {
 #cpu,
 #memory,
 #network,
-#pulseaudio {
+#pulseaudio,
+#battery {
   color: @ts_text;
   font-weight: 500;
   padding: 0 12px;
@@ -101,6 +102,15 @@ window#waybar {
 
 #pulseaudio.muted:hover {
   color: @ts_bg;
+}
+
+#battery.warning:not(.charging) {
+  color: @ts_red;
+}
+
+#battery.critical:not(.charging) {
+  color: @ts_bg;
+  background-color: @ts_red;
 }
 
 #clock {

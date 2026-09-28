@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- @license lucide-static v0.468.0 - ISC -->
+
+<svg
+   class="lucide lucide-download"
+   width="24"
+   height="24"
+   viewBox="0 0 24 24"
+   fill="none"
+   stroke="currentColor"
+   stroke-width="2"
+   stroke-linecap="round"
+   stroke-linejoin="round"
+   version="1.1"
+   id="svg1"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
+     d="m 3,14 a 1,1 0 0 0 -1,1 v 4 c 0,1.64501 1.3549904,3 3,3 h 14 c 1.64501,0 3,-1.35499 3,-3 v -4 a 1,1 0 0 0 -1,-1 1,1 0 0 0 -1,1 v 4 c 0,0.564129 -0.435871,1 -1,1 H 5 C 4.4358706,20 4,19.564129 4,19 V 15 A 1,1 0 0 0 3,14 Z"
+     id="path1" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
+     d="m 7,9 a 1,1 0 0 0 -0.7070313,0.2929688 1,1 0 0 0 0,1.4140622 l 5.0000003,5 a 1.0001,1.0001 0 0 0 1.414062,0 l 5,-5 a 1,1 0 0 0 0,-1.4140622 1,1 0 0 0 -1.414062,0 L 12,13.585938 7.7070312,9.2929688 A 1,1 0 0 0 7,9 Z"
+     id="polyline1" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
+     d="m 12,2 a 1,1 0 0 0 -1,1 v 12 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 V 3 A 1,1 0 0 0 12,2 Z"
+     id="line1" />
+</svg>

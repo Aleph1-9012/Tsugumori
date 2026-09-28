@@ -108,6 +108,12 @@ Item {
         function onAudioMutedChanged() { view.refresh() }
         function onBrightnessLevelChanged() { view.refresh() }
         function onBrightnessAvailableChanged() { view.refresh() }
+        function onGpuStatusChanged() { view.refresh() }
+        function onGpuActiveIdChanged() { view.refresh() }
+        function onGpuSelectionChanged() { view.refresh() }
+        function onGpuBusyChanged() { view.refresh() }
+        function onGpuFailedChanged() { view.refresh() }
+        function onGpuCanSaveChanged() { view.refresh() }
         function onNotificationsChanged() { view.refresh() }
         function onDndEnabledChanged() { view.refresh() }
         function onPendingFilePathChanged() { view.refresh() }
@@ -345,7 +351,7 @@ Item {
                                     secured: !!actionLoader.entry.secured
                                     navigationFocus: view.controller.keyboardNavigation && view.controller.action === actionLoader.entry.key
                                     reducedMotion: view.reducedMotion
-                                    enabled: actionLoader.entry.key !== "none"
+                                    enabled: actionLoader.entry.key !== "none" && !actionLoader.entry.disabled
                                     onHoverEntered: { view.controller.keyboardNavigation = false; view.controller.action = actionLoader.entry.key }
                                     onClicked: {
                                         view.controller.action = actionLoader.entry.key
@@ -379,6 +385,47 @@ Item {
                     horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
                 }
                 Item { width: 1; height: 8; visible: actionModel.count > 0 }
+                Column {
+                    width: parent.width; spacing: 12
+                    visible: view.displaySlot === "bottom" && view.displaySub === "gpu"
+                    Text {
+                        width: parent.width; text: view.controller.gpuSelectionDetails()
+                        textFormat: Text.PlainText; wrapMode: Text.Wrap
+                        font.family: "JetBrains Mono"; font.pixelSize: 11; color: "#e8e8e8"
+                    }
+                    Rectangle { width: parent.width; height: 1; color: "#333333" }
+                    Text {
+                        width: parent.width
+                        text: "ACTIVE DESKTOP GPU\n" + view.controller.gpuActiveLabel()
+                            + "\n\nSAVED PREFERENCE\n" + view.controller.gpuLabel(view.controller.gpuStatus.saved)
+                            + (view.controller.gpuStatus.pending ? " / NEXT LOGIN" : "")
+                        textFormat: Text.PlainText; wrapMode: Text.Wrap
+                        font.family: "JetBrains Mono"; font.pixelSize: 11; color: "#a2a2a2"
+                    }
+                    Text {
+                        width: parent.width
+                        visible: !view.controller.gpuActiveId && !view.controller.gpuFailed && !view.controller.gpuBusy
+                        text: view.controller.gpuStatus.active_reason || "The active desktop GPU could not be verified."
+                        textFormat: Text.PlainText; wrapMode: Text.Wrap
+                        font.family: "JetBrains Mono"; font.pixelSize: 11; color: "#a2a2a2"
+                    }
+                    Text {
+                        width: parent.width
+                        text: view.controller.gpuMessage || view.controller.gpuStatus.reason
+                            || (view.controller.gpuStatus.missing ? "Saved GPU is unavailable. Login will fall back to automatic selection."
+                                : view.controller.gpuStatus.gpus.length < 2 ? "At least two PCI graphics cards are required to choose a primary GPU." : "")
+                        visible: text !== ""
+                        textFormat: Text.PlainText; wrapMode: Text.Wrap
+                        font.family: "JetBrains Mono"; font.pixelSize: 11
+                        color: view.controller.gpuFailed || view.controller.gpuStatus.reason ? "#ef7664" : "#a2a2a2"
+                    }
+                    Text {
+                        width: parent.width
+                        text: "Save, then log out and back in when ready. This sets Hyprland’s primary renderer; other GPUs remain available for displays. No automatic logout, reboot, MUX change, or GPU power-off."
+                        textFormat: Text.PlainText; wrapMode: Text.Wrap
+                        font.family: "JetBrains Mono"; font.pixelSize: 11; color: "#a2a2a2"
+                    }
+                }
                 ActionButton {
                     width: parent.width; text: "CLEAR HISTORY"
                     visible: view.displaySlot === "right" && view.displaySub === "history"

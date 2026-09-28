@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- @license lucide-static v0.468.0 - ISC -->
+
+<svg
+   class="lucide lucide-network"
+   width="24"
+   height="24"
+   viewBox="0 0 24 24"
+   fill="none"
+   stroke="currentColor"
+   stroke-width="2"
+   stroke-linecap="round"
+   stroke-linejoin="round"
+   version="1.1"
+   id="svg4"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs4" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
+     d="m 17,15 c -1.090703,0 -2,0.909297 -2,2 v 4 c 0,1.090703 0.909297,2 2,2 h 4 c 1.090703,0 2,-0.909297 2,-2 v -4 c 0,-1.090703 -0.909297,-2 -2,-2 z m 0,2 h 4 v 4 h -4 z"
+     id="rect1" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
+     d="m 3,15 c -1.0907028,0 -2,0.909297 -2,2 v 4 c 0,1.090703 0.9092972,2 2,2 h 4 c 1.0907028,0 2,-0.909297 2,-2 V 17 C 9,15.909297 8.0907028,15 7,15 Z m 0,2 h 4 v 4 H 3 Z"
+     id="rect2" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
+     d="M 10,1 C 8.9092972,1 8,1.9092972 8,3 v 4 c 0,1.0907028 0.9092972,2 2,2 h 4 c 1.090703,0 2,-0.9092972 2,-2 V 3 C 16,1.9092972 15.090703,1 14,1 Z m 0,2 h 4 v 4 h -4 z"
+     id="rect3" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
+     d="m 6,11 c -1.0927249,0 -2,0.907275 -2,2 v 3 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -3 h 12 v 3 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -3 c 0,-1.092725 -0.907275,-2 -2,-2 z"
+     id="path3" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
+     d="m 12,7 a 1,1 0 0 0 -1,1 v 4 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 V 8 A 1,1 0 0 0 12,7 Z"
+     id="path4" />
+</svg>

@@ -1,0 +1,183 @@
+/* Tsugumori / Carbon. Loaded only inside Nautilus by tsugumori.py. */
+:root {
+  --window-bg-color: #0d0d0e;
+  --window-fg-color: #dededb;
+  --view-bg-color: #0d0d0e;
+  --view-fg-color: #dededb;
+  --headerbar-bg-color: #0d0d0e;
+  --headerbar-fg-color: #dededb;
+  --headerbar-backdrop-color: #0d0d0e;
+  --headerbar-shade-color: transparent;
+  --sidebar-bg-color: #0d0d0e;
+  --sidebar-fg-color: #a5a5a3;
+  --sidebar-backdrop-color: #0d0d0e;
+  --sidebar-shade-color: transparent;
+  --secondary-sidebar-bg-color: #0d0d0e;
+  --secondary-sidebar-fg-color: #dededb;
+  --card-bg-color: #141415;
+  --card-fg-color: #dededb;
+  --popover-bg-color: #0d0d0e;
+  --popover-fg-color: #dedede;
+  --dialog-bg-color: #0d0d0e;
+  --dialog-fg-color: #dedede;
+  --border-color: #262627;
+  --accent-bg-color: #cc1515;
+  --accent-fg-color: #ffffff;
+  --accent-color: #ed5555;
+  --focus-border-color: #cc1515;
+  --shade-color: rgba(0, 0, 0, 0.2);
+  font-family: "IBM Plex Sans", "Inter", sans-serif;
+  font-size: 14px;
+}
+
+window, .background, .view, navigation-view, toolbarview, .sidebar {
+  background-color: #0d0d0e;
+  color: #dededb;
+  border-radius: 0;
+}
+headerbar {
+  min-height: 52px;
+  padding: 5px 10px;
+  border-bottom: 1px solid #262627;
+  background: #0d0d0e;
+  box-shadow: none;
+}
+headerbar button, headerbar menubutton > button {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 5px;
+  color: #b2afa5;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+button, row, entry, text, popover, popover > contents {
+  border-radius: 0;
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+button:focus, button:focus-visible, entry:focus, entry:focus-within, text:focus {
+  outline: none;
+  box-shadow: none;
+}
+button:focus-visible { box-shadow: inset 0 -1px #cc1515; }
+headerbar button:hover, headerbar button:checked {
+  color: #e6e2d6;
+  background: #171717;
+  background-image: linear-gradient(#cc1515, #cc1515);
+  background-size: 10px 1px;
+  background-repeat: no-repeat;
+  background-position: center bottom;
+}
+.nautilus-pathbar, .nautilus-pathbar .linked, .nautilus-path-button {
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  border-radius: 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  font-weight: 400;
+}
+.nautilus-path-button { margin: 3px; padding: 3px 6px; }
+.nautilus-path-button.current-dir { color: #e6e2d6; font-weight: 500; }
+.nautilus-pathbar box > label.dim-label { color: #cc1515; opacity: 1; padding: 0 5px; }
+.nautilus-pathbar button label.dim-label { color: #969695; opacity: 1; }
+.ts-slash { color: #cc1515; opacity: 1; }
+.nautilus-pathbar > scrolledwindow undershoot { background: none; border: 0; }
+.sidebar-pane { border-right: 1px solid #222223; }
+
+.navigation-sidebar, .navigation-sidebar list, .navigation-sidebar row {
+  background: #0d0d0e;
+  color: #a5a5a3;
+  border-radius: 0;
+}
+.navigation-sidebar { padding: 12px; }
+.navigation-sidebar row { min-height: 22px; padding: 7px 10px; margin: 1px 0; }
+.navigation-sidebar row image { color: #8b8b88; -gtk-icon-size: 16px; }
+.navigation-sidebar row:selected {
+  background-color: #191919;
+  color: #e6e2d6;
+  background-image: linear-gradient(#cc1515, #cc1515);
+  background-size: 2px calc(100% - 14px);
+  background-position: left center;
+  background-repeat: no-repeat;
+  outline: none;
+  box-shadow: none;
+}
+.navigation-sidebar row:selected image { color: #c7c4b9; }
+.navigation-sidebar row:hover:not(:selected) { background: #161617; }
+.navigation-sidebar row:focus-visible label { text-decoration: underline #cc1515; }
+.navigation-sidebar separator { background: #292927; min-height: 1px; margin: 10px; }
+
+.nautilus-grid-view gridview { padding: 26px 22px; border-spacing: 12px 20px; }
+.nautilus-grid-view gridview > child,
+.nautilus-grid-view .nautilus-view-cell {
+  background: transparent;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+}
+.nautilus-grid-view .nautilus-view-cell { padding: 12px 8px; }
+.nautilus-grid-view gridview > child { min-width: 128px; }
+.nautilus-grid-view .icon-ui-labels-box > label { color: #b8b6af; font-size: 14px; font-weight: 400; }
+.nautilus-grid-view .icon-ui-labels-box { min-height: 42px; }
+.nautilus-grid-view .icon-ui-labels-box > label:first-child {
+  min-height: 0;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+.nautilus-grid-view gridview > child:hover { background: transparent; }
+.nautilus-grid-view gridview > child:hover label { color: #dedbd1; }
+.nautilus-grid-view gridview > child:selected,
+.nautilus-list-view columnview > listview > row:selected {
+  color: #e6e2d6;
+  background-color: transparent;
+  background-image: linear-gradient(#cc1515, #cc1515), linear-gradient(#cc1515, #cc1515), linear-gradient(#cc1515, #cc1515), linear-gradient(#cc1515, #cc1515);
+  background-size: 8px 1px, 1px 8px, 8px 1px, 1px 8px;
+  background-position: 7px 7px, 7px 7px, calc(100% - 7px) calc(100% - 7px), calc(100% - 7px) calc(100% - 7px);
+  background-repeat: no-repeat;
+  border-radius: 0;
+  outline: none;
+  box-shadow: none;
+}
+.nautilus-grid-view gridview > child:selected label { color: #e6e2d6; font-weight: 500; }
+.nautilus-grid-view gridview > child:focus-visible label:first-child,
+.nautilus-list-view row:focus-visible .column-name-labels-box label { text-decoration: underline #cc1515; }
+.view .nautilus-image { filter: none; }
+.view .thumbnail { border-radius: 0; }
+.nautilus-grid-view gridview > child:hover .nautilus-image:not(.thumbnail) { filter: brightness(1.18); }
+.nautilus-grid-view gridview > child:selected .nautilus-image:not(.thumbnail) { filter: brightness(1.32); }
+.nautilus-list-view columnview > listview > row { border-radius: 0; outline: none; }
+.nautilus-list-view columnview > listview > row:hover:not(:selected) { background: #161617; }
+rubberband { border: 1px solid #cc1515; border-radius: 0; background: rgba(204,21,21,0.05); }
+.floating-bar { background: #0d0d0e; box-shadow: none; border: none; border-radius: 0; padding: 8px 12px; color: #969695; font: 11px "JetBrains Mono"; }
+
+popover, popover > contents, popover.background > contents {
+  --accent-bg-color: #cc1515;
+  --accent-color: #ed5555;
+  background: #0d0d0e;
+  color: #dedede;
+  border: 1px solid #262627;
+  border-radius: 0;
+  box-shadow: none;
+}
+popover { border: none; background: transparent; }
+popover arrow { background: #0d0d0e; border-color: #262627; }
+popover modelbutton, popover button.flat { min-height: 26px; padding: 4px 10px; margin: 0; border-radius: 0; background: transparent; color: #dedede; outline: none; box-shadow: none; }
+popover modelbutton:hover, popover modelbutton:selected, popover modelbutton:focus-visible {
+  color: #dedede;
+  background: #1a1a1c;
+  box-shadow: inset 1px 0 #cc1515;
+}
+popover modelbutton image { color: #a6a6a9; -gtk-icon-size: 15px; }
+popover accelerator, popover .accelerator { color: #929295; font: 11px "JetBrains Mono"; }
+popover separator { min-height: 1px; background: #262627; margin: 5px 10px; }
+popover label.title-2 { font: 11px "JetBrains Mono"; color: #929295; }
+entry { background: #121213; color: #dedede; border: 1px solid #262627; border-bottom: 1px solid #cc1515; border-radius: 0; padding: 8px 10px; caret-color: #cc1515; }
+entry:focus-within, entry:focus { outline: none; box-shadow: none; border-bottom-color: #cc1515; }
+text selection, entry selection { background: #491717; color: #ededed; }
+popover button.suggested-action { background: #1a1a1c; color: #dedede; border: 1px solid #38383a; border-radius: 0; box-shadow: none; padding: 6px 16px; }
+popover button.suggested-action:hover { background: #242426; }
+@media (prefers-reduced-motion: reduce) {
+  button, row, entry, text, popover, popover > contents { transition: none; }
+}

@@ -1,0 +1,11 @@
+[Icon Theme]
+Name=Tsugumori Nautilus
+Comment=App-local outline icons for the Tsugumori file manager
+Inherits=Adwaita,hicolor
+Directories=scalable
+
+[scalable]
+Size=48
+Type=Scalable
+MinSize=8
+MaxSize=512

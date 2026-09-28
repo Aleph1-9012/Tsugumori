@@ -131,6 +131,7 @@ collect_choices() {
     BACKUP_OLD=true;          ask_yn "Backup existing configs to $BACKUP_DIR?" y || BACKUP_OLD=false
     INSTALL_WALLPAPERS=true;  ask_yn "Install default wallpapers to ~/Pictures/wallpapers?" y || INSTALL_WALLPAPERS=false
     INSTALL_BASHRC=true;      ask_yn "Install Tsugumori .bashrc (welcome banner + Tsugumori prompt)?" y || INSTALL_BASHRC=false
+    INSTALL_NAUTILUS=true;    ask_yn "Install Nautilus and its matching file-dialog theme (builds a small GTK module)?" y || INSTALL_NAUTILUS=false
     ENABLE_SERVICES=true;     ask_yn "Enable system services (NetworkManager, pipewire)?" y || ENABLE_SERVICES=false
 
     if $VM_GL_TWEAKS; then
@@ -721,6 +722,131 @@ EOF
     fi
 }
 
+# Nautilus is optional. Keep its packages separate from the base desktop and
+# build the GTK 3 module locally instead of distributing a machine-built .so.
+prepare_nautilus_theme() {
+    ${INSTALL_NAUTILUS:-false} || return 0
+    log "Installing optional Nautilus theme dependencies from the Arch repositories..."
+    $PINNED_MODE && warn "Optional Nautilus packages use current Arch versions, not the pinned desktop manifest."
+    sudo pacman -S --needed --noconfirm nautilus nautilus-python gtk3 fontconfig gcc pkgconf
+    build_nautilus_theme
+}
+
+build_nautilus_theme() {
+    local flags
+    flags=$(pkg-config --cflags --libs gtk+-3.0 fontconfig) \
+        || fatal "GTK 3 and Fontconfig development files are required for the file-dialog theme."
+    local -a gtk_flags
+    read -r -a gtk_flags <<< "$flags"
+    gcc -shared -fPIC -O2 -Wall -Wextra -Wl,-z,relro,-z,now \
+        -o "$CLONE_DIR/filechooser-gtk3.so" \
+        "$CLONE_DIR/config/nautilus/tsugumori/filechooser-gtk3.c" "${gtk_flags[@]}" \
+        || fatal "Could not build the GTK 3 file-dialog theme. No theme files were installed."
+}
+
+deploy_nautilus_theme() {
+    ${INSTALL_NAUTILUS:-false} || return 0
+    log "Installing Nautilus appearance and scoped GTK file-dialog styles..."
+    python3 - "$CLONE_DIR" "$CONFIG_HOME" "${XDG_DATA_HOME:-$HOME/.local/share}" \
+        "$BACKUP_DIR" "$BACKUP_OLD" <<'PY'
+import os
+from pathlib import Path
+import shutil
+import stat
+import sys
+import tempfile
+
+source, config, data, backup = map(Path, sys.argv[1:5])
+if not all(path.is_absolute() for path in (config, data, backup)):
+    raise SystemExit("Nautilus installation requires absolute XDG directory paths.")
+config, data = config.resolve(), data.resolve()
+if any(char in str(config) for char in ":\n\r"):
+    raise SystemExit("The GTK module path cannot contain a colon or newline.")
+
+# Each entry is a file we own. Do not replace Nautilus, GTK or extension folders.
+theme = source / "config/nautilus/tsugumori"
+files = {config / "nautilus/tsugumori" / path.relative_to(theme): path
+         for path in theme.rglob("*") if path.is_file() or path.is_symlink()}
+files[data / "nautilus-python/extensions/tsugumori.py"] = source / "config/nautilus/tsugumori.py"
+files[config / "nautilus/tsugumori/filechooser-gtk3.so"] = source / "filechooser-gtk3.so"
+css = config / "gtk-4.0/gtk.css"
+environment = config / "environment.d/80-tsugumori-filechooser.conf"
+
+# Validate every destination before writing. Shared dotfile symlinks must be
+# managed by their owner, and should never be replaced or followed silently.
+for target in [*files, css, environment]:
+    root = config if target.is_relative_to(config) else data
+    for parent in target.parents:
+        if parent == root:
+            break
+        if parent.is_symlink() or (parent.exists() and not parent.is_dir()):
+            raise SystemExit(f"Manage this Nautilus theme destination manually: {parent}")
+    if target.is_symlink():
+        original = files.get(target)
+        if not original or not original.is_symlink() or os.readlink(target) != os.readlink(original):
+            raise SystemExit(f"Refusing to replace a custom symlink: {target}")
+    elif target.exists() and not target.is_file():
+        raise SystemExit(f"Refusing to replace a non-file: {target}")
+
+contents = {}
+for target, original in files.items():
+    if original.is_symlink():
+        if not original.resolve().is_relative_to(theme.resolve()) or not original.is_file():
+            raise SystemExit(f"Invalid bundled icon alias: {original}")
+        contents[target] = None
+    else:
+        contents[target] = original.read_bytes()
+
+css_text = css.read_text() if css.exists() else ""
+import_line = '@import url("../nautilus/tsugumori/filechooser-gtk4.css");'
+if import_line not in css_text.splitlines():
+    css_text = import_line + "\n" + css_text
+contents[css] = css_text.encode()
+
+# environment.d expands these at login. Keep other GTK 3 modules and any
+# unrelated settings in this dedicated fragment; never alter GTK_MODULES.
+env_text = environment.read_text() if environment.exists() else ""
+env_lines = [line for line in env_text.splitlines()
+             if not line.lstrip().startswith("GTK3_MODULES=")]
+env_lines.append('GTK3_MODULES="${GTK3_MODULES:+${GTK3_MODULES}:}${XDG_CONFIG_HOME:-${HOME}/.config}/nautilus/tsugumori/filechooser-gtk3.so"')
+contents[environment] = ("\n".join(env_lines) + "\n").encode()
+
+for target, content in contents.items():
+    if content is None and target.is_symlink():
+        continue
+    if content is not None and target.is_file() and target.read_bytes() == content:
+        continue
+    if sys.argv[5] == "true" and (target.exists() or target.is_symlink()):
+        root = config if target.is_relative_to(config) else data
+        saved = backup / ("config" if root == config else "data") / target.relative_to(root)
+        saved.parent.mkdir(parents=True, exist_ok=True)
+        if saved.exists() or saved.is_symlink():
+            raise SystemExit(f"A Nautilus theme backup already exists: {saved}")
+        shutil.copy2(target, saved, follow_symlinks=False)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if content is None:
+        descriptor, temporary = tempfile.mkstemp(prefix=".tsugumori-", dir=target.parent)
+        os.close(descriptor)
+        Path(temporary).unlink()
+        try:
+            Path(temporary).symlink_to(os.readlink(files[target]))
+            os.replace(temporary, target)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
+        continue
+    mode = stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o644
+    descriptor, temporary = tempfile.mkstemp(prefix=".tsugumori-", dir=target.parent)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            os.fchmod(stream.fileno(), mode)
+            stream.write(content)
+        os.replace(temporary, target)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+PY
+    ok "Nautilus theme installed. Log out and back in to load the file-dialog module."
+}
+
 install_lock_background() {
     local bundled="$CLONE_DIR/assets/wallpapers/Aleph1.png"
     local output="$CONFIG_HOME/hypr/lockbg.png"
@@ -910,7 +1036,9 @@ main() {
     write_tsugumori_options "$CLONE_DIR/config/hypr/tsugumori_options.lua"
     validate_lock_runtime
     validate_hyprland_config
+    prepare_nautilus_theme
     deploy_configs
+    deploy_nautilus_theme
     install_font_assets
     install_lock_background
     warn_legacy_pam

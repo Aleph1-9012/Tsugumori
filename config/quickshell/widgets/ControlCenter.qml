@@ -42,7 +42,8 @@ ShellRoot {
                   {key:"bluetooth", label:"Bluetooth"} ],
         bottom: [ {key:"output",    label:"Output"},
                   {key:"volume",    label:"Volume"},
-                  {key:"brightness",label:"Brightness"} ],
+                  {key:"brightness",label:"Brightness"},
+                  {key:"gpu",       label:"GPU"} ],
         left:   [ {key:"send",      label:"Send"},
                   {key:"receive",   label:"Receive"} ],
         right:  [ {key:"history",   label:"History"},
@@ -141,6 +142,21 @@ ShellRoot {
         if (key === "bottom.volume") {
             return [{key:"mute-toggle", label: audioMuted ? "Unmute audio" : "Mute audio", primary:true}]
         }
+        // GPU choices are staged until explicitly saved for the next login.
+        if (key === "bottom.gpu") {
+            var gpuActions = [{key:"select:auto", label:"Automatic", kind:"row",
+                selected:gpuSelection === "auto", disabled:gpuBusy,
+                metadata:gpuBadge("auto")}]
+            for (var g = 0; g < gpuStatus.gpus.length; ++g) {
+                var gpu = gpuStatus.gpus[g]
+                gpuActions.push({key:"select:" + gpu.id, label:gpu.name + " / " + gpu.id,
+                    kind:"row", selected:gpuSelection === gpu.id, disabled:gpuBusy,
+                    metadata:gpuBadge(gpu.id)})
+            }
+            gpuActions.push({key:"save", label:"Save for next login", primary:true, disabled:!gpuCanSave})
+            gpuActions.push({key:"refresh", label:"Refresh GPUs", disabled:gpuBusy})
+            return gpuActions
+        }
         // Quickshare Send (qshare.py)
         if (key === "left.send") {
             var acts4 = []
@@ -209,6 +225,7 @@ ShellRoot {
         if (key === "bottom.output")     return "Audio Output"
         if (key === "bottom.volume")     return "Volume"
         if (key === "bottom.brightness") return "Brightness"
+        if (key === "bottom.gpu")        return "GPU / Primary Renderer"
         if (key === "left.send")         return "Send Files"
         if (key === "left.receive")      return "Receive Files"
         if (key === "right.history")     return "Notifications"
@@ -244,6 +261,14 @@ ShellRoot {
             if (!brightnessAvailable) return "Unavailable"
             return Math.round(brightnessLevel * 100) + "%"
         }
+        if (key === "bottom.gpu") {
+            if (gpuBusy) return "Reading / saving GPU settings…"
+            var gpuSummary = "Active · " + gpuActiveLabel()
+            if (gpuFailed) return gpuSummary
+            if (gpuSelection !== gpuStatus.saved) gpuSummary += "\nSelection not saved"
+            else if (gpuStatus.pending) gpuSummary += "\nNext login · " + gpuLabel(gpuStatus.saved)
+            return gpuSummary
+        }
         if (key === "left.send") {
             if (pendingFilePath === "") return "Ready · pick a file"
             return qshareTunnel ? "Tunnel mode" : "LAN mode"
@@ -268,6 +293,7 @@ ShellRoot {
         if (key === "bottom.output")     return true
         if (key === "bottom.volume")     return !audioMuted
         if (key === "bottom.brightness") return brightnessAvailable
+        if (key === "bottom.gpu")        return gpuActiveId !== ""
         if (key === "left.send")         return pendingFilePath !== ""
         if (key === "left.receive")      return qshareUrl !== ""
         if (key === "right.history")     return notifications.length > 0
@@ -275,6 +301,94 @@ ShellRoot {
         var d3 = root.details[key]
         return d3 ? d3.on : false
     }
+    // ── Desktop GPU preference (applied by UWSM at the next login) ──
+    property var gpuStatus: ({ gpus: [], saved: "auto", session: "auto", active: null, supported: false })
+    property string gpuSelection: "auto"
+    property string gpuMessage: ""
+    property bool gpuFailed: false
+    readonly property bool gpuBusy: gpuProc.running
+    readonly property string gpuActiveId: !gpuFailed && gpuStatus.active
+        && gpuStatus.gpus.some(function(gpu) { return gpu.id === gpuStatus.active }) ? gpuStatus.active : ""
+    readonly property bool gpuCanSave: !gpuBusy && !gpuFailed
+        && gpuSelection !== gpuStatus.saved
+        && ((gpuStatus.supported && gpuStatus.gpus.length > 1)
+            || (gpuSelection === "auto" && gpuStatus.saved !== "auto"))
+
+    function gpuLabel(id) {
+        if (id === "auto") return "Automatic"
+        for (var i = 0; i < gpuStatus.gpus.length; ++i)
+            if (gpuStatus.gpus[i].id === id) return gpuStatus.gpus[i].name
+        return "Unavailable GPU " + id
+    }
+
+    function gpuActiveLabel() {
+        return gpuActiveId ? gpuLabel(gpuActiveId) : "UNKNOWN"
+    }
+
+    function gpuBadge(id) {
+        if (gpuFailed) return ""
+        var badges = []
+        if (id === gpuActiveId) badges.push("ACTIVE")
+        if (gpuStatus.pending && id === gpuStatus.saved) badges.push("NEXT LOGIN")
+        return badges.join(" / ")
+    }
+
+    function gpuSelectionDetails() {
+        if (gpuSelection === "auto") return "Let Hyprland choose its primary renderer."
+        var gpu = gpuStatus.gpus.find(function(item) { return item.id === gpuSelection })
+        if (!gpu) return "This GPU is unavailable; login will fall back to automatic selection."
+        return gpu.name + "\n" + gpu.id + " / " + gpu.driver
+            + (gpu.outputs.length ? "\nDisplays: " + gpu.outputs.join(", ") : "")
+    }
+
+    function gpuRequest(request) {
+        if (gpuBusy || (request === "save" && !gpuCanSave)) return
+        gpuMessage = ""
+        gpuFailed = false
+        gpuProc.command = ["python3", Qt.resolvedUrl("../scripts/gpu_ctl.py").toString().replace("file://", ""), request]
+            .concat(request === "save" ? [gpuSelection] : [])
+        gpuProc.running = true
+        gpuTimeout.restart()
+    }
+
+    Process {
+        id: gpuProc
+        running: false
+        stdout: StdioCollector {
+            onStreamFinished: {
+                gpuTimeout.stop()
+                try {
+                    var result = JSON.parse(this.text)
+                    if (!result.ok) throw new Error(result.error || "GPU settings could not be read.")
+                    if (!Array.isArray(result.gpus) || typeof result.saved !== "string")
+                        throw new Error("Invalid GPU information returned.")
+                    root.gpuStatus = result
+                    root.gpuSelection = result.saved
+                    root.gpuMessage = result.message || ""
+                } catch (error) {
+                    root.gpuFailed = true
+                    root.gpuMessage = String(error.message || error)
+                }
+            }
+        }
+        onExited: exitCode => {
+            gpuTimeout.stop()
+            if (exitCode !== 0 && !root.gpuFailed) {
+                root.gpuFailed = true
+                root.gpuMessage = "GPU helper failed. No change was confirmed; refresh to check the saved choice."
+            }
+        }
+    }
+    Timer {
+        id: gpuTimeout
+        interval: 12000
+        onTriggered: {
+            gpuProc.running = false
+            root.gpuFailed = true
+            root.gpuMessage = "GPU helper timed out. Refresh to check the saved choice."
+        }
+    }
+
     // ── System data: Wi-Fi ──
     // Public names stay on root so the presentation and keyboard flow are unchanged.
     property alias wifiEnabled: wifiService.enabled
@@ -878,7 +992,7 @@ ShellRoot {
     onLevelChanged: { if (level !== 3) cancelWifiPrompt() }
     onOpenChanged: {
         if (!open) cancelWifiPrompt()
-        else { loadBrightness(); keyboardNavigation = false }
+        else { loadBrightness(); keyboardNavigation = false; gpuRequest("status") }
     }
 
     // Cancel the Wi-Fi prompt cleanly (close TextInput and reset key-handler focus).
@@ -896,6 +1010,21 @@ ShellRoot {
     function dispatchAction(slotKey, subKey, actionKey) {
         console.log("[ControlCenter] action:", slotKey + "." + subKey + "." + actionKey)
         var cmd = ""
+
+        // GPU selection never changes the running desktop or logs out the user.
+        if (slotKey === "bottom" && subKey === "gpu") {
+            if (gpuBusy) return
+            if (actionKey === "refresh") gpuRequest("status")
+            else if (actionKey === "save") gpuRequest("save")
+            else if (actionKey.indexOf("select:") === 0) {
+                var choice = actionKey.substring(7)
+                if (choice === "auto" || gpuStatus.gpus.some(function(gpu) { return gpu.id === choice })) {
+                    gpuSelection = choice
+                    if (!gpuFailed) gpuMessage = ""
+                }
+            }
+            return
+        }
 
         // ── Wi-Fi ──
         if (slotKey === "top" && subKey === "wifi") {

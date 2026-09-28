@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- @license lucide-static v0.468.0 - ISC -->
+
+<svg
+   class="lucide lucide-house"
+   width="24"
+   height="24"
+   viewBox="0 0 24 24"
+   fill="none"
+   stroke="currentColor"
+   stroke-width="2"
+   stroke-linecap="round"
+   stroke-linejoin="round"
+   version="1.1"
+   id="svg2"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs2" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
+     d="m 10,11 c -1.0927249,0 -2,0.907275 -2,2 v 8 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -8 h 4 v 8 a 1,1 0 0 0 1,1 1,1 0 0 0 1,-1 v -8 c 0,-1.092725 -0.907275,-2 -2,-2 z"
+     id="path1" />
+  <path
+     style="baseline-shift:baseline;display:inline;overflow:visible;vector-effect:none;fill:#000000;stroke:none;stroke-linecap:butt;stroke-linejoin:miter;enable-background:accumulate;stop-color:#000000;stop-opacity:1;opacity:1"
+     d="m 12,1.0039062 c -0.690029,0 -1.379106,0.2347961 -1.935547,0.7050782 a 1.0001,1.0001 0 0 0 -0.0059,0.00391 L 3.0644531,7.7089844 C 2.3903019,8.2787503 1.9997884,9.1173261 2,10 v 9 c 0,1.64501 1.3549904,3 3,3 h 14 c 1.64501,0 3,-1.35499 3,-3 V 10 C 22.000212,9.1173261 21.609698,8.2787503 20.935547,7.7089844 L 13.941406,1.7128906 a 1.0001,1.0001 0 0 0 -0.0059,-0.00391 C 13.379106,1.2387023 12.690029,1.0039063 12,1.0039062 Z m -0.644531,2.2324219 c 0.377894,-0.3193811 0.911168,-0.3193811 1.289062,0 l 6.996094,5.9941407 a 1.0001,1.0001 0 0 0 0.0039,0.00586 C 19.869897,9.426798 20.000071,9.7049266 20,10 v 9 c 0,0.564129 -0.435871,1 -1,1 H 5 C 4.4358706,20 4,19.564129 4,19 V 10 C 3.9999293,9.7049266 4.1301034,9.426798 4.3554687,9.2363281 a 1.0001,1.0001 0 0 0 0.00391,-0.00586 z"
+     id="path2" />
+</svg>

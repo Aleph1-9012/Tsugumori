@@ -16,6 +16,7 @@
     "memory",
     "network",
     "pulseaudio",
+    "battery",
     "clock",
     "custom/power"
   ],
@@ -53,6 +54,16 @@
     "format": "VOL {volume}%",
     "format-muted": "VOL --",
     "on-click": "qs ipc call ctrl toggle"
+  },
+
+  "battery": {
+    "format": "BAT {capacity}%",
+    "format-charging": "BAT {capacity}%+",
+    "interval": 30,
+    "states": {
+      "warning": 20,
+      "critical": 10
+    }
   },
 
   "clock": {
