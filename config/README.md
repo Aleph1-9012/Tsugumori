@@ -1,7 +1,7 @@
 # Configuration map
 
-The installer places these files into `~/.config`. You do not need to
-understand every file to customize Tsugumori.
+The paths below are relative to your installed `~/.config` directory.
+They can differ from the source locations in this repository.
 
 | I want to change... | Open... |
 |---|---|
@@ -10,8 +10,8 @@ understand every file to customize Tsugumori.
 | Lock and idle timing | `hypr/hypridle.conf` |
 | Emergency lock-screen appearance | `hypr/hyprlock.conf` |
 | Terminal colors and font | `kitty/kitty.conf` |
-| Fastfetch layout | `kitty/fastfetch.jsonc` |
-| btop colors and layout | `kitty/tsugumori-btop.theme` and `kitty/btop.conf` |
+| Fastfetch layout | `fastfetch/config.jsonc` |
+| btop colors and layout | `btop/themes/tsugumori.theme` and `btop/btop.conf` |
 | Quickshell colors, fonts, and spacing | `quickshell/theme/Theme.qml` |
 | Quickshell user options | `quickshell/settings/Settings.qml` |
 | Launcher, Control Center, or panels | `quickshell/widgets/` |
@@ -32,10 +32,14 @@ adds the scoped GTK 4 stylesheet import. See the
 
 ## What upgrades preserve
 
-The installer preserves these two personal files:
+The installer preserves these personal desktop files:
 
 - `~/.config/hypr/user.lua`
 - `~/.config/quickshell/settings/Settings.qml`
+
+It also retains an existing `hypr/user.conf` for migration, though the Lua
+configuration does not load it. Personal Bash overrides in `~/.bashrc.local`
+are left untouched.
 
 Other files inside the installed configuration can be replaced during an
 upgrade. Keep long-term Hyprland changes in `user.lua`, and keep a copy of any

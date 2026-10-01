@@ -23,7 +23,7 @@ https://github.com/user-attachments/assets/0f27254b-d3ef-4ce7-a7c8-903179d5269e
 </p>
 
 > [!NOTE]
-> The installer checks the configuration before replacing anything and keeps
+> The installer validates the configuration before replacing desktop config and keeps
 > timestamped backups by default.
 
 ## Install
@@ -55,12 +55,16 @@ with their licenses, so the installer does not need an AUR helper.
 - Compact music player with an artwork glyph matrix, hover colour reveal, and local track drawer
 - Waybar and Kitty configurations, plus themed Fastfetch and btop
 - Nautilus as the default file manager and a graphical file picker for Quickshare
+- Optional Nautilus and file-dialog theme
 - Native Phase lock and wallpaper-picker transitions, shared red curtains, and bundled wallpapers
 
 See [desktop design and runtime notes](docs/native-desktop.md) for the terminal,
 widgets, fonts, and native animation details.
 
 ## Change the basics
+
+These links point to repository sources. See the
+[customization guide](docs/customize.md#common-files) for installed file locations.
 
 | What you want to change | Where to look |
 |---|---|
@@ -75,7 +79,8 @@ widgets, fonts, and native animation details.
 | Wallpapers | [`assets/wallpapers/`](assets/wallpapers) |
 
 The installer preserves `~/.config/hypr/user.lua` and Quickshell's
-`Settings.qml` during upgrades. See the [customization guide](docs/customize.md)
+`Settings.qml` during upgrades, and leaves `~/.bashrc.local` untouched.
+See the [customization guide](docs/customize.md)
 and the [configuration map](config/README.md) before editing other installed
 files.
 
@@ -112,9 +117,9 @@ restored with Undo during the current shell session.
 
 | Folder | Purpose |
 |---|---|
-| `config/` | Desktop configuration installed into `~/.config` |
-| `assets/` | Wallpapers and the bundled font |
-| `packages/` | Applications installed by `install.sh` |
+| `config/` | Desktop, terminal, and shell configuration, plus widget assets |
+| `assets/` | Wallpapers and Share Tech Mono font assets |
+| `packages/` | Base package manifest used by `install.sh` |
 | `docs/` | Customization, controls, help, and software requirements |
 | `.github/` | GitHub checks and issue templates; not installed on the desktop |
 

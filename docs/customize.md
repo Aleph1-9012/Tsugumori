@@ -20,8 +20,10 @@ defaults.
 | GTK file-dialog appearance | `~/.config/nautilus/tsugumori/filechooser-gtk3.css` and `filechooser-gtk4.css` |
 | Wallpapers | `~/Pictures/wallpapers/` |
 
-Only `user.lua` and `Settings.qml` are preserved automatically. Keep a backup
-or use your own fork for changes to the other installed files.
+Within the managed desktop configuration, `user.lua` and `Settings.qml` are
+preserved automatically. An existing legacy `hypr/user.conf` is retained for
+migration but is not loaded. Personal Bash overrides in `~/.bashrc.local` are
+left untouched. Keep a backup or use your own fork for changes to other files.
 
 ## Hyprland examples
 
