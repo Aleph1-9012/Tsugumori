@@ -59,6 +59,9 @@ Item {
         ? Math.max(0, Math.min(pw, Math.round(Math.max(wipeHost.x, curtain.width)))) : pw
     readonly property int currentInputWidth: wipeHost.visible ? Math.max(0, pw - currentInputX) : 0
     readonly property bool shown: currentInputWidth > 0
+    // Keep the window mapped through the entire curtain and drawer exit.
+    readonly property bool presentationActive: requestedVisible || wipeHost.visible
+                                               || visibilityAnim.running || waitingForDrawerClose
     readonly property int collapsedHeight: Math.ceil(header.height + mainRow.height + progress.height + libraryToggle.height + 2)
     readonly property int drawerNaturalHeight: Math.max(0, Math.min(s(240), availableHeight - collapsedHeight,
         s(14) + (trackCount > 0 ? trackCount * s(58) : s(44))))
@@ -195,12 +198,16 @@ Item {
                     Item {
                         anchors.centerIn: parent
                         width: matrixArea.squareSize; height: width
-                        PlayerGlyph {
+                        Loader {
+                            objectName: "artworkLoader"
                             anchors.fill: parent
-                            artworkUrl: root.mpCoverUrl; mediaKey: root.mpMediaKey
-                            trackTitle: root.mpTitle; trackArtist: root.mpArtist
-                            mediaAvailable: root.mediaAvailable; active: root.shown
-                            reducedMotion: root.reducedMotion
+                            active: root.presentationActive
+                            sourceComponent: PlayerGlyph {
+                                artworkUrl: root.mpCoverUrl; mediaKey: root.mpMediaKey
+                                trackTitle: root.mpTitle; trackArtist: root.mpArtist
+                                mediaAvailable: root.mediaAvailable; active: root.shown
+                                reducedMotion: root.reducedMotion
+                            }
                         }
                         Rectangle { anchors.top: parent.top; anchors.right: parent.right; width: root.s(15); height: 1; color: "#7d6b5e" }
                         Rectangle { anchors.top: parent.top; anchors.right: parent.right; width: 1; height: root.s(15); color: "#7d6b5e" }

@@ -4,7 +4,7 @@ Open the Control Center with `SUPER + Tab`, then select **Quickshare**.
 
 ## Send a file
 
-Send mode opens Yazi so you can choose a file. Quickshare then creates a local
+Send mode opens a graphical file picker. Quickshare then creates a local
 download link and QR code. A temporary Cloudflare tunnel can be used when the
 other device is not on the same local network.
 

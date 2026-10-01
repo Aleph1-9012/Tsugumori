@@ -131,7 +131,8 @@ collect_choices() {
     BACKUP_OLD=true;          ask_yn "Backup existing configs to $BACKUP_DIR?" y || BACKUP_OLD=false
     INSTALL_WALLPAPERS=true;  ask_yn "Install default wallpapers to ~/Pictures/wallpapers?" y || INSTALL_WALLPAPERS=false
     INSTALL_BASHRC=true;      ask_yn "Install Tsugumori .bashrc (welcome banner + Tsugumori prompt)?" y || INSTALL_BASHRC=false
-    INSTALL_NAUTILUS=true;    ask_yn "Install Nautilus and its matching file-dialog theme (builds a small GTK module)?" y || INSTALL_NAUTILUS=false
+    INSTALL_NAUTILUS_THEME=true
+    ask_yn "Install the Nautilus and file-dialog theme (builds a small GTK module)?" y || INSTALL_NAUTILUS_THEME=false
     ENABLE_SERVICES=true;     ask_yn "Enable system services (NetworkManager, pipewire)?" y || ENABLE_SERVICES=false
 
     if $VM_GL_TWEAKS; then
@@ -722,13 +723,18 @@ EOF
     fi
 }
 
-# Nautilus is optional. Keep its packages separate from the base desktop and
-# build the GTK 3 module locally instead of distributing a machine-built .so.
+configure_file_manager() {
+    log "Setting Nautilus as the default file manager..."
+    xdg-mime default org.gnome.Nautilus.desktop inode/directory
+}
+
+# Nautilus and GTK are base dependencies; only the appearance extension is
+# optional. Build its GTK 3 module locally instead of distributing a .so.
 prepare_nautilus_theme() {
-    ${INSTALL_NAUTILUS:-false} || return 0
+    ${INSTALL_NAUTILUS_THEME:-false} || return 0
     log "Installing optional Nautilus theme dependencies from the Arch repositories..."
     $PINNED_MODE && warn "Optional Nautilus packages use current Arch versions, not the pinned desktop manifest."
-    sudo pacman -S --needed --noconfirm nautilus nautilus-python gtk3 fontconfig gcc pkgconf
+    sudo pacman -S --needed --noconfirm nautilus-python fontconfig gcc pkgconf
     build_nautilus_theme
 }
 
@@ -745,7 +751,7 @@ build_nautilus_theme() {
 }
 
 deploy_nautilus_theme() {
-    ${INSTALL_NAUTILUS:-false} || return 0
+    ${INSTALL_NAUTILUS_THEME:-false} || return 0
     log "Installing Nautilus appearance and scoped GTK file-dialog styles..."
     python3 - "$CLONE_DIR" "$CONFIG_HOME" "${XDG_DATA_HOME:-$HOME/.local/share}" \
         "$BACKUP_DIR" "$BACKUP_OLD" <<'PY'
@@ -1044,6 +1050,7 @@ main() {
     warn_legacy_pam
     deploy_shell_config
     setup_user_dirs
+    configure_file_manager
     deploy_qshare_symlink
     enable_services
     finalize

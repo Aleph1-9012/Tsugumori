@@ -431,8 +431,10 @@ ShellRoot {
 
     Timer {
         interval: 1000
-        running: !root.localMode && root.externalPlayer !== null
+        running: root.playerVisible && !root.localMode
+                 && root.externalPlayer !== null && root.externalPlayer.isPlaying
         repeat: true
+        triggeredOnStart: true
         onTriggered: {
             var player = root.externalPlayer
             if (!player || !player.isPlaying) return
@@ -763,6 +765,7 @@ ShellRoot {
         PanelWindow {
             id: playerWindow
             required property var modelData;screen:modelData
+            visible: playerItem.presentationActive
             anchors.top:true;anchors.right:true
             // Keep the collapsed player anchored while Local Tracks expands below it.
             margins.top:Math.max(0, Math.round((modelData.height-playerItem.collapsedHeight)*Settings.playerPositionY))
@@ -805,8 +808,8 @@ ShellRoot {
                 onPrevTrack:root.previousTrack()
                 onLocalTrackSelected: function(path){ root.playLocalTrack(path) }
                 onShowTrackListChanged: {
-                    // Re-scan on open so newly added files show up without a full
-                    // QuickShell restart — the original scan only ever ran once at startup.
+                    // Scan on demand, including the first open, so login does
+                    // not walk a music library the user may never open.
                     if (showTrackList) root.requestMusicScan()
                 }
                 onSeekToSecs: function(secs){ root.seekTo(secs) }
@@ -815,7 +818,6 @@ ShellRoot {
     }
 
     Component.onCompleted: {
-        root.requestMusicScan()
         root.reselectExternalPlayer()
     }
 }

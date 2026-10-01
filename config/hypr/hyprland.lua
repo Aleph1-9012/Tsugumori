@@ -105,14 +105,6 @@ hl.window_rule({
     fullscreen = true,
 })
 
-hl.window_rule({
-    name = "tsugumori-yazi-picker",
-    match = { class = "^(qs-yazi-picker)$" },
-    float = true,
-    size = { 900, 600 },
-    center = true,
-})
-
 local quickshell_command = "env "
 if options.vm_software_gl then
     quickshell_command = quickshell_command .. "LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe "
@@ -148,9 +140,9 @@ hl.bind("SUPER + Return", exec("qs ipc call tsugumoriShell togglePlayer"))
 hl.bind("SUPER + SHIFT + Return", exec("qs ipc call tsugumoriShell toggleFront"))
 
 -- Applications.
-local kitty_command = "/usr/bin/kitty"
+local kitty_command = "/usr/bin/kitty --single-instance"
 if options.vm_software_gl then
-    kitty_command = "env LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe KITTY_GPU_DISABLED=1 /usr/bin/kitty"
+    kitty_command = "env LIBGL_ALWAYS_SOFTWARE=1 GALLIUM_DRIVER=llvmpipe KITTY_GPU_DISABLED=1 /usr/bin/kitty --single-instance"
 end
 
 hl.bind("SUPER + T", exec(kitty_command))

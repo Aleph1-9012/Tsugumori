@@ -113,7 +113,7 @@ Item {
     function scheduleSync() {
         if (!completed || syncQueued) return
         syncQueued = true
-        Qt.callLater(function() { root.syncQueued = false; root.syncMedia() })
+        mediaSync.start()
     }
     function syncMedia() {
         var key = mediaKey + "\u0000" + String(mediaAvailable)
@@ -243,10 +243,20 @@ Item {
     Component.onDestruction: { retry.stop(); transition.stop() }
 
     Rectangle { anchors.fill: parent; color: "#090909" }
+    Timer {
+        id: mediaSync
+        interval: 0
+        onTriggered: { root.syncQueued = false; root.syncMedia() }
+    }
     Image {
         id: cover
+        objectName: "decodedCover"
         anchors.fill: parent; visible: false
+        fillMode: Image.PreserveAspectFit
         asynchronous: true; cache: false; retainWhileLoading: false
+        // The glyph sampler only needs 128x128 pixels. Bound both decoders so
+        // high-resolution artwork cannot retain two full-size image buffers.
+        sourceSize: Qt.size(256, 256)
         property int decodeGeneration: -1
         property int attempts: 0
         property bool usedFallback: false
@@ -269,6 +279,7 @@ Item {
     // Load the accepted cover URL there before sampling the matching centred crop.
     Canvas {
         id: sampler
+        objectName: "artworkSampler"
         width: 128; height: 128; opacity: 0
         renderTarget: Canvas.Image; renderStrategy: Canvas.Immediate
         property string sampleUrl: ""
@@ -282,7 +293,7 @@ Item {
             var url = String(cover.source)
             if (sampleUrl !== url || sampleGeneration !== root.generation) {
                 releaseImage(); sampleUrl = url; sampleGeneration = root.generation
-                loadImage(sampleUrl)
+                loadImage(sampleUrl, Qt.size(cover.implicitWidth, cover.implicitHeight))
             }
             if (isImageLoaded(sampleUrl)) requestPaint()
         }
@@ -292,7 +303,7 @@ Item {
             if (!root.needsSample || !root.active || !root.artworkReady) return
             if (sampleGeneration !== root.generation || !isImageLoaded(sampleUrl)) { prepareImage(); return }
             var token = root.generation, ctx = getContext("2d")
-            var sw = cover.sourceSize.width, sh = cover.sourceSize.height
+            var sw = cover.implicitWidth, sh = cover.implicitHeight
             if (sw <= 0 || sh <= 0) return
             var side = Math.min(sw, sh)
             ctx.reset(); ctx.clearRect(0, 0, 128, 128)
@@ -311,6 +322,7 @@ Item {
             if (token !== root.generation) return
             root.needsSample = false
             root.commitCells(root.compileCells(raw, red, root.signatureSeed(), true, colours), false)
+            releaseImage()
         }
     }
     Canvas {

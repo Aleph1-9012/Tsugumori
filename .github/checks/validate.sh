@@ -238,8 +238,8 @@ package_set = set(packages)
 duplicates = sorted({package for package in packages if packages.count(package) > 1})
 if duplicates:
     raise SystemExit(f"{manifest}: duplicate packages: {', '.join(duplicates)}")
-if len(packages) != 41:
-    raise SystemExit(f"{manifest}: expected 41 direct packages, found {len(packages)}")
+if len(packages) != 43:
+    raise SystemExit(f"{manifest}: expected 43 direct packages, found {len(packages)}")
 obsolete_manifests = [Path("packages/" "aur.txt"), Path("packages/pinned-" "aur.txt")]
 present_obsolete = [str(path) for path in obsolete_manifests if path.exists()]
 if present_obsolete:
@@ -248,6 +248,7 @@ if present_obsolete:
 required_pacman = {
     "awww", "quickshell", "hyprlock", "hypridle",
     "ttf-jetbrains-mono-nerd", "fastfetch", "btop",
+    "nautilus", "gtk3", "python-gobject",
 }
 missing = sorted(required_pacman - package_set)
 if missing:
@@ -258,6 +259,9 @@ removed_packages = {
     "qt5-wayland", "gtk4-layer-shell", "figlet", "pavucontrol", "satty",
     "ttf-jetbrains-mono", "fish", "starship", "python-cairo", "python-numpy",
     "python-opencv", "qrencode",
+    "1password", "1password-beta", "1password-bin", "aether", "alacritty",
+    "brave", "brave-bin", "xournalpp", "yazi", "vivaldi",
+    "vivaldi-ffmpeg-codecs", "signal-desktop", "kdeconnect",
 }
 reintroduced = sorted(removed_packages & package_set)
 if reintroduced:
@@ -329,7 +333,7 @@ if [[ -x /usr/lib/qt6/bin/qmltestrunner ]]; then
     done
     QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_SCALE_FACTOR=1.25 \
         /usr/lib/qt6/bin/qmltestrunner -import .github/checks/qmltests/player/stubs \
-            -input .github/checks/qmltests/player/tst_PlayerClose.qml -o -,txt
+            -input .github/checks/qmltests/player -o -,txt
 else
     missing_optional_tool "Qt presentation tests"
 fi

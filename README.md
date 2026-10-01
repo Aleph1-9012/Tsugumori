@@ -54,6 +54,7 @@ with their licenses, so the installer does not need an AUR helper.
 - Clipboard history on `SUPER + C`, with search, image previews, pins, and deletion Undo
 - Compact music player with an artwork glyph matrix, hover colour reveal, and local track drawer
 - Waybar and Kitty configurations, plus themed Fastfetch and btop
+- Nautilus as the default file manager and a graphical file picker for Quickshare
 - Native Phase lock and wallpaper-picker transitions, shared red curtains, and bundled wallpapers
 
 See [desktop design and runtime notes](docs/native-desktop.md) for the terminal,

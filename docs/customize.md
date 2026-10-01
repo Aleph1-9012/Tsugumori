@@ -84,13 +84,16 @@ in the `battery.states` section of `~/.config/waybar/config.jsonc`.
 
 ## Nautilus and file dialogs
 
+Nautilus is the default file manager, including the menu's Files button.
+Quickshare uses a GTK file picker. Both are installed with the base desktop.
+
 Choose the optional Nautilus theme during installation to add the dark slash
 header, sidebar dividers, red selection marks, outline icons and matching
 menus. The extension preserves Nautilus's native file operations. Its font
 settings also include the label-clipping fix used by the live theme.
 
-The option installs `nautilus`, `nautilus-python`, `gtk3`, `fontconfig`, `gcc`
-and `pkgconf` from the current Arch repositories. These optional packages are
+The theme option adds `nautilus-python`, `fontconfig`, `gcc` and `pkgconf`
+from the current Arch repositories. These optional theme packages are
 not pinned, even with `--pinned`. The GTK 3 module is built from source on the
 destination machine. No compiled module is bundled in the repository.
 
@@ -110,8 +113,8 @@ Installed locations, relative to the normal XDG config and data directories:
   through [GTK3_MODULES](https://docs.gtk.org/gtk3/running.html#environment-variables),
   preserving other modules. The module styles file chooser dialogs only.
 
-Log out and back in after installing. This does not change the default file
-manager or the global icon theme. Qt, browser-built and sandboxed file dialogs
+Log out and back in after installing the theme. The theme does not change the
+global icon theme. Qt, browser-built and sandboxed file dialogs
 may use their own appearance. The Nautilus styling uses internal widget names
 and was checked with Nautilus 50 and GTK 4.22; future versions may need updates.
 

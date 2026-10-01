@@ -89,7 +89,7 @@ Item {
                     var name      = parts[0].trim()
                     var desktopId = parts[1].trim()
                     var cats      = parts[2] || ""
-                    var rawExec   = (parts[3] || "").replace(/%[A-Za-z]/g,"").trim()
+                    var rawExec   = parts.slice(3).join("|").replace(/%[A-Za-z]/g,"").trim()
                     if (!name || !desktopId) continue
                     // Use the raw exec when available; otherwise use the desktop ID.
                     var launchCmd = rawExec || desktopId
@@ -162,7 +162,7 @@ Item {
     }
 
     Timer {
-        interval: 1000; running: true; repeat: true
+        interval: 1000; running: root.menuOpen; repeat: true; triggeredOnStart: true
         onTriggered: {
             var d = new Date()
             root.clockStr = String(d.getHours()).padStart(2,"0") + ":"
@@ -186,7 +186,6 @@ Item {
         clockStr = String(d.getHours()).padStart(2,"0") + ":"
             + String(d.getMinutes()).padStart(2,"0") + ":"
             + String(d.getSeconds()).padStart(2,"0")
-        desktopReader.running = true
     }
 
     // ── Overlay ──
@@ -690,12 +689,12 @@ Item {
                     MenuFooterButton {
                         text: "TERMINAL"
                         reducedMotion: footer.reducedMotion
-                        onClicked: root.launch("kitty")
+                        onClicked: root.launch("kitty --single-instance")
                     }
                     MenuFooterButton {
                         text: "FILES"
                         reducedMotion: footer.reducedMotion
-                        onClicked: root.launch("kitty -e yazi")
+                        onClicked: root.launch("/usr/bin/nautilus --new-window")
                     }
                 }
 

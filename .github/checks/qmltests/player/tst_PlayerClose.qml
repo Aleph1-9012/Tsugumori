@@ -23,8 +23,12 @@ Item {
             player.requestedVisible = false
             tryCompare(player, "revealProgress", 0, 1500)
             tryCompare(drawer, "height", 0, 500)
+            tryCompare(player, "presentationActive", false)
+            compare(findChild(player, "artworkLoader").item, null)
             player.requestedVisible = true
             tryCompare(player, "revealProgress", 1, 1500)
+            compare(player.presentationActive, true)
+            verify(findChild(player, "artworkLoader").item !== null)
         }
         function openDrawer() {
             player.showTrackList = true
@@ -39,6 +43,7 @@ Item {
             verify(!findChild(player, "libraryToggle").enabled)
             if (!player.reducedMotion) {
                 verify(player.waitingForDrawerClose)
+                verify(player.presentationActive)
                 wait(80)
                 verify(drawer.height > 0 && drawer.height < player.drawerNaturalHeight)
                 compare(player.revealProgress, 1)

@@ -162,7 +162,7 @@ ShellRoot {
             var acts4 = []
             acts4.push({key:"pick-file", label: pendingFilePath
                 ? pendingFilePath.split("/").pop()
-                : "Pick file with Yazi", primary:true})
+                : "Pick a file", primary:true})
             if (pendingFilePath !== "") {
                 acts4.push({key:"clear-file", label: "Cancel selection"})
             }
@@ -715,7 +715,7 @@ ShellRoot {
     property string qshareRunId:     "idle"
     readonly property string qshareScriptPath: xdgConfigHome + "/quickshell/scripts/qshare.py"
     readonly property string networkScriptPath: xdgConfigHome + "/quickshell/scripts/network_ctl.py"
-    readonly property string yaziScriptPath: xdgConfigHome + "/quickshell/scripts/launch_yazi_picker.py"
+    readonly property string filePickerScriptPath: xdgConfigHome + "/quickshell/scripts/launch_file_picker.py"
     readonly property string qshareEventFile: runtimeDir + "/qshare-events-" + qshareRunId
     readonly property string qshareQrFile: runtimeDir + "/qshare-qr-" + qshareRunId + ".png"
 
@@ -726,42 +726,26 @@ ShellRoot {
         "/tmp"
     ]
 
-    // Process that launches Yazi to pick a file.
+    // Open a graphical picker to choose a file.
     Process {
-        id: yaziProc
+        id: filePickerProc
         running: false
-        command: ["python3", root.yaziScriptPath]
-        // Yazi writes the result to the private runtime directory.
+        command: ["python3", root.filePickerScriptPath]
+        // The graphical picker exits after writing the selected path.
         onExited: (exitCode, exitStatus) => {
-            if (exitCode === 0) {
-                yaziCheckTimer.count = 0
-                yaziCheckTimer.running = true
-            }
-        }
-    }
-    // Timer that checks for the file selected by Yazi.
-    Timer {
-        id: yaziCheckTimer
-        interval: 500
-        repeat: true
-        property int count: 0
-        onTriggered: {
-            count += 1
-            yaziReadProc.running = true
-            if (count >= 60) { running = false; count = 0 }   // 30s max
+            if (exitCode === 0) filePickerReadProc.running = true
         }
     }
     Process {
-        id: yaziReadProc
-        command: ["python3", root.yaziScriptPath, "--read-choice"]
+        id: filePickerReadProc
+        command: ["python3", root.filePickerScriptPath, "--read-choice"]
         running: false
         stdout: StdioCollector {
             onStreamFinished: {
-                var path = this.text.trim()
-                if (path && path !== root.pendingFilePath) {
+                // Remove the helper's final newline, preserving filename spaces.
+                var path = this.text.replace(/\n$/, "")
+                if (path) {
                     root.pendingFilePath = path
-                    yaziCheckTimer.running = false
-                    yaziCheckTimer.count = 0
                     // Reopen the Control Center on left.send with the selected file.
                     if (!root.open) {
                         root.open = true
@@ -1113,14 +1097,9 @@ ShellRoot {
         // ── Quickshare Send (qshare.py) ──
         else if (slotKey === "left" && subKey === "send") {
             if (actionKey === "pick-file") {
-                // Launch the floating terminal with Yazi.
-                // 1) Wait ~350ms for the Control Center to release exclusive focus
-                //    (the close animation lasts 290ms).
-                // 2) Launch Yazi in the background.
-                // 3) Force focus with hyprctl if Hyprland did not assign it
-                //    automatically (a race condition is possible).
-                yaziProc.running = true
-                // Close the Control Center so the Yazi window can receive focus.
+                // The picker waits for the close animation to release focus.
+                filePickerProc.running = true
+                // Close the Control Center so the picker can receive focus.
                 close()
                 return
             } else if (actionKey === "clear-file") {

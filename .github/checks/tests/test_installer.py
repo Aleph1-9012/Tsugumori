@@ -158,6 +158,51 @@ class InstallerLuaMigrationTests(unittest.TestCase):
         )
         self.assertTrue(git_args[-1].startswith(str(self.root / "Tsugumori-install-")))
 
+    def test_package_install_uses_nautilus_without_removed_apps(self) -> None:
+        package_log = self.root / "installed-packages"
+        self.write_executable("pacman", "#!/bin/sh\nexit 1\n")
+        self.write_executable(
+            "sudo",
+            '#!/bin/sh\nprintf \'%s\\n\' "$@" >"$PACKAGE_LOG"\n',
+        )
+        result = self.run_installer_shell(
+            """
+            mkdir -p "$CLONE_DIR/packages"
+            cp "$PACKAGE_MANIFEST" "$CLONE_DIR/packages/pacman.txt"
+            install_packages
+            """,
+            extra_env={
+                "PATH": f"{self.fake_bin}{os.pathsep}{self.env['PATH']}",
+                "PACKAGE_LOG": str(package_log),
+                "PACKAGE_MANIFEST": str(REPO_ROOT / "packages/pacman.txt"),
+            },
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = package_log.read_text().splitlines()
+        self.assertEqual(args[:4], ["pacman", "-S", "--needed", "--noconfirm"])
+        packages = set(args[4:])
+        self.assertTrue({"nautilus", "gtk3", "python-gobject"} <= packages)
+        removed = {
+            "1password", "1password-beta", "aether", "alacritty", "brave-bin",
+            "xournalpp", "yazi", "vivaldi", "vivaldi-ffmpeg-codecs",
+            "signal-desktop", "kdeconnect",
+        }
+        self.assertFalse(packages & removed)
+
+    @unittest.skipUnless(shutil.which("xdg-mime"), "xdg-mime is not installed")
+    def test_default_file_manager_keeps_other_mime_associations(self) -> None:
+        associations = self.config_home / "mimeapps.list"
+        associations.write_text(
+            "[Default Applications]\n"
+            "inode/directory=yazi.desktop\n"
+            "text/plain=editor.desktop\n"
+        )
+        result = self.run_installer_shell("configure_file_manager")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        settings = associations.read_text()
+        self.assertIn("inode/directory=org.gnome.Nautilus.desktop", settings)
+        self.assertIn("text/plain=editor.desktop", settings)
+
     def test_lua_and_legacy_overrides_are_both_preserved(self) -> None:
         result = self.run_installer_shell("printf '%s\n' \"${PRESERVED_FILES[@]}\"")
 

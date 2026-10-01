@@ -17,9 +17,12 @@ ffmpeg
 
 # ─── Terminal ──────────────────────────────────────────
 kitty
-yazi
 fastfetch
 btop
+
+# ─── File manager + graphical file picker ───────────────
+nautilus
+gtk3
 
 # ─── Audio ─────────────────────────────────────────────
 pipewire
@@ -61,6 +64,7 @@ noto-fonts-emoji
 # ─── Python dependencies for Quickshare and clipboard ─
 python-pillow
 python-qrcode
+python-gobject
 
 cloudflared
 

@@ -27,6 +27,12 @@ and animated footer buttons. IBM Plex Mono is bundled for the menu and Waybar.
 Share Tech Mono remains bundled as an optional font. Font licenses stay beside
 their respective font files.
 
+The menu reads application entries on first open and pauses its clock while
+closed. User desktop entries override system entries, including hidden apps.
+Kitty windows share a process. The player limits artwork decoding, releases its
+artwork component after closing, and scans local music when the track drawer
+opens. These changes reduce background work without changing the layout.
+
 The B2 Control Center uses separate components, summary cards, remembered
 submenus, queued slider writes, and less background polling. Per-monitor
 brightness is software dimming. It does not change a panel's backlight or save
@@ -68,6 +74,11 @@ Waybar Pomodoro scripts are removed from the installed config. Their previous
 versions are recoverable from Git history.
 
 ## Upgrades
+
+The package list installs Nautilus and a GTK file picker instead of Yazi.
+Re-running the installer keeps the Files button and Quickshare on these
+defaults. It does not create web-app shortcuts or replace launcher overrides
+in `~/.local/share/applications/`.
 
 The installer preserves the user's `hypr/user.lua` and Quickshell
 `Settings.qml`. On an existing installation, review the latter if the curtain
