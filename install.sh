@@ -28,6 +28,7 @@ readonly PRESERVED_FILES=(
 PINNED_MODE=false
 VM_GL_TWEAKS=false          # Mesa llvmpipe + software libgl for Quickshell/Kitty (VirtualBox and similar).
 BOOT_WALLPAPER_VM=false     # Lua start callback applies the first wallpaper in VM mode
+INSTALL_FISHRC=false        # Install Tsugumori Fish config (opt-in via --fish)
 
 [[ "${TSUGUMORI_VM:-}" == "1" || "${TSUGUMORI_VM:-}" == "yes" ]] && VM_GL_TWEAKS=true
 
@@ -36,6 +37,7 @@ for arg in "$@"; do
         --pinned) PINNED_MODE=true ;;
         --latest) PINNED_MODE=false ;;
         --vm)     VM_GL_TWEAKS=true ;;
+        --fish)   INSTALL_FISHRC=true ;;
         --help|-h)
             cat <<EOF
 Usage: install.sh [options]
@@ -45,6 +47,8 @@ Usage: install.sh [options]
              Requires packages/pinned-pacman.txt.
   --vm       VirtualBox / weak GPU: configure Quickshell + Kitty to use software OpenGL
              (llvmpipe), optional boot wallpaper. Or set env TSUGUMORI_VM=1.
+  --fish     Install Tsugumori Fish config (aliases, PATH).
+             Does not change your login shell. Fish is installed if missing.
 
   Also: TSUGUMORI_VM=1 same effect as --vm for non-interactive installs.
 EOF
@@ -131,6 +135,7 @@ collect_choices() {
     BACKUP_OLD=true;          ask_yn "Backup existing configs to $BACKUP_DIR?" y || BACKUP_OLD=false
     INSTALL_WALLPAPERS=true;  ask_yn "Install default wallpapers to ~/Pictures/wallpapers?" y || INSTALL_WALLPAPERS=false
     INSTALL_BASHRC=true;      ask_yn "Install Tsugumori .bashrc (welcome banner + Tsugumori prompt)?" y || INSTALL_BASHRC=false
+    INSTALL_FISHRC=false;      ask_yn "Install Tsugumori Fish config (aliases, PATH)?" n || INSTALL_FISHRC=true
     INSTALL_NAUTILUS_THEME=true
     ask_yn "Install the Nautilus and file-dialog theme (builds a small GTK module)?" y || INSTALL_NAUTILUS_THEME=false
     ENABLE_SERVICES=true;     ask_yn "Enable system services (NetworkManager, pipewire)?" y || ENABLE_SERVICES=false
@@ -949,6 +954,66 @@ OVR
     ok "Bashrc installed."
 }
 
+# ─── Fish config (opt-in) ──────────────────────────────────────────
+deploy_fish_config() {
+    $INSTALL_FISHRC || { warn "Skipping Fish config installation."; return; }
+
+    local fish_src="$CLONE_DIR/config/fish/config.fish"
+    local fish_dir="$HOME/.config/fish"
+    local fish_dest="$fish_dir/config.fish"
+
+    [[ -f "$fish_src" ]] || { warn "No bundled Fish config found in repo."; return; }
+
+    # Install fish if missing
+    if ! command -v fish >/dev/null 2>&1; then
+        if $PINNED_MODE; then
+            warn "Pinned mode: install fish manually from the Arch Archive."
+        else
+            log "Installing fish package…"
+            sudo pacman -S --needed --noconfirm fish
+        fi
+    fi
+
+    # Inspect the entry itself, including dangling links, without following it.
+    if [[ -e "$fish_dest" && ! -f "$fish_dest" && ! -L "$fish_dest" ]]; then
+        fatal "Refusing to replace unexpected Fish config destination: $fish_dest"
+    fi
+    if [[ -L "$fish_dest" || -f "$fish_dest" ]]; then
+        if $BACKUP_OLD; then
+            mkdir -p "$BACKUP_DIR"
+            [[ ! -e "$BACKUP_DIR/config.fish" && ! -L "$BACKUP_DIR/config.fish" ]] \
+                || fatal "A Fish config backup already exists: $BACKUP_DIR/config.fish"
+            cp -a -- "$fish_dest" "$BACKUP_DIR/config.fish"
+            log "Backed up existing ~/.config/fish/config.fish"
+        fi
+    fi
+
+    log "Installing Tsugumori Fish config…"
+    mkdir -p "$fish_dir"
+    local fish_stage
+    fish_stage=$(mktemp "$fish_dir/config.fish.XXXXXX")
+    if ! install -m 644 -- "$fish_src" "$fish_stage" \
+        || ! mv -fT -- "$fish_stage" "$fish_dest"; then
+        rm -f -- "$fish_stage"
+        fatal "Could not replace Fish config: $fish_dest"
+    fi
+
+    # Create empty user override if missing
+    if [[ ! -f "$fish_dir/config.fish.local" ]]; then
+        cat > "$fish_dir/config.fish.local" <<'OVR'
+# Tsugumori Fish user overrides — never touched by updates.
+# Put your personal aliases, functions, exports here.
+#
+# Examples:
+#   alias ll='ls -la'
+#   set -gx EDITOR nano
+OVR
+        ok "Created empty ~/.config/fish/config.fish.local for your personal overrides."
+    fi
+
+    ok "Fish config installed. Set Fish as your shell with: chsh -s /usr/bin/fish"
+}
+
 # ─── Wallpapers & Pictures dir ─────────────────────────────────────
 setup_user_dirs() {
     mkdir -p "$HOME/Pictures/wallpapers" "$HOME/Screenshots"
@@ -1008,7 +1073,11 @@ finalize() {
     fi
     echo "    2. Customise via ~/.config/hypr/user.lua — keep personal changes out of hyprland.lua."
     echo "    3. Bashrc personal overrides go in ~/.bashrc.local"
-    echo "    4. Wallpapers go in ~/Pictures/wallpapers/ (use SUPER+P to pick one)."
+    if $INSTALL_FISHRC; then
+        echo "    4. Fish personal overrides go in ~/.config/fish/config.fish.local"
+        echo "       Set Fish as your shell with: chsh -s /usr/bin/fish"
+    fi
+    echo "    5. Wallpapers go in ~/Pictures/wallpapers/ (use SUPER+P to pick one)."
     if $LEGACY_USER_CONF_ACTIVE; then
         echo
         echo "  ${C_BOLD}Legacy Hyprland override reminder:${C_RESET}"
@@ -1049,6 +1118,7 @@ main() {
     install_lock_background
     warn_legacy_pam
     deploy_shell_config
+    deploy_fish_config
     setup_user_dirs
     configure_file_manager
     deploy_qshare_symlink
