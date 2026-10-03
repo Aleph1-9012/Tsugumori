@@ -50,10 +50,11 @@ versions. This is separate from the August clean-install VM record above.
 | Lua | 5.5.1-1 |
 | ShellCheck | 0.11.0 |
 
-The strict repository validation passed all 104 Python tests, Bash/Fish/Lua
-syntax checks, ShellCheck, Hyprland configuration verification, and QML
-lint/import checks across 31 files. The offscreen Qt suites reported 47 passes
-and one shader-render skip because the software backend cannot run that test.
+The initial strict validation of commit `8babbb8` passed 104 Python tests,
+Bash/Fish/Lua syntax checks, ShellCheck, Hyprland configuration verification,
+and QML lint/import checks across 31 files. The standalone Qt suites passed
+33 behavior cases and skipped one shader-render case because the software
+backend cannot run it. Their reported 47 passes also included 14 setup and cleanup entries.
 Shader source compilation and bundled shader checks passed separately.
 
 New regressions cover installer recovery and destination conflicts, optional
@@ -62,6 +63,12 @@ escaped Wi-Fi names, MPRIS position ownership, lock-launch contention, PATH
 preservation, Kitty options, and Quickshare listener/token routing.
 Installation tests used temporary homes and fault-injection fixtures. This pass
 did not redeploy the desktop or repeat the August clean-install VM exercise.
+
+The follow-up test cleanup removed three brittle UI/source-text tests and one
+Qt case that only rechecked its own fixture. It also trimmed historical
+assertions and focused the upload-page and wallpaper-command checks on token
+wiring and literal arguments. The suite now contains 101 Python test methods and 33 standalone Qt
+cases. Qt case counts exclude setup and cleanup entries.
 
 ## How to install pinned versions
 

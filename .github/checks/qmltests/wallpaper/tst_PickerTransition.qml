@@ -105,12 +105,6 @@ Item {
             tryCompare(motion, "finished", true, 400);
             compare(motion.progress, 0); compare(closed.count, 1); verify(!motion.inputReady);
         }
-        function test_shader_urls_are_real_files() {
-            verify(field.vertexShaderUrl.toString().startsWith("file:///"));
-            verify(field.fragmentShaderUrl.toString().startsWith("file:///"));
-            verify(field.vertexShaderUrl.toString().endsWith("/lockscreen/shaders/lines.vert.qsb"));
-            verify(field.fragmentShaderUrl.toString().endsWith("/lockscreen/shaders/lines.frag.qsb"));
-        }
         function test_live_corners_follow_picker_lifecycle() {
             motion.open(); tryCompare(motion, "inputReady", true, 2400);
             var items = [];

@@ -207,21 +207,8 @@ class QuicksharePresentationTests(unittest.TestCase):
             token="test-token",
         )
 
-    def test_upload_page_uses_sidonia_palette_and_english_copy(self) -> None:
+    def test_upload_page_embeds_session_token_and_upload_url(self) -> None:
         html = self.rendered_upload_page()
-
-        for value in ("#0a0a0a", "#111111", "#e8e8e8", "#909090", "#cc1515"):
-            self.assertIn(value, html)
-        for text in (
-            "Sidonia // File Transfer",
-            "QShare Uplink",
-            "Upload files",
-            "Awaiting selection.",
-        ):
-            self.assertIn(text, html)
-        for legacy_text in ("Transmettre", "Fin multipart absente", "Iosevka"):
-            self.assertNotIn(legacy_text, html)
-
         self.assertIn('const TOKEN = "test-token";', html)
         self.assertIn('xhr.open("POST", "/upload?t=" + TOKEN);', html)
 

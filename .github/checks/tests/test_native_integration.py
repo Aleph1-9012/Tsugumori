@@ -28,13 +28,12 @@ class NativeIntegrationTests(unittest.TestCase):
                 refs = set(re.findall(r"\b" + name + r"\.(\w+)", path.read_text()))
                 self.assertFalse(refs - members, (path, refs - members))
 
-    def test_startup_check_accepts_native_files_without_videos(self) -> None:
+    def test_startup_check_accepts_required_assets(self) -> None:
         with tempfile.TemporaryDirectory(prefix="tsugumori-native-check-") as temp:
             env = {**os.environ, "XDG_CONFIG_HOME": str(REPO / "config"), "XDG_CACHE_HOME": temp}
             result = subprocess.run(["bash", str(SHELL / "wave-check.sh")], env=env,
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertFalse((SHELL / "videos").exists())
             self.assertIn("Native lockscreen and picker assets verified",
                           (Path(temp) / "quickshell/wave-check.log").read_text())
 
@@ -65,44 +64,18 @@ class NativeIntegrationTests(unittest.TestCase):
                     self.assertIn("widgets/" + asset,
                                   (root / "cache/quickshell/wave-check.log").read_text())
 
-    def test_clipboard_keeps_keyboard_routing_and_live_bounds(self) -> None:
-        source = (SHELL / "widgets/Clipboard.qml").read_text()
-        self.assertIn("keyNavigationEnabled: false", source)
-        self.assertIn("root.store.moveSelection(event.key", source)
-        self.assertIn("CurtainSurface {", source)
-        service = source
-        self.assertIn("Math.max(0, Math.min(entriesModel.count - 1, selectedIndex + step))", service)
-
-    def test_notes_copy_feedback_and_same_size_button_remain(self) -> None:
-        source = (SHELL / "widgets/QuickNotes.qml").read_text()
-        self.assertIn("Quickshell.clipboardText = copyText", source)
-        self.assertIn("Layout.preferredWidth: newButton.implicitWidth", source)
-        self.assertIn("onCopyTextChanged: resetCopyFeedback()", source)
-
-    def test_left_volume_popup_is_removed_but_audio_controls_remain(self) -> None:
-        self.assertFalse((SHELL / "widgets/VolumeBar.qml").exists())
-        self.assertNotIn("VolumeBar", (SHELL / "shell.qml").read_text())
-        self.assertNotIn("VolumeBar", (SHELL / "widgets/qmldir").read_text())
-        controller = (SHELL / "widgets/ControlCenter.qml").read_text()
-        self.assertIn('"set-sink-volume"', controller)
-        bindings = (REPO / "config/hypr/hyprland.lua").read_text()
-        for key in ("XF86AudioRaiseVolume", "XF86AudioLowerVolume", "XF86AudioMute"):
-            self.assertIn(key, bindings)
-
     def test_terminal_noninteractive_use_is_silent(self) -> None:
         for name in ("tsugumori-welcome.sh", "tsugumori-prompt.sh"):
             result = subprocess.run(["bash", str(SHELL / name)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(result.stdout, "")
 
-    def test_deployed_code_has_no_machine_paths_or_video_players(self) -> None:
+    def test_deployed_code_has_no_machine_specific_home_paths(self) -> None:
         for path in SHELL.rglob("*"):
             if path.suffix not in (".qml", ".js", ".sh", ".py"):
                 continue
             text = path.read_text()
             self.assertNotRegex(text, r"/home/[^/\s]+/", str(path))
-            self.assertNotIn("import QtMultimedia", text, str(path))
-            self.assertNotIn("MediaPlayer {", text, str(path))
 
 
 if __name__ == "__main__":

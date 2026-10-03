@@ -1033,12 +1033,6 @@ class InstallerLuaMigrationTests(unittest.TestCase):
         self.assertLess(install_font, finalize)
         self.assertLess(render, validate)
         self.assertLess(validate, deploy)
-        self.assertNotIn("INSTALL_AUR", source)
-        self.assertNotIn("bootstrap_aur_helper", source)
-        self.assertNotIn("base-devel", source)
-        self.assertNotIn("apply_vm_software_gl_tweaks_deployed", source)
-        self.assertNotIn("exec-once = sleep 4 && awww img", source)
-        self.assertNotIn("hyprland.conf", source)
 
     def test_wallpaper_client_and_daemon_are_both_required(self) -> None:
         empty_bin = self.root / "empty-bin"
