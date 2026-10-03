@@ -19,7 +19,7 @@ jobs:
       - name: Install target-platform validation tools
         run: >-
           pacman -Syu --noconfirm --needed
-          git hyprland lua mpv python python-pillow python-qrcode quickshell qt6-declarative
+          fish git hyprland kitty lua mpv python python-gobject python-pillow python-qrcode quickshell qt6-declarative
           qt6-shadertools ripgrep shellcheck xdg-utils
 
       - name: Check out repository

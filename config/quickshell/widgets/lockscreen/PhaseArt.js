@@ -67,13 +67,13 @@ function drawField(c, cells, p, dpr) {
         var key = node.key, depth = node.depth;
         var q = ramp(p, .09 + hash(key, depth, 5) * .14, .65 + depth * .10);
         var shift = (1 - q) * (hash(key, depth, 6) - .5) * .34;
-        var shape = [[[-.36,-.39],[-.36,.33],[-.12,.33]],
+        var polygon = [[[-.36,-.39],[-.36,.33],[-.12,.33]],
             [[-.36,-.12],[.32,-.12],[.32,.11]], [[.02+shift,-.40],[.02+shift,.35]],
             [[-.12,.12],[.35,.12],[.35,.40]], [[.22,-.40],[.40,-.40],[.40,-.24]]];
         var cos = Math.cos(node.angle), sin = Math.sin(node.angle), red = hash(key, depth, 81) > .968;
-        for (var i = 0; i < shape.length; i++) {
+        for (var i = 0; i < polygon.length; i++) {
             var local = ramp(p, .02 + hash(key, i, 13) * .20, .40 + hash(key, i, 13) * .26);
-            var points = shape[i].map(function(pt) { return [cx + (pt[0]*cos - pt[1]*sin)*size, cy + (pt[0]*sin + pt[1]*cos)*size]; });
+            var points = polygon[i].map(function(pt) { return [cx + (pt[0]*cos - pt[1]*sin)*size, cy + (pt[0]*sin + pt[1]*cos)*size]; });
             stroke(c, points, red ? '#b71d22' : '#7c796e', 1, alpha * (red ? .82 : .47), local, dpr);
         }
     }
@@ -103,14 +103,14 @@ function glyphMarks(p) {
         if (alpha < .004) return;
         var a = Math.floor(hash(key,depth,27)*4)*Math.PI/2, cos = Math.cos(a), sin = Math.sin(a);
         var bend = (hash(key,depth,17)-.5)*.26, local = Math.sin(p*.24+key)*.075;
-        var shape = [[[-.35,-.4],[-.35,.34],[-.14,.34]], [[-.35,-.13],[.31,-.13],[.31,.12]],
+        var polygon = [[[-.35,-.4],[-.35,.34],[-.14,.34]], [[-.35,-.13],[.31,-.13],[.31,.12]],
             [[.02+bend,-.39],[.02+bend,.34]], [[-.12,.12+local],[.35,.12+local],[.35,.39]],
             [[-.4,-.39],[-.2,-.39]], [[.22,-.4],[.4,-.4],[.4,-.25]]];
         // Increased red coverage only. Keep the approved K geometry and timing.
         var tint = smooth((p*.075+.23-hash(key,depth,61))/.2);
         var color = 'rgb('+Math.round(lerp(104,209,tint))+','+Math.round(lerp(102,22,tint))+','+Math.round(lerp(94,28,tint))+')';
-        for (var i = 0; i < shape.length; i++) {
-            var points = shape[i].map(function(pt) { return [cx+(pt[0]*cos-pt[1]*sin)*size, cy+(pt[0]*sin+pt[1]*cos)*size]; });
+        for (var i = 0; i < polygon.length; i++) {
+            var points = polygon[i].map(function(pt) { return [cx+(pt[0]*cos-pt[1]*sin)*size, cy+(pt[0]*sin+pt[1]*cos)*size]; });
             marks.push({points:points,c:color,w:Math.max(.75,size*.031),alpha:alpha});
         }
     }

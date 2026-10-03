@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fcntl
 import os
 from pathlib import Path
 import shutil
@@ -284,6 +285,49 @@ class SupervisedLockLauncherTests(unittest.TestCase):
         first_stdout, first_stderr = first.communicate(timeout=8)
         self.assertEqual(first.returncode, 0, first_stdout + first_stderr)
         self.assertFalse(self.hyprlock_log.exists())
+        self.assert_handshake_cleaned()
+
+    def test_transitional_duplicate_waits_for_guard_then_launches(self) -> None:
+        real_flock = shutil.which("flock")
+        self.assertIsNotNone(real_flock)
+        attempts = self.root / "guard-attempts"
+        self.write_executable(
+            "flock",
+            """
+            #!/usr/bin/env bash
+            "$FAKE_REAL_FLOCK" "$@"
+            status=$?
+            if [[ "$status" -eq 75 ]]; then
+                printf 'busy\n' >>"$FAKE_GUARD_ATTEMPTS"
+            fi
+            exit "$status"
+            """,
+        )
+        env = self.launcher_env("secure-release")
+        env["FAKE_REAL_FLOCK"] = real_flock
+        env["FAKE_GUARD_ATTEMPTS"] = str(attempts)
+        private = self.runtime_dir / "tsugumori"
+        private.mkdir(mode=0o700)
+        with (private / "quickshell-lock-wayland-test.lock").open("w") as guard:
+            fcntl.flock(guard, fcntl.LOCK_EX)
+            process = subprocess.Popen(
+                [str(LAUNCHER)], env=env, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+            self.processes.append(process)
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if attempts.exists() and len(attempts.read_text().splitlines()) >= 2:
+                    break
+                time.sleep(0.01)
+            else:
+                self.fail("launcher did not retry the occupied guard")
+            fcntl.flock(guard, fcntl.LOCK_UN)
+
+        stdout, stderr = process.communicate(timeout=8)
+        self.assertEqual(process.returncode, 0, stdout + stderr)
+        self.assertFalse(self.hyprlock_log.exists(), stderr)
+        self.assertEqual(len(self.qs_log.read_text().splitlines()), 1)
         self.assert_handshake_cleaned()
 
     def test_qml_commits_release_authorization_before_hide_animation(self) -> None:

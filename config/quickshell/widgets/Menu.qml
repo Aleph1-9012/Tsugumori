@@ -79,20 +79,18 @@ Item {
         running: false
         stdout: StdioCollector {
             onStreamFinished: {
-                var lines = this.text.trim().split("\n")
+                var entries
+                try {
+                    entries = JSON.parse(this.text)
+                } catch (error) {
+                    return
+                }
+
                 var result = []
-                for (var i = 0; i < lines.length; i++) {
-                    var line = lines[i].trim()
-                    if (!line) continue
-                    var parts = line.split("|")
-                    if (parts.length < 2) continue
-                    var name      = parts[0].trim()
-                    var desktopId = parts[1].trim()
-                    var cats      = parts[2] || ""
-                    var rawExec   = parts.slice(3).join("|").replace(/%[A-Za-z]/g,"").trim()
-                    if (!name || !desktopId) continue
-                    // Use the raw exec when available; otherwise use the desktop ID.
-                    var launchCmd = rawExec || desktopId
+                for (var i = 0; i < entries.length; i++) {
+                    var entry = entries[i]
+                    var name = entry.name
+                    var cats = entry.categories
 
                     var cat = "other"
                     if (/Development|IDE|TextEditor|Debugger/i.test(cats))          cat = "dev"
@@ -125,9 +123,8 @@ Item {
                         id:        String(i+1).padStart(2,"0"),
                         name:      name,
                         cat:       cat,
-                        meta:      desktopId,
-                        desktopId: launchCmd,
-                        cmd:       launchCmd,
+                        meta:      entry.desktopId,
+                        desktopFile: entry.desktopFile,
                         icon:      ico
                     })
                 }
@@ -137,18 +134,14 @@ Item {
         }
     }
 
-    // One Process — use sh -c for the complete command.
     Process {
         id: launchProc
-        property string pending: ""
-        command: ["sh", "-c", pending]
         running: false
     }
 
-    function launchApp(cmd) {
-        if (!cmd) return
-        // nohup plus redirection avoids EPIPE for Electron apps (Discord, etc.).
-        launchProc.pending = "nohup " + cmd + " > /dev/null 2>&1 &"
+    function launchApp(desktopFile) {
+        if (!desktopFile) return
+        launchProc.command = ["python3", Quickshell.shellPath("scripts/launch_desktop.py"), desktopFile]
         launchProc.running = true
         root.closeMenu()
     }
@@ -156,7 +149,7 @@ Item {
     // Launch a direct command (footer).
     function launch(cmd) {
         if (!cmd || cmd === "") return
-        launchProc.pending = "nohup " + cmd + " > /dev/null 2>&1 &"
+        launchProc.command = ["sh", "-c", "nohup " + cmd + " > /dev/null 2>&1 &"]
         launchProc.running = true
         root.closeMenu()
     }
@@ -493,7 +486,7 @@ Item {
                                         }
                                         Keys.onReturnPressed: {
                                             var a=root.filteredApps[root.focusIdx]
-                                            if(a) root.launchApp(a.desktopId)
+                                            if(a) root.launchApp(a.desktopFile)
                                         }
 
                                         Text {
@@ -658,7 +651,7 @@ Item {
                                 MouseArea {
                                     id:appMA; anchors.fill:parent; hoverEnabled:true
                                     onEntered: root.focusIdx=index
-                                    onClicked: root.launchApp(modelData.desktopId)
+                                    onClicked: root.launchApp(modelData.desktopFile)
                                 }
                             }
 
@@ -794,7 +787,7 @@ Item {
         currentCat  = "all"
         // Sync TextInput text with the empty property.
         searchInput.text = ""
-        if (!appsLoaded) desktopReader.running = true
+        if (!desktopReader.running) desktopReader.running = true
         wipeHide.stop()
         wipeReveal.start()
     }

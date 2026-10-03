@@ -27,11 +27,18 @@ and animated footer buttons. IBM Plex Mono is bundled for the menu and Waybar.
 Share Tech Mono remains bundled as an optional font. Font licenses stay beside
 their respective font files.
 
-The menu reads application entries on first open and pauses its clock while
-closed. User desktop entries override system entries, including hidden apps.
+The menu refreshes application entries each time it opens and pauses its clock
+while closed. User desktop entries override system entries, including hidden apps.
+GIO reads and launches desktop files, including their working directory,
+activation settings, and quoted arguments. Terminal applications open in
+Kitty through a private launcher adapter.
+
 Kitty windows share a process. The player limits artwork decoding, releases its
 artwork component after closing, and scans local music when the track drawer
 opens. These changes reduce background work without changing the layout.
+Media state, MPRIS integration, and local mpv playback live in
+`config/quickshell/services/PlayerService.qml`; `shell.qml` owns the windows
+and visibility controls. This separation keeps the existing player visuals.
 
 The B2 Control Center uses separate components, summary cards, remembered
 submenus, queued slider writes, and less background polling. Per-monitor
@@ -44,6 +51,11 @@ keys. There is no separate left-edge volume popup or hover area.
 Quickshare uses a charcoal, light, and red glyph-style QR image. Tests check
 module centres and protected QR regions. These checks do not replace scanning
 the displayed result with a phone.
+Tunnel mode binds its local HTTP server to loopback, while LAN mode listens
+on the network interfaces. Both modes use a random 256-bit bearer token.
+Downloads require the generated token-and-filename URL path; putting a token
+in another path or query does not authorize a download. The shared URL remains
+usable by anyone who has it while the transfer session is active.
 
 ## Native lock and wallpaper picker
 
@@ -84,3 +96,7 @@ The installer preserves the user's `hypr/user.lua` and Quickshell
 `Settings.qml`. On an existing installation, review the latter if the curtain
 is still white: the new default is `curtainColor: "#cc1515"`. Do not replace
 personal monitor or scaling settings just to update the colour.
+
+Optional Fish support installs only its managed `fish/conf.d/tsugumori.fish`
+fragment under the selected config directory. Existing `fish/config.fish`
+and `fish/config.fish.local` remain untouched, and the login shell is unchanged.

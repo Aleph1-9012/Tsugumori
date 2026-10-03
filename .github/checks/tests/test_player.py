@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -74,9 +75,109 @@ class PlayerTests(unittest.TestCase):
         self.assertEqual(bridge.wait_for("track-ended")["reason"], "stop")
 
     @unittest.skipUnless(Path(QML_TEST_RUNNER).is_file(), "qmltestrunner is not installed")
+    def test_only_selected_player_can_release_position_guard(self) -> None:
+        source = (SHELL / "services/PlayerService.qml").read_text()
+        names = (
+            "syncExternalState", "updateExternalPosition", "metadataString",
+            "mediaKeyForPlayer", "mediaKeyRank", "visibleMetadataConflicts",
+            "coverUrlForPlayer", "normalizedCoverUrl", "youtubeVideoId",
+        )
+        methods = []
+        for name in names:
+            match = re.search(r"^    function " + name + r"\(.*?^    }$", source,
+                              flags=re.MULTILINE | re.DOTALL)
+            self.assertIsNotNone(match, name)
+            methods.append(match[0])
+        handler = re.search(r"function onPositionChanged\(\) {[^\n]+}", source)
+        self.assertIsNotNone(handler)
+        qml = '''import QtQuick
+import QtTest
+TestCase {
+    id: root
+    name: "ExternalPosition"
+    property var externalPlayer: null
+    property bool localMode: false
+    property double localPreferenceUntil: 0
+    property string externalMediaKey: ""
+    property bool externalPositionAwaitingFresh: false
+    property int mediaRevision: 0
+    property string mpTitle: ""
+    property string mpArtist: ""
+    property string mpAlbum: ""
+    property int mpTrackNumber: 0
+    property string mpCoverUrl: ""
+    property bool mpPlaying: false
+    property real mpPosition: 0
+    property real mpLength: 0
+
+    QtObject {
+        id: selectedPlayer
+        property bool canControl: true
+        property bool isPlaying: true
+        property string trackTitle: "New track"
+        property string trackArtist: "Artist"
+        property string trackAlbum: "Album"
+        property string trackArtUrl: ""
+        property var metadata: ({"mpris:trackid": "new"})
+        property bool positionSupported: true
+        property bool lengthSupported: true
+        property real length: 180
+        property real position: 93
+    }
+
+    QtObject {
+        id: otherPlayer
+        property real position: 20
+    }
+
+    Connections {
+        target: selectedPlayer
+        readonly property var modelData: selectedPlayer
+        __HANDLER__
+    }
+
+    Connections {
+        target: otherPlayer
+        readonly property var modelData: otherPlayer
+        __HANDLER__
+    }
+
+    __FUNCTIONS__
+
+    function test_unrelated_position_keeps_track_transition_guard() {
+        externalPlayer = selectedPlayer
+        externalMediaKey = "track:old"
+        mpTitle = "Old track"
+        mpPosition = 93
+        syncExternalState()
+        compare(mpTitle, "New track")
+        compare(mpPosition, 0)
+        verify(externalPositionAwaitingFresh)
+
+        otherPlayer.position = 21
+        compare(mpPosition, 0)
+        verify(externalPositionAwaitingFresh)
+
+        selectedPlayer.position = 0
+        compare(mpPosition, 0)
+        verify(!externalPositionAwaitingFresh)
+
+        selectedPlayer.position = 4
+        compare(mpPosition, 4)
+    }
+}'''.replace("__FUNCTIONS__", "\n".join(methods)).replace("__HANDLER__", handler[0])
+        test_file = self.path / "tst_ExternalPosition.qml"
+        test_file.write_text(qml)
+        result = subprocess.run([QML_TEST_RUNNER, "-input", str(test_file)],
+                                env={**os.environ, "QT_QPA_PLATFORM": "offscreen",
+                                     "QT_QUICK_BACKEND": "software"},
+                                capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(Path(QML_TEST_RUNNER).is_file(), "qmltestrunner is not installed")
     def test_shell_auto_next_policy(self) -> None:
         # Use the actual shell methods without starting desktop services.
-        source = (SHELL / "shell.qml").read_text()
+        source = (SHELL / "services/PlayerService.qml").read_text()
 
         def function(name: str) -> str:
             body = source.split("    function " + name + "(", 1)[1]

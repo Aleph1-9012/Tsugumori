@@ -5,7 +5,12 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-import re
+import json
+
+import gi
+
+gi.require_version("GioUnix", "2.0")
+from gi.repository import GioUnix
 
 
 def application_dirs() -> list[Path]:
@@ -14,26 +19,9 @@ def application_dirs() -> list[Path]:
     return [Path(base) / "applications" for base in [user, *system.split(":")] if base]
 
 
-def desktop_entry(path: Path) -> dict[str, str]:
-    fields: dict[str, str] = {}
-    in_entry = False
-    try:
-        with path.open(encoding="utf-8", errors="replace") as stream:
-            for raw in stream:
-                line = raw.strip()
-                if line.startswith("["):
-                    in_entry = line == "[Desktop Entry]"
-                elif in_entry and not line.startswith("#") and "=" in line:
-                    key, value = line.split("=", 1)
-                    fields.setdefault(key, value)
-    except OSError:
-        pass
-    return fields
-
-
-def list_apps(directories: list[Path]) -> list[str]:
+def list_apps(directories: list[Path]) -> list[dict[str, str]]:
     seen: set[str] = set()
-    rows: list[str] = []
+    rows: list[dict[str, str]] = []
     for directory in directories:
         for path in sorted(directory.rglob("*.desktop")):
             desktop_id = "-".join(path.relative_to(directory).parts)
@@ -41,22 +29,20 @@ def list_apps(directories: list[Path]) -> list[str]:
                 continue
             # A hidden user override must also suppress the system entry.
             seen.add(desktop_id)
-            fields = desktop_entry(path)
-            if fields.get("Hidden") == "true" or fields.get("NoDisplay") == "true":
+            try:
+                app = GioUnix.DesktopAppInfo.new_from_filename(str(path.absolute()))
+            except TypeError:
+                # PyGObject reports GIO's rejected entry as a NULL constructor.
                 continue
-            if fields.get("Type", "Application") != "Application":
+            if app is None or app.get_is_hidden() or not app.should_show():
                 continue
-            name, command = fields.get("Name", ""), fields.get("Exec", "")
-            if not name or not command:
+            if not app.get_executable() and not app.get_boolean("DBusActivatable"):
                 continue
-            command = re.sub(r" %[A-Za-z]", "", command)
-            values = (name, desktop_id.removesuffix(".desktop"), fields.get("Categories", ""))
-            # Keep the launcher's existing one-line, pipe-delimited protocol.
-            # Exec is the final field and can itself contain shell pipelines.
-            rows.append("|".join(value.replace("|", " ") for value in values) + "|" + command)
-    return sorted(set(rows))
+
+            rows.append({"name": app.get_name(), "desktopId": desktop_id.removesuffix(".desktop"),
+                         "categories": app.get_categories() or "", "desktopFile": str(path.absolute())})
+    return sorted(rows, key=lambda row: (row["name"], row["desktopId"]))
 
 
 if __name__ == "__main__":
-    for row in list_apps(application_dirs()):
-        print(row)
+    print(json.dumps(list_apps(application_dirs()), ensure_ascii=True))

@@ -814,6 +814,209 @@ class InstallerLuaMigrationTests(unittest.TestCase):
         self.assertEqual(lines, [])
         self.assertIn("0.55.2 or newer", result.stderr)
 
+    def make_deployment_fixture(self) -> Path:
+        fixture = self.root / "fixture"
+        files = {
+            "hypr/hyprland.lua": "new-managed-config\n",
+            "hypr/user.lua": "bundled-user\n",
+            "quickshell/settings/Settings.qml": "bundled-settings\n",
+            "waybar/config": "new-bar\n",
+            "kitty/kitty.conf": "new-kitty\n",
+        }
+        for rel, contents in files.items():
+            target = fixture / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(contents)
+        for rel in ("hypr/user.lua", "hypr/user.conf", "quickshell/settings/Settings.qml"):
+            target = self.config_home / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("keep-" + rel + "\n")
+        (self.config_home / "hypr/hyprland.lua").write_text("old-managed-config\n")
+        return fixture
+
+    def test_failed_deployment_restores_preserved_files_without_backups(self) -> None:
+        fixture = self.make_deployment_fixture()
+        result = self.run_installer_shell(
+            """
+            mkdir -p "$CLONE_DIR"
+            cp -r "$FIXTURE" "$CLONE_DIR/config"
+            cp() {
+                if [[ "$1" == "-r" && "$2" == "$CLONE_DIR/config/waybar" ]]; then
+                    printf '%s' "$PRESERVED_STASH" >"$STASH_LOG"
+                    return 73
+                fi
+                command cp "$@"
+            }
+            BACKUP_OLD=false
+            deploy_configs
+            """,
+            extra_env={"FIXTURE": str(fixture), "STASH_LOG": str(self.root / "stash-path")},
+        )
+        self.assertEqual(result.returncode, 73, result.stderr)
+        self.assertEqual((self.config_home / "hypr/hyprland.lua").read_text(), "new-managed-config\n")
+        for rel in ("hypr/user.lua", "hypr/user.conf", "quickshell/settings/Settings.qml"):
+            self.assertEqual((self.config_home / rel).read_text(), "keep-" + rel + "\n")
+        self.assertFalse(Path((self.root / "stash-path").read_text()).exists())
+        self.assertFalse(list(self.home.glob(".config-backup-*")))
+
+    def test_failed_recovery_retains_all_preserved_copies(self) -> None:
+        fixture = self.make_deployment_fixture()
+        result = self.run_installer_shell(
+            """
+            mkdir -p "$CLONE_DIR"
+            cp -r "$FIXTURE" "$CLONE_DIR/config"
+            cp() {
+                if [[ "$1" == "-r" && "$2" == "$CLONE_DIR/config/waybar" ]]; then
+                    printf '%s' "$PRESERVED_STASH" >"$STASH_LOG"
+                    return 73
+                fi
+                command cp "$@"
+            }
+            mv() {
+                if [[ "${*: -1}" == "$CONFIG_HOME/hypr/user.lua" ]]; then
+                    return 74
+                fi
+                command mv "$@"
+            }
+            BACKUP_OLD=false
+            deploy_configs
+            """,
+            extra_env={"FIXTURE": str(fixture), "STASH_LOG": str(self.root / "stash-path")},
+        )
+        self.assertEqual(result.returncode, 73, result.stderr)
+        stash = Path((self.root / "stash-path").read_text())
+        self.assertIn(str(stash), result.stdout)
+        for rel in ("hypr/user.lua", "hypr/user.conf", "quickshell/settings/Settings.qml"):
+            self.assertEqual((stash / rel).read_text(), "keep-" + rel + "\n")
+
+    def test_dangling_managed_destination_fails_before_replacing_configs(self) -> None:
+        fixture = self.make_deployment_fixture()
+        (self.config_home / "kitty").symlink_to(self.root / "missing-kitty")
+        result = self.run_installer_shell(
+            """
+            mkdir -p "$CLONE_DIR"
+            cp -r "$FIXTURE" "$CLONE_DIR/config"
+            BACKUP_OLD=false
+            deploy_configs
+            """,
+            extra_env={"FIXTURE": str(fixture)},
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("dangling symlink", result.stderr)
+        self.assertEqual((self.config_home / "hypr/hyprland.lua").read_text(), "old-managed-config\n")
+        self.assertEqual((self.config_home / "hypr/user.lua").read_text(), "keep-hypr/user.lua\n")
+
+    def test_qshare_keeps_or_backs_up_foreign_commands(self) -> None:
+        script = self.config_home / "quickshell/scripts/qshare.py"
+        script.parent.mkdir(parents=True)
+        script.write_text("# bundled qshare\n")
+        for backup in (False, True):
+            for symlink in (False, True):
+                with self.subTest(backup=backup, symlink=symlink):
+                    home = self.root / f"qshare-{backup}-{symlink}"
+                    command = home / ".local/bin/qshare"
+                    command.parent.mkdir(parents=True)
+                    if symlink:
+                        target = home / "personal-qshare"
+                        target.write_text("personal command\n")
+                        command.symlink_to("../../personal-qshare")
+                    else:
+                        command.write_text("personal command\n")
+                    result = self.run_installer_shell(
+                        """
+                        BACKUP_OLD="$BACKUP_CHOICE"
+                        deploy_qshare_symlink
+                        printf 'backup=%s\n' "$BACKUP_DIR/bin/qshare"
+                        """,
+                        extra_env={"HOME": str(home), "BACKUP_CHOICE": str(backup).lower()},
+                    )
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    saved = Path(result.stdout.split("backup=", 1)[1].strip())
+                    if backup:
+                        self.assertEqual(os.readlink(command), str(script))
+                        if symlink:
+                            self.assertTrue(saved.is_symlink())
+                            self.assertEqual(os.readlink(saved), "../../personal-qshare")
+                            self.assertEqual(target.read_text(), "personal command\n")
+                        else:
+                            self.assertEqual(saved.read_text(), "personal command\n")
+                    else:
+                        self.assertEqual(command.read_text(), "personal command\n")
+                        self.assertEqual(command.is_symlink(), symlink)
+                        self.assertFalse(saved.exists())
+
+    def test_fish_fragment_preserves_existing_config_and_uses_xdg_home(self) -> None:
+        fish_dir = self.config_home / "fish"
+        fish_dir.mkdir()
+        personal = self.root / "personal.fish"
+        personal.write_text("set -gx PERSONAL_SETTING keep\n")
+        (fish_dir / "config.fish").symlink_to(personal)
+        override = fish_dir / "config.fish.local"
+        override.write_text("set -gx PERSONAL_OVERRIDE keep\n")
+        self.write_executable("fish", "#!/bin/sh\nexit 0\n")
+        result = self.run_installer_shell(
+            """
+            mkdir -p "$CLONE_DIR/config/fish/conf.d"
+            cp "$FISH_FRAGMENT" "$CLONE_DIR/config/fish/conf.d/tsugumori.fish"
+            INSTALL_FISHRC=true
+            BACKUP_OLD=false
+            deploy_fish_config
+            """,
+            extra_env={
+                "PATH": f"{self.fake_bin}{os.pathsep}{self.env['PATH']}",
+                "FISH_FRAGMENT": str(REPO_ROOT / "config/fish/conf.d/tsugumori.fish"),
+            },
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((fish_dir / "config.fish").is_symlink())
+        self.assertEqual(personal.read_text(), "set -gx PERSONAL_SETTING keep\n")
+        self.assertEqual(override.read_text(), "set -gx PERSONAL_OVERRIDE keep\n")
+        self.assertTrue((fish_dir / "conf.d/tsugumori.fish").is_file())
+        self.assertFalse((self.home / ".config/fish").exists())
+
+    @unittest.skipUnless(shutil.which("fish"), "Fish is not installed")
+    def test_fish_fragment_loads_xdg_override_and_allows_personal_config(self) -> None:
+        fish_dir = self.config_home / "fish"
+        (fish_dir / "conf.d").mkdir(parents=True)
+        shutil.copyfile(REPO_ROOT / "config/fish/conf.d/tsugumori.fish", fish_dir / "conf.d/tsugumori.fish")
+        (fish_dir / "config.fish.local").write_text("set -gx TSUGUMORI_TEST_OVERRIDE loaded\n")
+        (fish_dir / "config.fish").write_text("function ls; printf 'personal-ls\\n'; end\n")
+        env = {**self.env, "TERM": "xterm-256color"}
+        result = subprocess.run(
+            [shutil.which("fish"), "-i", "-c", "printf '%s\\n' $TSUGUMORI_TEST_OVERRIDE; ls"],
+            env=env, text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "loaded\npersonal-ls\n")
+        result = subprocess.run(
+            [shutil.which("fish"), "-c", "printf command-ran"],
+            env=env, text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "command-ran")
+
+    def test_pinned_missing_manifest_fails_before_package_changes(self) -> None:
+        self.write_executable("git", "#!/bin/sh\nexit 0\n")
+        self.write_executable("sudo", '#!/bin/sh\nprintf called >"$PACKAGE_LOG"\n')
+        result = self.run_installer_shell(
+            """
+            clone_repo() {
+                mkdir -p "$CLONE_DIR/packages"
+                printf 'hyprland\n' >"$CLONE_DIR/packages/pacman.txt"
+            }
+            PINNED_MODE=true
+            prepare_repository
+            install_packages
+            """,
+            extra_env={
+                "PATH": f"{self.fake_bin}{os.pathsep}{self.env['PATH']}",
+                "PACKAGE_LOG": str(self.root / "packages-called"),
+            },
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("pinned-pacman.txt", result.stderr)
+        self.assertFalse((self.root / "packages-called").exists())
+
     def test_main_prepares_options_before_validation_and_deployment(self) -> None:
         source = INSTALLER.read_text(encoding="utf-8")
         main_body = source.split("main() {", 1)[1].split("\n}", 1)[0]
@@ -824,6 +1027,7 @@ class InstallerLuaMigrationTests(unittest.TestCase):
         validate = main_body.index("validate_hyprland_config")
         deploy = main_body.index("deploy_configs")
         finalize = main_body.index("finalize")
+        self.assertLess(main_body.index("prepare_repository"), main_body.index("install_packages"))
         self.assertLess(validate_font, deploy)
         self.assertLess(deploy, install_font)
         self.assertLess(install_font, finalize)

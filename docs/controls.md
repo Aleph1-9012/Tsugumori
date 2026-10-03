@@ -2,23 +2,69 @@
 
 ## Desktop shortcuts
 
+These are the defaults in
+[`config/hypr/hyprland.lua`](../config/hypr/hyprland.lua). Personal bindings in
+`hypr/user.lua` can override them. `SUPER` is normally the Windows key.
+
+### Panels and applications
+
 | Shortcut | Action |
 |---|---|
-| `SUPER` | Open the application menu |
-| `SUPER + Tab` | Open the Control Center |
+| Left `SUPER`, on release | Toggle the application menu |
+| `SUPER + Tab` | Toggle the Control Center |
 | `SUPER + N` | Open or close quick notes on the focused monitor |
 | `SUPER + C` | Open or close clipboard history on the focused monitor |
 | `SUPER + L` | Lock the session |
 | `SUPER + T` | Open Kitty |
 | `SUPER + Return` | Show or hide the player |
+| `SUPER + SHIFT + Return` | Move the player above or below application windows |
+| `SUPER + M` | Launch Spotify, or toggle its special workspace when already running |
 | `SUPER + R` | Restart only the desktop shell |
 | `SUPER + P` | Open the wallpaper picker |
+
+The Spotify shortcut requires Spotify to be installed separately.
+
+### Windows and session
+
+| Shortcut | Action |
+|---|---|
 | `SUPER + Q` | Close the active window |
 | `SUPER + F` | Toggle fullscreen |
-| `ALT + Tab` | Cycle through windows |
-| `ALT + 1`, `2`, `3`... | Switch workspace |
-| `Print` | Take a screenshot |
-| `ALT + SHIFT + S` | Select an area for a screenshot |
+| `SUPER + D` | Toggle maximized mode |
+| `SUPER + V` | Toggle floating mode |
+| `SUPER + W` | Use the master layout |
+| `SUPER + SHIFT + W` | Use the dwindle layout |
+| `SUPER + Escape` | Exit Hyprland immediately, without confirmation |
+| `ALT + Tab` | Cycle to the next window |
+| `ALT + SHIFT + Tab` | Cycle to the previous window |
+| `SUPER + Left`, `Right`, `Up`, `Down` | Focus the window in that direction |
+| `SUPER + SHIFT + Left`, `Right`, `Up`, `Down` | Move the active window in that direction |
+| `SUPER + left-button drag` | Move the active window with the mouse |
+| `SUPER + right-button drag` | Resize the active window with the mouse |
+
+### Workspaces
+
+| Shortcut | Action |
+|---|---|
+| `ALT + 1` through `9`, or `0` | Switch to workspace 1 through 9, or 10 |
+| `SUPER + SHIFT + 1` through `9`, or `0` | Move the active window to workspace 1 through 9, or 10 |
+| `SUPER + mouse wheel down` | Switch to the next workspace |
+| `SUPER + mouse wheel up` | Switch to the previous workspace |
+| `SUPER + S` | Toggle the `magic` special workspace |
+| `SUPER + SHIFT + S` | Move the active window to the `magic` special workspace |
+
+### Hardware keys and screenshots
+
+| Shortcut | Action |
+|---|---|
+| Volume up / down | Change the default audio output volume by 5% |
+| Mute | Toggle mute on the default audio output |
+| Brightness up / down | Change hardware backlight brightness by 5% |
+| `ALT + SHIFT + S` | Select a screenshot region using Hyprshot |
+| `Print` | Select a region using grim and slurp; save a timestamped PNG in `~/Screenshots` |
+
+Hardware brightness keys use `brightnessctl`. The Control Center's
+per-monitor brightness uses software dimming instead.
 
 ## Control Center
 

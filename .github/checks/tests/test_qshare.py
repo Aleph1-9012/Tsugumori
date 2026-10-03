@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
 import io
@@ -507,6 +508,49 @@ class QuickshareSendTests(unittest.TestCase):
             b"Host: qshare.test\r\nConnection: " + connection + b"\r\n\r\n"
         )
 
+    def test_only_the_generated_download_route_serves_the_file(self) -> None:
+        for target in (
+            "/other?token=/test-token/",
+            "/prefix/test-token/payload.bin",
+            "/test-token/another-file.bin",
+            "/test-token/payload.bin?extra=1",
+            "/wrong-token/payload.bin",
+        ):
+            with self.subTest(target=target):
+                handler = self.handler()
+                request = (
+                    f"GET {target} HTTP/1.1\r\n"
+                    "Host: qshare.test\r\nConnection: close\r\n\r\n"
+                ).encode("ascii")
+
+                response, _ = run_handler(handler, request)
+
+                self.assertEqual(response_status(response), 404)
+                self.assertFalse(handler.done_event.is_set())
+
+    def test_encoded_download_filenames_still_work(self) -> None:
+        for filename in ("report with spaces.txt", "100%?#雪.txt"):
+            with self.subTest(filename=filename):
+                handler = self.handler()
+                handler.file_name = filename
+                encoded_name = qshare.quote(filename)
+                request = (
+                    f"GET /test-token/{encoded_name} HTTP/1.1\r\n"
+                    "Host: qshare.test\r\nConnection: close\r\n\r\n"
+                ).encode("ascii")
+
+                with redirect_stdout(io.StringIO()):
+                    response, _ = run_handler(handler, request)
+                status, headers, body = parse_response(response)
+
+                self.assertEqual(status, 200)
+                self.assertEqual(body, self.payload.read_bytes())
+                self.assertEqual(
+                    headers["content-disposition"],
+                    f'attachment; filename="{encoded_name}"',
+                )
+                self.assertTrue(handler.done_event.is_set())
+
     def test_partial_headers_hit_absolute_deadline_without_completing(self) -> None:
         events = RecordingEvents()
         handler = self.handler(
@@ -775,6 +819,63 @@ class QuickshareCloudflareTests(unittest.TestCase):
 
 
 class QuickshareServerTests(unittest.TestCase):
+    def test_share_commands_choose_listener_and_generate_256_bit_tokens(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="tsugumori-qshare-bind-") as temporary:
+            root = Path(temporary)
+            payload = root / "payload.txt"
+            payload.write_text("example", encoding="utf-8")
+            for command, handler in (
+                (qshare.cmd_send, qshare.SendHandler),
+                (qshare.cmd_recv, qshare.RecvHandler),
+            ):
+                for tunnel in (False, True):
+                    for occupied_port in (False, True):
+                        with self.subTest(command=command.__name__, tunnel=tunnel,
+                                          occupied_port=occupied_port):
+                            args = types.SimpleNamespace(
+                                paths=[str(payload)], output=str(root / "received"),
+                                tunnel=tunnel, port=0, iface=None, keep_alive=True,
+                                event_file=None, qr_out=None,
+                                transfer_timeout=qshare.DEFAULT_TRANSFER_TIMEOUT,
+                                max_upload_bytes=qshare.DEFAULT_MAX_UPLOAD_BYTES,
+                                max_session_bytes=qshare.DEFAULT_MAX_SESSION_BYTES,
+                                max_files_per_request=qshare.DEFAULT_MAX_FILES_PER_REQUEST,
+                                max_files_per_session=qshare.DEFAULT_MAX_FILES_PER_SESSION,
+                                upload_timeout=qshare.DEFAULT_UPLOAD_TIMEOUT,
+                            )
+                            server = mock.Mock()
+                            tunnel_process = mock.Mock()
+                            results = [OSError("port occupied"), server] if occupied_port else [server]
+                            with (
+                                mock.patch.object(qshare, "BoundedThreadingHTTPServer",
+                                                  side_effect=results) as create_server,
+                                mock.patch.object(qshare, "_free_port", side_effect=[42000, 42001]),
+                                mock.patch.object(qshare, "start_cloudflared",
+                                                  return_value=(tunnel_process, "https://example.invalid")) as start_tunnel,
+                                mock.patch.object(qshare, "get_local_ip", return_value="192.0.2.1"),
+                                mock.patch.object(qshare, "_print_banner"),
+                            ):
+                                command(args)
+
+                            host = "127.0.0.1" if tunnel else "0.0.0.0"
+                            ports = [8080 if tunnel else 42000]
+                            if occupied_port:
+                                ports.append(42000 if tunnel else 42001)
+                            self.assertEqual(
+                                create_server.call_args_list,
+                                [mock.call((host, port), handler) for port in ports],
+                            )
+                            server.serve_forever.assert_called_once_with()
+                            if tunnel:
+                                start_tunnel.assert_called_once_with(ports[-1])
+                                tunnel_process.terminate.assert_called_once_with()
+                            else:
+                                start_tunnel.assert_not_called()
+                            raw_token = base64.urlsafe_b64decode(
+                                handler.token + "=" * (-len(handler.token) % 4)
+                            )
+                            self.assertEqual(len(raw_token), 32)
+
     def test_saturation_rejects_without_thread_and_releases_capacity(self) -> None:
         class RecordingServer(qshare.BoundedThreadingHTTPServer):
             def __init__(self):

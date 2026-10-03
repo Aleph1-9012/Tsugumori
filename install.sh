@@ -66,6 +66,7 @@ readonly MANAGED_DIRS=(hypr quickshell waybar kitty fastfetch btop)
 
 # Temp dir used to stash preserved user files during install
 PRESERVED_STASH=""
+PRESERVED_RECOVERY_NEEDED=false
 LEGACY_USER_CONF_ACTIVE=false
 
 # ─── Colors & logging ───────────────────────────────────────────────
@@ -97,9 +98,20 @@ ask_yn() {
 }
 
 cleanup() {
+    local status=$?
+    if $PRESERVED_RECOVERY_NEEDED; then
+        if restore_preserved_files; then
+            PRESERVED_RECOVERY_NEEDED=false
+            warn "Restored preserved user files after the interrupted deployment."
+        else
+            warn "Could not restore every user file. Recovery copies remain in $PRESERVED_STASH."
+        fi
+    fi
     [[ -d "$CLONE_DIR" ]] && rm -rf "$CLONE_DIR"
-    [[ -n "$PRESERVED_STASH" && -d "$PRESERVED_STASH" ]] && rm -rf "$PRESERVED_STASH"
-    return 0
+    if ! $PRESERVED_RECOVERY_NEEDED && [[ -n "$PRESERVED_STASH" && -d "$PRESERVED_STASH" ]]; then
+        rm -rf "$PRESERVED_STASH"
+    fi
+    return "$status"
 }
 trap cleanup EXIT
 
@@ -204,6 +216,20 @@ install_base() {
 clone_repo() {
     log "Cloning Tsugumori ($REPO_BRANCH)…"
     git clone --depth=1 --branch "$REPO_BRANCH" "$REPO_URL" "$CLONE_DIR"
+}
+
+prepare_repository() {
+    if ! command -v git >/dev/null 2>&1; then
+        $PINNED_MODE && fatal "git is required to inspect a pinned checkout before any package changes. Install git first."
+        install_base
+    fi
+    clone_repo
+    require_manifest "$CLONE_DIR/packages/pacman.txt"
+    if $PINNED_MODE; then
+        require_manifest "$CLONE_DIR/packages/pinned-pacman.txt"
+        validate_pinned_manifest "$CLONE_DIR/packages/pacman.txt" \
+            "$CLONE_DIR/packages/pinned-pacman.txt" "Pacman"
+    fi
 }
 
 # ─── Packages ───────────────────────────────────────────────────────
@@ -637,29 +663,51 @@ stash_preserved_files() {
 # Restore preserved files (overwrites whatever the repo copy put in their place).
 restore_preserved_files() {
     [[ -z "$PRESERVED_STASH" || ! -d "$PRESERVED_STASH" ]] && return 0
-    local rel
+    local rel staged
     for rel in "${PRESERVED_FILES[@]}"; do
         local stash="$PRESERVED_STASH/$rel"
         local dest="$CONFIG_HOME/$rel"
-        # A stashed relative symlink can be dangling until it returns to its
-        # original directory, so recognize the link object with -L. Remove the
-        # freshly installed template first to avoid destination-dependent cp
-        # behavior and then restore the preserved entry verbatim.
+        # Restore atomically, retaining the stash if a disk or permission error
+        # prevents recovery. Relative links keep their original text and parent.
         if [[ -L "$stash" || -f "$stash" ]]; then
-            mkdir -p "$(dirname "$dest")"
-            rm -f -- "$dest"
-            cp -a -- "$stash" "$dest"
+            mkdir -p "$(dirname "$dest")" || return 1
+            staged=$(mktemp "$(dirname "$dest")/.tsugumori-restore.XXXXXX") || return 1
+            if ! rm -f -- "$staged" || ! cp -a -- "$stash" "$staged" \
+                || ! mv -fT -- "$staged" "$dest"; then
+                rm -f -- "$staged"
+                return 1
+            fi
             ok "Restored user file: $rel"
         fi
     done
 }
 
 # ─── Deploy configs ─────────────────────────────────────────────────
+validate_deploy_destinations() {
+    local name dest
+    for name in "${MANAGED_DIRS[@]}"; do
+        dest="$CONFIG_HOME/$name"
+        if [[ -L "$dest" && ! -d "$dest" ]] \
+            || [[ -e "$dest" && ! -d "$dest" ]]; then
+            fatal "Managed config destination is not a directory or is a dangling symlink: $dest"
+        fi
+        if $BACKUP_OLD && [[ -e "$BACKUP_DIR/$name" || -L "$BACKUP_DIR/$name" ]]; then
+            fatal "A configuration backup already exists: $BACKUP_DIR/$name"
+        fi
+    done
+    if [[ -f "$CLONE_DIR/config/kitty/btop.conf" \
+        && ! -f "$CLONE_DIR/config/kitty/tsugumori-btop.theme" ]]; then
+        fatal "Missing btop theme: config/kitty/tsugumori-btop.theme"
+    fi
+}
+
 deploy_configs() {
     mkdir -p "$CONFIG_HOME"
+    validate_deploy_destinations
 
     # 1. Stash files that must survive the install.
     stash_preserved_files
+    PRESERVED_RECOVERY_NEEDED=true
 
     # 2. Backup or remove existing managed dirs, then copy fresh from repo.
     for name in "${MANAGED_DIRS[@]}"; do
@@ -672,10 +720,6 @@ deploy_configs() {
             btop)      src="$CLONE_DIR/config/kitty/btop.conf" ;;
         esac
         [[ -e "$src" ]] || { warn "Skipping $name (not in repo)."; continue; }
-        if [[ "$name" == "btop" && ! -f "$CLONE_DIR/config/kitty/tsugumori-btop.theme" ]]; then
-            fatal "Missing btop theme: config/kitty/tsugumori-btop.theme"
-        fi
-
         if [[ -e "$dest" ]]; then
             if $BACKUP_OLD; then
                 mkdir -p "$BACKUP_DIR"
@@ -700,6 +744,7 @@ deploy_configs() {
 
     # 3. Restore preserved user files (overwrites any template the repo provided).
     restore_preserved_files
+    PRESERVED_RECOVERY_NEEDED=false
 
     # 4. Make all .sh / .py executable.
     log "Setting executable bits on scripts…"
@@ -962,11 +1007,25 @@ OVR
 deploy_fish_config() {
     $INSTALL_FISHRC || { warn "Skipping Fish config installation."; return; }
 
-    local fish_src="$CLONE_DIR/config/fish/config.fish"
-    local fish_dir="$HOME/.config/fish"
-    local fish_dest="$fish_dir/config.fish"
+    local fish_src="$CLONE_DIR/config/fish/conf.d/tsugumori.fish"
+    local fish_dir="$CONFIG_HOME/fish"
+    local fish_dest="$fish_dir/conf.d/tsugumori.fish"
 
     [[ -f "$fish_src" ]] || { warn "No bundled Fish config found in repo."; return; }
+
+    # config.fish belongs to the user. Only replace our marked conf.d fragment.
+    if [[ -L "$fish_dir" || -L "$fish_dir/conf.d" ]] \
+        || [[ -e "$fish_dir" && ! -d "$fish_dir" ]] \
+        || [[ -e "$fish_dir/conf.d" && ! -d "$fish_dir/conf.d" ]]; then
+        fatal "Manage this Fish configuration directory manually: $fish_dir/conf.d"
+    fi
+    if [[ -L "$fish_dest" ]] || [[ -e "$fish_dest" && ! -f "$fish_dest" ]]; then
+        fatal "Refusing to replace a custom Fish fragment destination: $fish_dest"
+    fi
+    if [[ -f "$fish_dest" ]] \
+        && [[ "$(head -n 1 "$fish_dest")" != '# Managed by the Tsugumori installer.' ]]; then
+        fatal "Refusing to replace an unowned Fish fragment: $fish_dest"
+    fi
 
     # Install fish if missing
     if ! command -v fish >/dev/null 2>&1; then
@@ -978,24 +1037,21 @@ deploy_fish_config() {
         fi
     fi
 
-    # Inspect the entry itself, including dangling links, without following it.
-    if [[ -e "$fish_dest" && ! -f "$fish_dest" && ! -L "$fish_dest" ]]; then
-        fatal "Refusing to replace unexpected Fish config destination: $fish_dest"
-    fi
-    if [[ -L "$fish_dest" || -f "$fish_dest" ]]; then
+    if [[ -f "$fish_dest" ]]; then
         if $BACKUP_OLD; then
-            mkdir -p "$BACKUP_DIR"
-            [[ ! -e "$BACKUP_DIR/config.fish" && ! -L "$BACKUP_DIR/config.fish" ]] \
-                || fatal "A Fish config backup already exists: $BACKUP_DIR/config.fish"
-            cp -a -- "$fish_dest" "$BACKUP_DIR/config.fish"
-            log "Backed up existing ~/.config/fish/config.fish"
+            local fish_backup="$BACKUP_DIR/fish/conf.d/tsugumori.fish"
+            mkdir -p "$(dirname "$fish_backup")"
+            [[ ! -e "$fish_backup" && ! -L "$fish_backup" ]] \
+                || fatal "A Fish fragment backup already exists: $fish_backup"
+            cp -a -- "$fish_dest" "$fish_backup"
+            log "Backed up the previous Tsugumori Fish fragment."
         fi
     fi
 
-    log "Installing Tsugumori Fish config…"
-    mkdir -p "$fish_dir"
+    log "Installing Tsugumori Fish fragment…"
+    mkdir -p "$fish_dir/conf.d"
     local fish_stage
-    fish_stage=$(mktemp "$fish_dir/config.fish.XXXXXX")
+    fish_stage=$(mktemp "$fish_dir/conf.d/.tsugumori.fish.XXXXXX")
     if ! install -m 644 -- "$fish_src" "$fish_stage" \
         || ! mv -fT -- "$fish_stage" "$fish_dest"; then
         rm -f -- "$fish_stage"
@@ -1003,7 +1059,7 @@ deploy_fish_config() {
     fi
 
     # Create empty user override if missing
-    if [[ ! -f "$fish_dir/config.fish.local" ]]; then
+    if [[ ! -e "$fish_dir/config.fish.local" && ! -L "$fish_dir/config.fish.local" ]]; then
         cat > "$fish_dir/config.fish.local" <<'OVR'
 # Tsugumori Fish user overrides — never touched by updates.
 # Put your personal aliases, functions, exports here.
@@ -1012,7 +1068,7 @@ deploy_fish_config() {
 #   alias ll='ls -la'
 #   set -gx EDITOR nano
 OVR
-        ok "Created empty ~/.config/fish/config.fish.local for your personal overrides."
+        ok "Created $fish_dir/config.fish.local for personal overrides."
     fi
 
     ok "Fish config installed. Set Fish as your shell with: chsh -s /usr/bin/fish"
@@ -1049,10 +1105,29 @@ deploy_qshare_symlink() {
     fi
 
     mkdir -p "$HOME/.local/bin"
-    if [[ -L "$link" || -e "$link" ]]; then
-        rm -f "$link"
+    if [[ -L "$link" && "$(readlink -- "$link")" == "$script" ]]; then
+        ok "The qshare CLI already points to Tsugumori."
+        return
     fi
-    ln -s "$script" "$link"
+    if [[ -L "$link" || -e "$link" ]]; then
+        if [[ ! -L "$link" && ! -f "$link" ]] || ! $BACKUP_OLD; then
+            warn "Keeping existing $link; the Tsugumori CLI symlink was not installed."
+            return
+        fi
+        local saved="$BACKUP_DIR/bin/qshare"
+        [[ ! -e "$saved" && ! -L "$saved" ]] \
+            || fatal "A qshare backup already exists: $saved"
+        mkdir -p "$(dirname "$saved")"
+        cp -a -- "$link" "$saved"
+        ok "Backed up the existing qshare command: $saved"
+    fi
+    local staged
+    staged=$(mktemp "$HOME/.local/bin/.qshare.XXXXXX")
+    if ! rm -f -- "$staged" || ! ln -s "$script" "$staged" \
+        || ! mv -fT -- "$staged" "$link"; then
+        rm -f -- "$staged"
+        fatal "Could not install the qshare CLI symlink: $link"
+    fi
     ok "Symlinked qshare CLI: $link → $script"
 
     # Check that ~/.local/bin is in PATH
@@ -1078,7 +1153,7 @@ finalize() {
     echo "    2. Customise via ~/.config/hypr/user.lua — keep personal changes out of hyprland.lua."
     echo "    3. Bashrc personal overrides go in ~/.bashrc.local"
     if $INSTALL_FISHRC; then
-        echo "    4. Fish personal overrides go in ~/.config/fish/config.fish.local"
+        echo "    4. Fish personal overrides go in $CONFIG_HOME/fish/config.fish.local"
         echo "       Set Fish as your shell with: chsh -s /usr/bin/fish"
     fi
     echo "    5. Wallpapers go in ~/Pictures/wallpapers/ (use SUPER+P to pick one)."
@@ -1107,8 +1182,7 @@ main() {
     preflight
     collect_choices
     inspect_legacy_user_config
-    install_base
-    clone_repo
+    prepare_repository
     install_packages
     validate_font_assets
     validate_wallpaper_runtime

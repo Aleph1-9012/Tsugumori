@@ -29,7 +29,15 @@ hl.monitor({
     scale = 1,
 })
 
-hl.env("PATH", "/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin")
+local session_path = os.getenv("PATH")
+if not session_path or session_path == "" then
+    session_path = "/usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin"
+end
+local local_bin = home .. "/.local/bin"
+if not (":" .. session_path .. ":"):find(":" .. local_bin .. ":", 1, true) then
+    session_path = local_bin .. ":" .. session_path
+end
+hl.env("PATH", session_path)
 hl.env("XCURSOR_SIZE", "24")
 hl.env("QT_QPA_PLATFORM", "wayland")
 hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")

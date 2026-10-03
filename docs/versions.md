@@ -1,7 +1,7 @@
 # Tested versions
 
-This config was last tested with the following versions of its main
-dependencies on 2026-08-15. The tested set is a record, not a promise that
+The following versions were tested together on 2026-08-15.
+The tested set is a historical record, not a promise that
 the current Arch repositories still provide these versions.
 
 ## Main components
@@ -32,11 +32,45 @@ with the native Lua parser and a Quickshell 0.3 development build. The VM run wa
 headless validation of installation, configuration, and integration behavior;
 it did not replace an interactive GPU/PAM acceptance test on physical hardware.
 
+## Validation on 2026-10-03
+
+The October fixes were checked on an existing Arch installation with these
+versions. This is separate from the August clean-install VM record above.
+
+| Component | Version |
+|---|---|
+| Hyprland | 0.56.2-2 |
+| Quickshell | quickshell-git 0.3.0.r20.g28771c7-3 |
+| Kitty | 0.48.2-1 |
+| Fish | 4.9.2-1 |
+| Qt Declarative | 6.11.2-1 |
+| Python | 3.14.7-1 |
+| PyGObject | 3.56.3-1 |
+| mpv | 0.41.0-6 |
+| Lua | 5.5.1-1 |
+| ShellCheck | 0.11.0 |
+
+The strict repository validation passed all 104 Python tests, Bash/Fish/Lua
+syntax checks, ShellCheck, Hyprland configuration verification, and QML
+lint/import checks across 31 files. The offscreen Qt suites reported 47 passes
+and one shader-render skip because the software backend cannot run that test.
+Shader source compilation and bundled shader checks passed separately.
+
+New regressions cover installer recovery and destination conflicts, optional
+Fish preservation, pinned-mode ordering, desktop launches and catalog refresh,
+escaped Wi-Fi names, MPRIS position ownership, lock-launch contention, PATH
+preservation, Kitty options, and Quickshare listener/token routing.
+Installation tests used temporary homes and fault-injection fixtures. This pass
+did not redeploy the desktop or repeat the August clean-install VM exercise.
+
 ## How to install pinned versions
 
 Pinned manifests are not currently committed to this branch, so `--pinned`
-intentionally exits with a clear error instead of silently installing latest
-packages. Once reviewed manifests are published, the command will be:
+intentionally exits with a clear error before package installation or config
+deployment. The installer checks the cloned manifest before invoking Pacman.
+Git must already be installed for this mode; it will not be installed as a
+side effect of a failed pinned request. Once reviewed manifests are published,
+the command will be:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/Aleph1-9012/Tsugumori/main/install.sh) --pinned
@@ -47,6 +81,11 @@ installed Hyprland binary to parse both the bundled configuration and the
 candidate configuration containing preserved `user.lua` overrides before
 deploying it. Tsugumori's default package set uses official repository packages
 only; bundled Share Tech Mono assets replace the former optional font path.
+
+The default `--latest` mode expects a fully updated Arch installation and
+uses its existing package databases. Complete a full system update separately
+before installing or updating the rice. The installer does not run
+`pacman -Syu` or refresh package databases on its own.
 
 ## Manually pinning a single package
 

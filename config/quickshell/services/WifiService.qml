@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "WifiParser.js" as WifiParser
 
 // NetworkManager adapter for the Control Center.  This keeps command execution,
 // polling, and nmcli output parsing out of the presentation component.
@@ -57,41 +58,16 @@ Scope {
 
     Process {
         id: pollWifi
-        command: ["sh", "-c",
+        command: ["env", "LC_ALL=C", "sh", "-c",
             "echo \"$(nmcli radio wifi 2>/dev/null)\"; " +
             "nmcli -t -f IN-USE,SSID,SIGNAL,SECURITY dev wifi 2>/dev/null | head -40"
         ]
         stdout: StdioCollector {
             onStreamFinished: {
-                var lines = this.text.trim().split("\n")
-                service.enabled = (lines[0] || "").trim() === "enabled"
-                var seen = ({})
-                var current = ""
-                for (var i = 1; i < lines.length; i++) {
-                    var parts = lines[i].split(":")
-                    if (parts.length < 4) continue
-                    var inUse = parts[0] === "*"
-                    var ssid = parts[1]
-                    var signal = parseInt(parts[2]) || 0
-                    var security = parts[3] || "Open"
-                    if (!ssid) continue
-                    if (inUse) current = ssid
-                    if (seen[ssid]) {
-                        if (seen[ssid].active) continue
-                        if (seen[ssid].signal >= signal && !inUse) continue
-                    }
-                    seen[ssid] = {ssid: ssid, signal: signal, security: security, active: inUse}
-                }
-
-                var result = []
-                for (var key in seen) result.push(seen[key])
-                result.sort(function(a, b) {
-                    if (a.active && !b.active) return -1
-                    if (!a.active && b.active) return 1
-                    return b.signal - a.signal
-                })
-                service.networks = result
-                service.currentSsid = current
+                const result = WifiParser.parse(this.text)
+                service.enabled = result.enabled
+                service.networks = result.networks
+                service.currentSsid = result.currentSsid
             }
         }
     }

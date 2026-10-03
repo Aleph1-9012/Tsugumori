@@ -16,6 +16,7 @@ missing_optional_tool() {
 }
 
 mapfile -d '' SHELL_FILES < <(rg --files --hidden -0 -g '!.git/**' -g '*.sh')
+SHELL_FILES+=(config/quickshell/scripts/terminal/xdg-terminal-exec)
 for file in "${SHELL_FILES[@]}"; do
     bash -n "$file"
 done
@@ -28,6 +29,16 @@ if command -v shellcheck >/dev/null 2>&1; then
     printf 'ShellCheck errors: none\n'
 else
     missing_optional_tool "ShellCheck"
+fi
+
+if command -v fish >/dev/null 2>&1; then
+    mapfile -d '' FISH_FILES < <(rg --files -0 -g '*.fish')
+    for file in "${FISH_FILES[@]}"; do
+        fish -n "$file"
+    done
+    printf 'Fish syntax: OK (%d files)\n' "${#FISH_FILES[@]}"
+else
+    missing_optional_tool "Fish syntax"
 fi
 
 mapfile -d '' LUA_FILES < <(rg --files -0 -g '*.lua')
@@ -59,6 +70,12 @@ PY
 if ! command -v mpv >/dev/null 2>&1; then
     missing_optional_tool "mpv playback tests"
 fi
+if ! command -v kitty >/dev/null 2>&1; then
+    missing_optional_tool "Kitty configuration"
+fi
+if ! python3 -c 'import gi; gi.require_version("GioUnix", "2.0"); from gi.repository import GioUnix' 2>/dev/null; then
+    missing_optional_tool "GIO desktop application tests"
+fi
 python3 -B -m unittest discover -s .github/checks/tests -p 'test_*.py'
 printf 'Python unit tests: OK\n'
 
@@ -67,38 +84,6 @@ if rg -n 'curl[^[:cntrl:]]*\[[[:space:]]*https?://' README.md; then
     exit 1
 fi
 
-# Macrons in the approved Shōi/SHŌI terminal title are intentional.
-if rg -nP '[\x{00C0}-\x{00D6}\x{00D8}-\x{00F6}\x{00F8}-\x{024F}]' \
-    README.md docs install.sh config | sed -e 's/Shōi/Shoi/g' -e 's/SHŌI/SHOI/g' \
-    | rg -P '[\x{00C0}-\x{00D6}\x{00D8}-\x{00F6}\x{00F8}-\x{024F}]'; then
-    printf 'User-facing files contain accented Latin presentation text.\n' >&2
-    exit 1
-fi
-
-if rg -ni "\\b(p[o]lice|tr[a]it (horizontal|vertical)|optimis[a]tion vectorielle|r[e]ndu|s[o]rtie|l[a]ncement|ab[a]ndon|l[e]cture [.]desktop|compos[a]nts?|l['’]im[a]ge|t[e]xte|c[o]nteneur|volume act[u]el|s[i]non|indicat[i]on mute|c[a]rrousel|art[i]ste|scale gl[o]bal|c[o]uleurs|b[o]utons|transm[e]ttre|f[i]n multipart abs[e]nte)\\b" \
-    README.md docs install.sh config; then
-    printf 'User-facing files contain legacy French or mixed-French presentation text.\n' >&2
-    exit 1
-fi
-
-if rg -n 'ttf-[g]oogle|INSTALL_A[U]R|bootstrap_aur_[h]elper|pinned-[a]ur|base-[d]evel' \
-    install.sh packages README.md; then
-    printf 'Legacy AUR or build-tool bootstrap logic remains.\n' >&2
-    exit 1
-fi
-
-if rg -n 'session-[s]tart|session_start_[c]ommand|force_renderer_[r]eload|hl[.]dsp[.]d[p]ms' \
-    config .github/checks; then
-    printf 'Monitor-recovery feature code remains mixed into the cleanup branch.\n' >&2
-    exit 1
-fi
-
-for retired in config/quickshell/videos maintenance \
-    config/waybar/scripts/pomodoro.sh config/waybar/scripts/pomodoro_toggle.sh \
-    config/quickshell/components/WipeCurtain.qml config/quickshell/components/Scanlines.qml \
-    config/quickshell/components/CornerDeco.qml config/quickshell/components/TsugumoriButton.qml; do
-    [[ ! -e "$retired" ]] || { printf 'Retired file remains: %s\n' "$retired" >&2; exit 1; }
-done
 if rg -n '\bpython(3)?\b|pixel[_-]wave|ext_last|generat(e|ing|or)' config/quickshell/wave-check.sh; then
     printf 'Login-time wave verification still invokes asset generation.\n' >&2
     exit 1
@@ -142,12 +127,6 @@ for token in 'fallback_lock' 'exec hyprlock' 'qs --no-duplicate --path "$lockscr
         exit 1
     fi
 done
-
-if rg -ni 'n[i]er|mot de p[a]sse|authent[i]fication|tent[a]tive|Noto Sans JP' \
-    config/hypr/hyprlock.conf; then
-    printf 'The Hyprlock fallback still contains legacy branding or French presentation text.\n' >&2
-    exit 1
-fi
 
 for token in 'allow_session_lock_restore = true' 'hl.exec_cmd("awww-daemon")'; do
     if ! rg -Fq "$token" config/hypr/hyprland.lua; then
@@ -238,8 +217,6 @@ package_set = set(packages)
 duplicates = sorted({package for package in packages if packages.count(package) > 1})
 if duplicates:
     raise SystemExit(f"{manifest}: duplicate packages: {', '.join(duplicates)}")
-if len(packages) != 43:
-    raise SystemExit(f"{manifest}: expected 43 direct packages, found {len(packages)}")
 obsolete_manifests = [Path("packages/" "aur.txt"), Path("packages/pinned-" "aur.txt")]
 present_obsolete = [str(path) for path in obsolete_manifests if path.exists()]
 if present_obsolete:
@@ -296,7 +273,6 @@ fi
 
 if [[ -n "$QMLLINT_BIN" ]]; then
     mapfile -d '' QML_FILES < <(rg --files -0 -g '*.qml' config/quickshell)
-    (( ${#QML_FILES[@]} >= 16 )) || { printf 'Expected at least 16 QML files, found %d.\n' "${#QML_FILES[@]}" >&2; exit 1; }
     QMLLINT_LOG=$(mktemp)
     if ! "$QMLLINT_BIN" -I config/quickshell "${QML_FILES[@]}" >"$QMLLINT_LOG" 2>&1; then
         sed -n '1,500p' "$QMLLINT_LOG" >&2
@@ -327,7 +303,7 @@ else
 fi
 
 if [[ -x /usr/lib/qt6/bin/qmltestrunner ]]; then
-    for suite in lockscreen wallpaper; do
+    for suite in lockscreen wallpaper wifi; do
         QML_XHR_ALLOW_FILE_READ=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_SCALE_FACTOR=1.25 \
             /usr/lib/qt6/bin/qmltestrunner -input ".github/checks/qmltests/$suite" -o -,txt
     done

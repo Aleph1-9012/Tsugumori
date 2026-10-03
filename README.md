@@ -28,8 +28,10 @@ https://github.com/user-attachments/assets/0f27254b-d3ef-4ce7-a7c8-903179d5269e
 
 ## Install
 
-You need Arch Linux, Hyprland 0.55.2 or newer, a normal user account, and
-`sudo` access.
+You need a fully updated Arch Linux installation, Hyprland 0.55.2 or newer,
+a normal user account, and `sudo` access. Complete your normal full system
+update before running the installer. The installer uses the existing Pacman
+package databases; it does not refresh them or perform a system upgrade.
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/Aleph1-9012/Tsugumori/main/install.sh)
@@ -43,6 +45,22 @@ bash <(curl -fsSL https://raw.githubusercontent.com/Aleph1-9012/Tsugumori/main/i
 
 Tsugumori uses official Arch packages. IBM Plex Mono and Share Tech Mono ship
 with their licenses, so the installer does not need an AUR helper.
+
+Fish support is optional. Select it when asked, or add `--fish` to the install
+command. This installs basic aliases and adds `~/.local/bin` to Fish's PATH
+through [`config/fish/conf.d/tsugumori.fish`](config/fish/conf.d/tsugumori.fish).
+It does not change your login shell or install a Fish prompt.
+
+The Fish fragment goes in `$XDG_CONFIG_HOME/fish/conf.d/tsugumori.fish`, using
+`~/.config` when `XDG_CONFIG_HOME` is unset. Your existing `fish/config.fish`
+and `fish/config.fish.local` remain intact. The fragment reads the latter for
+personal overrides; Fish loads `config.fish` afterward. An unrelated file at
+the fragment's destination is left in place and the installer stops with an
+explanation.
+
+Pinned package manifests are not currently shipped. `--pinned` stops before
+package installation or config deployment when its manifest is missing or
+invalid. See [tested versions](docs/versions.md#how-to-install-pinned-versions).
 
 ## What you get
 
@@ -98,6 +116,7 @@ files.
 | `SUPER + P` | Open the wallpaper picker |
 | `SUPER + R` | Restart the desktop shell |
 | `SUPER + Q` | Close the active window |
+| `SUPER + Escape` | Exit Hyprland immediately, without confirmation |
 | `ALT + Tab` | Cycle through windows |
 | `ALT + SHIFT + S` | Select an area for a screenshot |
 

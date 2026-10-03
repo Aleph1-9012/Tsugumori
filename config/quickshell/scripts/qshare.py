@@ -821,7 +821,7 @@ class SendHandler(BaseHTTPRequestHandler):
         print(f"{ANSI_DIM}[{self.address_string()}] {fmt % args}{ANSI_RESET}")
 
     def do_GET(self):  # noqa: N802
-        if f"/{self.token}/" not in self.path:
+        if self.path != f"/{self.token}/{quote(self.file_name)}":
             self.send_error(404); return
         try:
             with open(self.file_path, "rb", buffering=0) as source:
@@ -1295,13 +1295,14 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
             self.shutdown_request(request)
 
 
-def _start_server_with_port(handler_cls, preferred_port: int):
+def _start_server_with_port(handler_cls, preferred_port: int, *, tunnel: bool = False):
+    host = "127.0.0.1" if tunnel else "0.0.0.0"
     port = preferred_port if preferred_port else _free_port()
     try:
-        return BoundedThreadingHTTPServer(("0.0.0.0", port), handler_cls), port
+        return BoundedThreadingHTTPServer((host, port), handler_cls), port
     except OSError:
         port = _free_port()
-        return BoundedThreadingHTTPServer(("0.0.0.0", port), handler_cls), port
+        return BoundedThreadingHTTPServer((host, port), handler_cls), port
 
 
 def _emit_ready(events: EventLog, url: str, qr_path: Path | None) -> None:
@@ -1314,7 +1315,7 @@ def _emit_ready(events: EventLog, url: str, qr_path: Path | None) -> None:
 def cmd_send(args: argparse.Namespace) -> None:
     paths = [Path(p).expanduser().resolve() for p in args.paths]
     served, name, is_tmp = build_payload(paths)
-    token = secrets.token_urlsafe(8)
+    token = secrets.token_urlsafe(32)
     events = EventLog(args.event_file)
 
     SendHandler.file_path = served
@@ -1326,7 +1327,7 @@ def cmd_send(args: argparse.Namespace) -> None:
     SendHandler.transfer_timeout = args.transfer_timeout
 
     preferred = args.port or (8080 if args.tunnel else 0)
-    server, port = _start_server_with_port(SendHandler, preferred)
+    server, port = _start_server_with_port(SendHandler, preferred, tunnel=args.tunnel)
 
     tunnel_proc = None
     if args.tunnel:
@@ -1366,7 +1367,7 @@ def cmd_send(args: argparse.Namespace) -> None:
 def cmd_recv(args: argparse.Namespace) -> None:
     out = Path(args.output).expanduser().resolve()
     out.mkdir(parents=True, exist_ok=True)
-    token = secrets.token_urlsafe(8)
+    token = secrets.token_urlsafe(32)
     events = EventLog(args.event_file)
 
     RecvHandler.out_dir = out
@@ -1384,7 +1385,7 @@ def cmd_recv(args: argparse.Namespace) -> None:
     RecvHandler.session_upload_bytes = 0
 
     preferred = args.port or (8080 if args.tunnel else 0)
-    server, port = _start_server_with_port(RecvHandler, preferred)
+    server, port = _start_server_with_port(RecvHandler, preferred, tunnel=args.tunnel)
 
     tunnel_proc = None
     if args.tunnel:

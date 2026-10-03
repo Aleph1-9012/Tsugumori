@@ -34,3 +34,8 @@ Run `qshare recv --help` to see the flags that change these limits.
 Local transfers use HTTP and should only be used on a trusted network. Tunnel
 mode uses HTTPS, but its temporary URL acts as a bearer token: anyone with the
 URL can use it while the session is active.
+
+In tunnel mode, the local HTTP server listens only on `127.0.0.1` for
+Cloudflare's connection. LAN mode listens on the network interfaces. Both modes
+use 256-bit random tokens. Use the generated download URL unchanged; a token
+embedded in a different path or query does not authorize a download.

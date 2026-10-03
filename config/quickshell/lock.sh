@@ -219,8 +219,9 @@ wait_for_guard_takeover() {
     for ((attempt = 0; attempt < 60; attempt++)); do
         if flock --nonblocking --conflict-exit-code 75 9; then
             return 0
+        else
+            status=$?
         fi
-        status=$?
         if [[ "$status" -ne 75 ]]; then
             fallback_lock "the lock-launch guard failed during relock (status $status)"
         fi

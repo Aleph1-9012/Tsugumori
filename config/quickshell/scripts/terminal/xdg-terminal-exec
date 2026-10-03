@@ -1,0 +1,3 @@
+#!/bin/sh
+# Private GIO adapter. Desktop-file arguments arrive already expanded.
+exec kitty --single-instance -- "$@"
