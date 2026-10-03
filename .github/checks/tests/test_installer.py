@@ -46,11 +46,12 @@ class InstallerLuaMigrationTests(unittest.TestCase):
         *,
         extra_env: dict[str, str] | None = None,
         drop_root_privileges: bool = False,
+        installer_args: tuple[str, ...] = (),
     ) -> subprocess.CompletedProcess[str]:
         env = self.env.copy()
         if extra_env:
             env.update(extra_env)
-        script = 'source "$INSTALLER_UNDER_TEST"\n' + textwrap.dedent(body)
+        script = 'source "$INSTALLER_UNDER_TEST" "$@"\n' + textwrap.dedent(body)
         identity: dict[str, object] = {}
         if drop_root_privileges and os.geteuid() == 0:
             # GitHub's Arch container runs as root, while the installer requires
@@ -62,7 +63,7 @@ class InstallerLuaMigrationTests(unittest.TestCase):
             env["INSTALLER_UNDER_TEST"] = str(installer_copy)
             identity = {"user": 65534, "group": 65534, "extra_groups": []}
         return subprocess.run(
-            ["/usr/bin/bash", "-c", script],
+            ["/usr/bin/bash", "-c", script, "installer-test", *installer_args],
             env=env,
             cwd=self.root,
             text=True,
@@ -157,6 +158,29 @@ class InstallerLuaMigrationTests(unittest.TestCase):
             ],
         )
         self.assertTrue(git_args[-1].startswith(str(self.root / "Tsugumori-install-")))
+
+    def test_fish_installation_is_opt_in_and_honors_cli_flag(self) -> None:
+        cases = (
+            ("n", (), "false"),
+            ("", (), "false"),
+            ("y", (), "true"),
+            (None, ("--fish",), "true"),
+        )
+        for answer, args, expected in cases:
+            with self.subTest(answer=answer, args=args):
+                answers = ["n", "n", "n"]
+                if answer is not None:
+                    answers.append(answer)
+                answers.extend(["n", "n", "n"])
+                body = "collect_choices <<'ANSWERS'\n" + "\n".join(answers)
+                body += '\nANSWERS\nprintf "fish=%s\\n" "$INSTALL_FISHRC"\n'
+                result = self.run_installer_shell(
+                    body,
+                    extra_env={"TSUGUMORI_VM": "0"},
+                    installer_args=args,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.splitlines()[-1], f"fish={expected}")
 
     def test_package_install_uses_nautilus_without_removed_apps(self) -> None:
         package_log = self.root / "installed-packages"

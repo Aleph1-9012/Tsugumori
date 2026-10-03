@@ -135,7 +135,11 @@ collect_choices() {
     BACKUP_OLD=true;          ask_yn "Backup existing configs to $BACKUP_DIR?" y || BACKUP_OLD=false
     INSTALL_WALLPAPERS=true;  ask_yn "Install default wallpapers to ~/Pictures/wallpapers?" y || INSTALL_WALLPAPERS=false
     INSTALL_BASHRC=true;      ask_yn "Install Tsugumori .bashrc (welcome banner + Tsugumori prompt)?" y || INSTALL_BASHRC=false
-    INSTALL_FISHRC=false;      ask_yn "Install Tsugumori Fish config (aliases, PATH)?" n || INSTALL_FISHRC=true
+    if ! $INSTALL_FISHRC; then
+        if ask_yn "Install Tsugumori Fish config (aliases, PATH)?" n; then
+            INSTALL_FISHRC=true
+        fi
+    fi
     INSTALL_NAUTILUS_THEME=true
     ask_yn "Install the Nautilus and file-dialog theme (builds a small GTK module)?" y || INSTALL_NAUTILUS_THEME=false
     ENABLE_SERVICES=true;     ask_yn "Enable system services (NetworkManager, pipewire)?" y || ENABLE_SERVICES=false
