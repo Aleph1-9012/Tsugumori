@@ -39,7 +39,7 @@ ShellRoot {
     // ── Detect the active monitor ──
     Process {
         id: getMonitorProc
-        command: ["sh","-c","hyprctl cursorpos -j | python3 -c \"\nimport sys,json,subprocess\npos=json.load(sys.stdin)\nmons=json.loads(subprocess.check_output(['hyprctl','monitors','-j']))\nfor m in mons:\n    x,y=m['x'],m['y']\n    w,h=m['width'],m['height']\n    if x<=pos['x']<x+w and y<=pos['y']<y+h:\n        print(m['name'])\n        break\n\""]
+        command: ["python3", root.xdgConfigHome + "/quickshell/scripts/cursor_monitor.py"]
         running: true
         stdout: StdioCollector {
             onStreamFinished: {

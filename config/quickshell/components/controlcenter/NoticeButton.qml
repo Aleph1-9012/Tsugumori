@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
+import "../../services/NotificationMarkup.js" as NotificationMarkup
 
 Button {
     id: root
@@ -39,7 +40,7 @@ Button {
         Text {
             visible: root.expanded
             width: parent.width
-            text: root.entry.body || ""; textFormat: Text.PlainText
+            text: NotificationMarkup.toStyledText(root.entry.body || ""); textFormat: Text.StyledText
             font.family: "JetBrains Mono"; font.pixelSize: 12; color: "#e8e8e8"
             wrapMode: Text.Wrap; maximumLineCount: 4; elide: Text.ElideRight
         }

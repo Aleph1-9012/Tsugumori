@@ -10,3 +10,7 @@
 -- hl.config({ input = { kb_layout = "us" } })
 -- hl.unbind("SUPER + T")
 -- hl.bind("SUPER + T", hl.dsp.exec_cmd("foot"))
+--
+-- Skip the lock screen at login when a display manager already asked for
+-- the password:
+-- tsugumori.lock_at_login = false
