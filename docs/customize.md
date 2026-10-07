@@ -125,6 +125,19 @@ remove only the Tsugumori import from `gtk.css`, and remove its `GTK3_MODULES`
 line from `80-tsugumori-filechooser.conf`. Leave any other settings intact, then
 log out and back in. Theme assets can remain in place while disabled.
 
+## Lock at login
+
+Tsugumori locks the screen right after Hyprland starts, so an autologin
+session still asks for a password. To turn this off, add this line to
+`~/.config/hypr/user.lua`:
+
+```lua
+tsugumori.lock_at_login = false
+```
+
+It takes effect at the next login. `SUPER + L`, idle locking, and the menu's
+LOCK button are unaffected.
+
 ## Wallpapers
 
 Place JPG, PNG, or WebP images in `~/Pictures/wallpapers/`, then press
