@@ -11,10 +11,10 @@ ShellRoot {
     id: root
 
     // ── NOTIFICATIONS ──
-    Notifications {}
+    Notifications { id: notificationDaemon }
 
     // ── CONTROLCENTER ──
-    ControlCenter {}
+    ControlCenter { notificationSource: notificationDaemon }
 
     // Standalone notes drawer, separate from the Control Center.
     QuickNotes { id: quickNotes }

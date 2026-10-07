@@ -363,15 +363,15 @@ Item {
                                 id: noticeComponent
                                 NoticeButton {
                                     entry: actionLoader.entry
-                                    expanded: view.controller.expandedNotifIdx === entry.notifIdx
+                                    expanded: view.controller.expandedNotifId === entry.notifId
                                     navigationFocus: view.controller.keyboardNavigation && view.controller.action === entry.key
                                     reducedMotion: view.reducedMotion
                                     onHoverEntered: { view.controller.keyboardNavigation = false; view.controller.action = entry.key }
-                                    onDismissed: view.controller.dismissNotif(entry.notifIdx)
+                                    onDismissed: view.controller.dismissNotif(entry.notifId)
                                     onClicked: {
                                         view.controller.action = entry.key
-                                        if (expanded) view.controller.invokeNotif(entry.notifIdx)
-                                        else view.controller.expandedNotifIdx = entry.notifIdx
+                                        if (expanded) view.controller.activateNotif(entry.notifId)
+                                        else view.controller.expandedNotifId = entry.notifId
                                     }
                                 }
                             }

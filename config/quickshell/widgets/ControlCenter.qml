@@ -193,8 +193,8 @@ ShellRoot {
             for (var p = 0; p < notifications.length; p++) {
                 var n2 = notifications[p]
                 acts6.push({
-                    key: "notif:" + p,
-                    identity:"notification:" + (n2.id === undefined ? p : n2.id),
+                    key: "notif:" + n2.id,
+                    identity:"notification:" + n2.id,
                     label: n2.summary || "(empty)",
                     body: n2.body || "",
                     app: n2.app || "",
@@ -204,7 +204,7 @@ ShellRoot {
                     timeout: n2.timeout >= 0 ? n2.timeout : -1,
                     desktopEntry: n2.desktopEntry || "",
                     actions: n2.actions || [],
-                    notifIdx: p
+                    notifId: n2.id
                 })
             }
             return acts6
@@ -434,46 +434,63 @@ ShellRoot {
     Process {
         id: pollAudio
         command: ["sh","-c",
-            "echo \"DEFAULT:$(pactl get-default-sink 2>/dev/null)\"; " +
-            "echo \"VOLUME:$(pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null | grep -oP '\\d+%' | head -1 | tr -d '%')\"; " +
-            "echo \"MUTE:$(pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null | awk '{print $2}')\"; " +
-            "pactl list short sinks 2>/dev/null | while read line; do " +
-            "  id=$(echo \"$line\" | awk '{print $1}'); " +
-            "  name=$(echo \"$line\" | awk '{print $2}'); " +
-            "  desc=$(pactl list sinks 2>/dev/null | awk -v n=\"$name\" '$1==\"Name:\" && $2==n{f=1} f && /Description:/{$1=\"\"; print substr($0,2); exit}'); " +
-            "  echo \"SINK:$name|$desc\"; " +
-            "done"
+            "printf 'DEFAULT:%s\\n' \"$(pactl get-default-sink 2>/dev/null)\"; " +
+            "pactl --format=json list sinks 2>/dev/null"
         ]
         stdout: StdioCollector {
             onStreamFinished: {
-                var lines = this.text.trim().split("\n")
-                var sinks = []
-                for (var i = 0; i < lines.length; i++) {
-                    var line = lines[i]
-                    if (line.indexOf("DEFAULT:") === 0) {
-                        root.audioDefaultSink = line.substring(8).trim()
-                    } else if (line.indexOf("VOLUME:") === 0) {
-                        var v = parseInt(line.substring(7))
-                        if (!isNaN(v) && root.pendingAudioPercent < 0 && !volumeWriteTimer.running && !setVolumeProc.running)
-                            root.audioVolume = v / 100
-                    } else if (line.indexOf("MUTE:") === 0) {
-                        root.audioMuted = line.substring(5).trim() === "yes"
-                    } else if (line.indexOf("SINK:") === 0) {
-                        var parts = line.substring(5).split("|")
-                        sinks.push({
-                            name: parts[0],
-                            description: parts[1] || parts[0],
-                            isDefault: parts[0] === root.audioDefaultSink
-                        })
-                    }
-                }
-                // Mark the default sink on a second pass in case it was read after the sinks.
-                for (var j = 0; j < sinks.length; j++) {
-                    sinks[j].isDefault = sinks[j].name === root.audioDefaultSink
-                }
-                root.audioSinks = sinks
+                var state = root.parseAudioState(this.text)
+                root.audioDefaultSink = state.defaultSink
+                if (state.volume >= 0 && root.pendingAudioPercent < 0
+                        && !volumeWriteTimer.running && !setVolumeProc.running)
+                    root.audioVolume = state.volume / 100
+                root.audioMuted = state.muted
+                root.audioSinks = state.sinks
             }
         }
+    }
+
+    // Parse "DEFAULT:name" plus `pactl --format=json list sinks` output.
+    function parseAudioState(text) {
+        var empty = {defaultSink: "", volume: -1, muted: false, sinks: []}
+        if (!text) return empty
+        var newline = text.indexOf("\n")
+        if (newline < 0) return empty
+        var header = text.substring(0, newline)
+        if (header.indexOf("DEFAULT:") !== 0) return empty
+        var defaultSink = header.substring(8).trim()
+        var list
+        try {
+            list = JSON.parse(text.substring(newline + 1))
+        } catch (e) {
+            return empty
+        }
+        if (!Array.isArray(list)) return empty
+        var sinks = []
+        var volume = -1
+        var muted = false
+        for (var i = 0; i < list.length; i++) {
+            var sink = list[i]
+            if (!sink || !sink.name) continue
+            var name = String(sink.name)
+            var isDefault = name === defaultSink
+            sinks.push({
+                name: name,
+                description: sink.description ? String(sink.description) : name,
+                isDefault: isDefault
+            })
+            if (isDefault) {
+                muted = sink.mute === true
+                if (sink.volume) {
+                    for (var channel in sink.volume) {
+                        var level = sink.volume[channel]
+                        var percent = level ? parseInt(level.value_percent, 10) : NaN
+                        if (!isNaN(percent)) { volume = percent; break }
+                    }
+                }
+            }
+        }
+        return {defaultSink: defaultSink, volume: volume, muted: muted, sinks: sinks}
     }
 
     // Keep the last slider value even while a previous write is still running.
@@ -626,78 +643,26 @@ ShellRoot {
         setBrightnessProc.running = true
     }
 
-    // ── Notifications via IPC to Notifications.qml (which owns the D-Bus bus) ──
-    property bool dndEnabled: false
-    property var notifications: []     // [{id, summary, body, app, ts}]
-    property int expandedNotifIdx: -1  // expanded notification index (-1 = none)
+    // ── Notifications from the in-process daemon (shell.qml wires it in) ──
+    property Notifications notificationSource: null
+    readonly property bool dndEnabled: notificationSource ? notificationSource.dndEnabled : false
+    readonly property var notifications: notificationSource ? notificationSource.history : []
+    property int expandedNotifId: -1   // expanded notification id (-1 = none)
 
-    // Poll notification history from the Notifications.qml daemon via IPC.
-    Timer {
-        interval: 1500
-        running: root.open
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: {
-            pollNotifsHistory.running = true
-            pollNotifsDnd.running = true
-        }
+    function dismissNotif(id) {
+        if (notificationSource) notificationSource.dismiss(id)
+        root.expandedNotifId = -1
     }
-    Process {
-        id: pollNotifsHistory
-        command: ["sh","-c","qs ipc call notifs getHistory 2>/dev/null"]
-        running: false
-        stdout: StdioCollector {
-            onStreamFinished: {
-                try {
-                    var parsed = JSON.parse(this.text.trim() || "[]")
-                    root.notifications = parsed
-                } catch(e) {
-                    root.notifications = []
-                }
-            }
-        }
-    }
-    Process {
-        id: pollNotifsDnd
-        command: ["sh","-c","qs ipc call notifs getDnd 2>/dev/null"]
-        running: false
-        stdout: StdioCollector {
-            onStreamFinished: {
-                root.dndEnabled = this.text.trim() === "true"
-            }
-        }
-    }
-    // Process for actions sent to the notification daemon.
-    Process {
-        id: notifActProc
-        command: ["sh","-c","true"]
-        running: false
-    }
-
-    // Helpers: call the daemon IPC.
-    function dismissNotif(idx) {
-        notifActProc.command = ["sh","-c","qs ipc call notifs dismissAt " + idx]
-        notifActProc.running = true
-        // Refresh local state immediately (optimistic update).
-        var list = root.notifications.slice()
-        list.splice(idx, 1)
-        root.notifications = list
-        root.expandedNotifIdx = -1
+    function activateNotif(id) {
+        if (notificationSource) notificationSource.activate(id)
+        root.expandedNotifId = -1
     }
     function dismissAllNotifs() {
-        notifActProc.command = ["sh","-c","qs ipc call notifs clearAll"]
-        notifActProc.running = true
-        root.notifications = []
-        root.expandedNotifIdx = -1
-    }
-    function invokeNotif(idx) {
-        // The daemon invokes and dismisses in one call.
-        dismissNotif(idx)
+        if (notificationSource) notificationSource.clearAll()
+        root.expandedNotifId = -1
     }
     function setDnd(state) {
-        notifActProc.command = ["sh","-c","qs ipc call notifs setDnd " + (state ? "true" : "false")]
-        notifActProc.running = true
-        dndEnabled = state
+        if (notificationSource) notificationSource.dndEnabled = state
     }
 
     // ── System data: Quickshare (qshare.py) ──
@@ -714,6 +679,7 @@ ShellRoot {
     property bool   qshareCancelled: false
     property string qshareRunId:     "idle"
     readonly property string qshareScriptPath: xdgConfigHome + "/quickshell/scripts/qshare.py"
+    readonly property string cursorMonitorScriptPath: xdgConfigHome + "/quickshell/scripts/cursor_monitor.py"
     readonly property string networkScriptPath: xdgConfigHome + "/quickshell/scripts/network_ctl.py"
     readonly property string filePickerScriptPath: xdgConfigHome + "/quickshell/scripts/launch_file_picker.py"
     readonly property string qshareEventFile: runtimeDir + "/qshare-events-" + qshareRunId
@@ -960,10 +926,6 @@ ShellRoot {
             pollAudio.running = true
             root.loadBrightness()
         }
-        if (slot === "right")  {
-            pollNotifsHistory.running = true
-            pollNotifsDnd.running = true
-        }
     }
     onSubChanged: {
         cancelWifiPrompt()
@@ -993,7 +955,7 @@ ShellRoot {
     // ── Button action dispatcher ──
     function dispatchAction(slotKey, subKey, actionKey) {
         console.log("[ControlCenter] action:", slotKey + "." + subKey + "." + actionKey)
-        var cmd = ""
+        var cmd = null
 
         // GPU selection never changes the running desktop or logs out the user.
         if (slotKey === "bottom" && subKey === "gpu") {
@@ -1052,42 +1014,46 @@ ShellRoot {
         // ── Bluetooth ──
         else if (slotKey === "top" && subKey === "bluetooth") {
             if (actionKey === "toggle") {
-                cmd = "bluetoothctl power " + (btEnabled ? "off" : "on")
+                cmd = ["bluetoothctl", "power", btEnabled ? "off" : "on"]
             } else if (actionKey === "scan") {
                 btScanning = !btScanning
                 if (btScanning) {
                     btScanProc.running = true
                     btScanStopTimer.restart()
                 } else {
-                    actProc.command = ["sh","-c","bluetoothctl --timeout 1 scan off"]
+                    actProc.command = ["bluetoothctl", "--timeout", "1", "scan", "off"]
                     actProc.running = true
                 }
                 return
             } else if (actionKey.indexOf("connect:") === 0) {
                 var mac = actionKey.substring(8)
-                cmd = "bluetoothctl trust " + mac + " 2>/dev/null; bluetoothctl connect " + mac
+                cmd = ["sh", "-c", "bluetoothctl trust \"$1\" 2>/dev/null; bluetoothctl connect \"$1\"",
+                    "bluetooth-connect", mac]
             } else if (actionKey.indexOf("disconnect:") === 0) {
                 var mac2 = actionKey.substring(11)
-                cmd = "bluetoothctl disconnect " + mac2
+                cmd = ["bluetoothctl", "disconnect", mac2]
             } else if (actionKey.indexOf("pair:") === 0) {
                 var mac3 = actionKey.substring(5)
-                cmd = "bluetoothctl pair " + mac3 + " && bluetoothctl trust " + mac3 + " && sleep 0.5 && bluetoothctl connect " + mac3
+                cmd = ["sh", "-c",
+                    "bluetoothctl pair \"$1\" && bluetoothctl trust \"$1\" && sleep 0.5 && bluetoothctl connect \"$1\"",
+                    "bluetooth-pair", mac3]
             } else if (actionKey.indexOf("remove:") === 0) {
                 var mac4 = actionKey.substring(7)
-                cmd = "bluetoothctl disconnect " + mac4 + " 2>/dev/null; bluetoothctl remove " + mac4
+                cmd = ["sh", "-c", "bluetoothctl disconnect \"$1\" 2>/dev/null; bluetoothctl remove \"$1\"",
+                    "bluetooth-remove", mac4]
             }
         }
         // ── Audio Output ──
         else if (slotKey === "bottom" && subKey === "output") {
             if (actionKey.indexOf("set-sink:") === 0) {
                 var sink = actionKey.substring(9)
-                cmd = "pactl set-default-sink '" + sink + "'"
+                cmd = ["pactl", "set-default-sink", sink]
             }
         }
         // ── Audio Volume ──
         else if (slotKey === "bottom" && subKey === "volume") {
             if (actionKey === "mute-toggle") {
-                cmd = "pactl set-sink-mute @DEFAULT_SINK@ toggle"
+                cmd = ["pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"]
             } else if (actionKey.indexOf("set-volume:") === 0) {
                 var vol = actionKey.substring(11)
                 root.setAudioPercent(Number(vol))
@@ -1141,8 +1107,8 @@ ShellRoot {
                 dismissAllNotifs()
                 return
             } else if (actionKey.indexOf("notif:") === 0) {
-                var idx = parseInt(actionKey.substring(6))
-                invokeNotif(idx)
+                var notifId = parseInt(actionKey.substring(6), 10)
+                activateNotif(notifId)
                 return
             } else if (actionKey === "none") {
                 return
@@ -1157,7 +1123,7 @@ ShellRoot {
         }
 
         if (cmd) {
-            actProc.command = ["sh","-c", cmd]
+            actProc.command = cmd
             actProc.running = true
             // Refresh state after one second.
             refreshTimer.restart()
@@ -1194,11 +1160,11 @@ ShellRoot {
         if (level === 3 && action) {
             // Notification special case: first Enter expands, second invokes.
             if (slot === "right" && sub === "history" && action.indexOf("notif:") === 0) {
-                var idx = parseInt(action.substring(6))
-                if (expandedNotifIdx === idx) {
-                    invokeNotif(idx)
+                var notifId = parseInt(action.substring(6), 10)
+                if (expandedNotifId === notifId) {
+                    activateNotif(notifId)
                 } else {
-                    expandedNotifIdx = idx
+                    expandedNotifId = notifId
                 }
                 return
             }
@@ -1317,7 +1283,7 @@ ShellRoot {
     Process {
         id: getMonitorProc
         running: root.open
-        command: ["sh","-c","hyprctl cursorpos -j | python3 -c \"\nimport sys,json,subprocess\npos=json.load(sys.stdin)\nmons=json.loads(subprocess.check_output(['hyprctl','monitors','-j']))\nfor m in mons:\n    x,y=m['x'],m['y']\n    scale=float(m.get('scale') or 1)\n    w,h=m['width']/scale,m['height']/scale\n    if int(m.get('transform',0)) % 2:\n        w,h=h,w\n    if x<=pos['x']<x+w and y<=pos['y']<y+h:\n        print(m['name'])\n        break\n\""]
+        command: ["python3", root.cursorMonitorScriptPath]
         stdout: StdioCollector {
             onStreamFinished: {
                 var n = this.text.trim()

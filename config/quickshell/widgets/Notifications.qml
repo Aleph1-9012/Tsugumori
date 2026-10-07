@@ -17,6 +17,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Notifications
 import Quickshell.Wayland
+import "../services/NotificationMarkup.js" as NotificationMarkup
 
 Scope {
     id: root
@@ -33,54 +34,15 @@ Scope {
 
         actionsSupported: true
         bodyMarkupSupported: true
-        bodyImagesSupported: true
+        bodyImagesSupported: false
         bodyHyperlinksSupported: false
         imageSupported: true
         keepOnReload: true
 
         onNotification: (n) => {
             n.tracked = true;
-
-            // Extract action names for display.
-            var actionNames = []
-            try {
-                if (n.actions) {
-                    for (var ai = 0; ai < n.actions.length; ai++) {
-                        var a = n.actions[ai]
-                        actionNames.push({
-                            id: a.identifier || "",
-                            text: a.text || ""
-                        })
-                    }
-                }
-            } catch(e) {}
-
-            // Hints / category / urgency level.
-            var urgencyLabel = "normal"
-            if (n.urgency === 0) urgencyLabel = "low"
-            else if (n.urgency === 2) urgencyLabel = "critical"
-
-            // Add to history (FIFO 50).
-            var entry = {
-                id: n.id,
-                summary: n.summary || "",
-                body: n.body || "",
-                app: n.appName || "",
-                appIcon: n.appIcon || "",
-                category: n.category || "",
-                urgency: urgencyLabel,
-                timeout: n.expireTimeout >= 0 ? n.expireTimeout : -1,
-                desktopEntry: n.desktopEntry || "",
-                hasImage: n.hasImage || false,
-                actions: actionNames,
-                ts: Date.now(),
-                ref: n
-            }
-            var list = root.history.slice()
-            list.unshift(entry)
-            if (list.length > 50) list = list.slice(0, 50)
-            root.history = list
-
+            root.record(n)
+            root.watchUpdates(n)
             if (root.dndEnabled) {
                 n.tracked = false
             }
@@ -92,6 +54,127 @@ Scope {
     // ─── Persistent in-memory history (max 50, FIFO) ───
     property var history: []
     property bool dndEnabled: false
+
+    // Add a notification to the front of the history, deduplicated by id.
+    function record(n) {
+        // Extract action names for display.
+        var actionNames = []
+        try {
+            if (n.actions) {
+                for (var ai = 0; ai < n.actions.length; ai++) {
+                    var a = n.actions[ai]
+                    actionNames.push({
+                        id: a.identifier || "",
+                        text: a.text || ""
+                    })
+                }
+            }
+        } catch(e) {}
+
+        // Hints / category / urgency level.
+        var urgencyLabel = "normal"
+        if (n.urgency === 0) urgencyLabel = "low"
+        else if (n.urgency === 2) urgencyLabel = "critical"
+
+        var entry = {
+            id: n.id,
+            summary: n.summary || "",
+            body: n.body || "",
+            app: n.appName || "",
+            appIcon: n.appIcon || "",
+            category: (n.hints && n.hints.category) || "",
+            urgency: urgencyLabel,
+            timeout: n.expireTimeout >= 0 ? n.expireTimeout : -1,
+            desktopEntry: n.desktopEntry || "",
+            hasImage: (n.image || "") !== "",
+            actions: actionNames,
+            ts: Date.now(),
+            ref: n
+        }
+        var list = [entry]
+        for (var i = 0; i < root.history.length && list.length < 50; i++) {
+            if (root.history[i].id !== n.id) list.push(root.history[i])
+        }
+        root.history = list
+    }
+
+    // A Notify with a replaces_id that is still tracked updates the existing
+    // object in place without emitting onNotification again, so the history
+    // copy would go stale. Re-record on any copied field's change signal.
+    // The entryIndex guard keeps dismissed or dropped entries out.
+    function watchUpdates(n) {
+        var refresh = function() {
+            if (root.entryIndex(n.id) >= 0) root.record(n)
+        }
+        var names = ["summary", "body", "appName", "appIcon", "urgency",
+            "expireTimeout", "desktopEntry", "image", "actions", "hints"]
+        for (var i = 0; i < names.length; i++) {
+            var signal = n[names[i] + "Changed"]
+            if (signal && signal.connect) signal.connect(refresh)
+        }
+    }
+
+    // Timeout in ms for a popup: expireTimeout 0 means never expire.
+    function popupTimeout(n) {
+        if (!n) return root.defaultTimeout
+        if (n.expireTimeout === 0) return -1
+        if (n.expireTimeout < 0)
+            return n.urgency === 2 ? root.criticalTimeout : root.defaultTimeout
+        return n.expireTimeout
+    }
+
+    function entryIndex(id) {
+        for (var i = 0; i < root.history.length; i++) {
+            if (root.history[i].id === id) return i
+        }
+        return -1
+    }
+
+    function removeEntry(id) {
+        var index = root.entryIndex(id)
+        if (index < 0) return null
+        var list = root.history.slice()
+        var entry = list.splice(index, 1)[0]
+        root.history = list
+        return entry
+    }
+
+    // Remove an entry and dismiss its notification. Never invokes an action.
+    function dismiss(id) {
+        var entry = root.removeEntry(id)
+        if (entry && entry.ref && entry.ref.tracked) {
+            entry.ref.dismiss()
+        }
+    }
+
+    // Run the notification's default action, then remove the entry. The
+    // ActionInvoked handler already closes non-resident notifications.
+    function activate(id) {
+        var entry = root.removeEntry(id)
+        if (!entry || !entry.ref || !entry.ref.tracked) return
+        var ref = entry.ref
+        if (ref.actions) {
+            for (var i = 0; i < ref.actions.length; i++) {
+                if (ref.actions[i].identifier === "default") {
+                    ref.actions[i].invoke()
+                    break
+                }
+            }
+        }
+        if (ref.tracked) {
+            ref.dismiss()
+        }
+    }
+
+    function clearAll() {
+        var entries = root.history
+        root.history = []
+        for (var i = 0; i < entries.length; i++) {
+            if (entries[i].ref && entries[i].ref.tracked) {
+                entries[i].ref.dismiss()
+            }
+        }
+    }
 
     // ─── IPC: expose history to the Control Center ───
     IpcHandler {
@@ -123,29 +206,16 @@ Scope {
             return root.history.length
         }
 
-        function dismissAt(idx: int): void {
-            if (idx < 0 || idx >= root.history.length) return
-            var h = root.history[idx]
-            if (h.ref) {
-                try {
-                    // If the notification has actions, invoke the first (default).
-                    if (h.ref.actions && h.ref.actions.length > 0) {
-                        h.ref.actions[0].invoke()
-                    }
-                    h.ref.dismiss()
-                } catch(e) {}
-            }
-            var list = root.history.slice()
-            list.splice(idx, 1)
-            root.history = list
+        function dismiss(id: int): void {
+            root.dismiss(id)
+        }
+
+        function activate(id: int): void {
+            root.activate(id)
         }
 
         function clearAll(): void {
-            for (var i = 0; i < root.history.length; i++) {
-                var h = root.history[i]
-                if (h.ref) { try { h.ref.dismiss() } catch(e) {} }
-            }
-            root.history = []
+            root.clearAll()
         }
 
         function setDnd(state: bool): void {
@@ -248,7 +318,10 @@ Scope {
 
         property var notification: null
         property int itemIndex: 0
+        property bool timedOut: false
         readonly property bool isNotifItem: true
+        readonly property int timeoutMs: root.popupTimeout(notification)
+        readonly property bool persistent: timeoutMs < 0
 
         readonly property int urgency: notification ? notification.urgency : 1
         readonly property color accentColor: {
@@ -356,7 +429,11 @@ Scope {
                     }
                     ScriptAction {
                         script: {
-                            if (notif.notification) notif.notification.dismiss();
+                            const n = notif.notification;
+                            if (n && n.tracked) {
+                                if (notif.timedOut) n.expire();
+                                else n.dismiss();
+                            }
                         }
                     }
                 }
@@ -365,17 +442,13 @@ Scope {
 
         Timer {
             id: closeTimer
-            running: notif.state === "visible"
+            running: notif.state === "visible" && !notif.persistent
             repeat: false
-            interval: {
-                if (!notif.notification) return root.defaultTimeout;
-                const t = notif.notification.expireTimeout;
-                if (t < 0 || t === 0) {
-                    return notif.urgency === 2 ? root.criticalTimeout : root.defaultTimeout;
-                }
-                return t;
+            interval: notif.persistent ? root.defaultTimeout : notif.timeoutMs
+            onTriggered: {
+                notif.timedOut = true;
+                notif.state = "closing";
             }
-            onTriggered: notif.state = "closing"
         }
 
         // Transition from entering → visible on mount.
@@ -495,6 +568,7 @@ Scope {
                         text: notif.notification
                               ? (notif.notification.appName || "SYSTEM").toUpperCase()
                               : "SYSTEM"
+                        textFormat: Text.PlainText
                         color: "#7a7358"
                         font.family: "Iosevka"
                         font.pixelSize: 8
@@ -654,6 +728,7 @@ Scope {
                         Text {
                             Layout.fillWidth: true
                             text: notif.notification ? notif.notification.summary : ""
+                            textFormat: Text.PlainText
                             color: "#2e2a1f"
                             font.family: "Inter"
                             font.pixelSize: 13
@@ -667,7 +742,7 @@ Scope {
 
                         Text {
                             Layout.fillWidth: true
-                            text: notif.notification ? notif.notification.body : ""
+                            text: notif.notification ? NotificationMarkup.toStyledText(notif.notification.body) : ""
                             color: "#cc1515"
                             font.family: "Inter"
                             font.pixelSize: 11
@@ -676,7 +751,7 @@ Scope {
                             wrapMode: Text.WordWrap
                             maximumLineCount: 4
                             elide: Text.ElideRight
-                            textFormat: Text.PlainText
+                            textFormat: Text.StyledText
                             visible: text.length > 0
                             lineHeight: 1.4
                         }
@@ -709,6 +784,7 @@ Scope {
                                 id: actionText
                                 anchors.centerIn: parent
                                 text: `▸ ${(modelData && modelData.text ? modelData.text : "").toUpperCase()}`
+                                textFormat: Text.PlainText
                                 color: actMouse.containsMouse ? "#c8c8c4" : "#cc1515"
                                 font.family: "Iosevka"
                                 font.pixelSize: 9
@@ -742,6 +818,7 @@ Scope {
                 height: 1
                 color: notif.accentColor
                 opacity: 0.3
+                visible: !notif.persistent
                 z: 1
 
                 Rectangle {
@@ -756,7 +833,7 @@ Scope {
                         from: progressBar.parent.width
                         to: 0
                         duration: closeTimer.interval
-                        running: notif.state === "visible"
+                        running: notif.state === "visible" && !notif.persistent
                     }
                 }
             }
@@ -771,7 +848,7 @@ Scope {
 
                 onEntered: closeTimer.stop()
                 onExited: {
-                    if (notif.state === "visible") closeTimer.restart();
+                    if (notif.state === "visible" && !notif.persistent) closeTimer.restart();
                 }
                 onClicked: (m) => {
                     if (m.button === Qt.MiddleButton) notif.state = "closing";
