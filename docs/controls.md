@@ -88,6 +88,10 @@ Choose Brightness to adjust the monitor where the Control Center opened. Drag
 or scroll over the slider, or use the left and right keys. Each monitor keeps
 its own level for the current login session.
 
+Selecting a notification history entry once expands it. Selecting it again
+runs the app's default action if it has one and removes the entry; the ×
+button removes it without running any action.
+
 ## Quick notes
 
 `SUPER + N` opens the standalone drawer on the focused monitor. Pressing it
@@ -152,3 +156,9 @@ The bottom-right RESTART and SHUT DOWN buttons require a second press to
 confirm. Choose CANCEL or press Escape to cancel. A failed power request leaves
 the session locked and allows another password attempt. System permissions
 determine whether shutdown or restart is available.
+
+## App menu power controls
+
+The app menu's SHUTDOWN and RESTART buttons also need a second press to
+confirm. The other button becomes CANCEL while one is armed, and closing the
+menu cancels the armed action.

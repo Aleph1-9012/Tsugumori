@@ -754,6 +754,14 @@ form.addEventListener("submit", event => {{
 """
 
 
+def content_disposition(name: str) -> str:
+    """RFC 5987 Content-Disposition for arbitrary download names."""
+    fallback = "".join(
+        c if 0x20 <= ord(c) <= 0x7E and c not in '"\\%' else "_" for c in name
+    )
+    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(name, safe='')}"
+
+
 # ─── Handlers HTTP ────────────────────────────────────────────────────────────
 class SendHandler(BaseHTTPRequestHandler):
     file_path: Path = None  # type: ignore[assignment]
@@ -830,7 +838,7 @@ class SendHandler(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/octet-stream")
                 self.send_header("Content-Length", str(size))
-                self.send_header("Content-Disposition", f'attachment; filename="{quote(self.file_name)}"')
+                self.send_header("Content-Disposition", content_disposition(self.file_name))
                 self.end_headers()
                 while remaining > 0:
                     chunk = source.read(min(_DOWNLOAD_CHUNK_SIZE, remaining))

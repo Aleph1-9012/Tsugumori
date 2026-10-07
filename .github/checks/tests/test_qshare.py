@@ -516,7 +516,18 @@ class QuickshareSendTests(unittest.TestCase):
                 self.assertFalse(handler.done_event.is_set())
 
     def test_encoded_download_filenames_still_work(self) -> None:
-        for filename in ("report with spaces.txt", "100%?#雪.txt"):
+        cases = {
+            "report with spaces.txt":
+                "attachment; filename=\"report with spaces.txt\"; "
+                "filename*=UTF-8''report%20with%20spaces.txt",
+            "100%?#雪.txt":
+                "attachment; filename=\"100_?#_.txt\"; "
+                "filename*=UTF-8''100%25%3F%23%E9%9B%AA.txt",
+            'a"b\\c\td.txt':
+                "attachment; filename=\"a_b_c_d.txt\"; "
+                "filename*=UTF-8''a%22b%5Cc%09d.txt",
+        }
+        for filename, expected in cases.items():
             with self.subTest(filename=filename):
                 handler = self.handler()
                 handler.file_name = filename
@@ -534,7 +545,7 @@ class QuickshareSendTests(unittest.TestCase):
                 self.assertEqual(body, self.payload.read_bytes())
                 self.assertEqual(
                     headers["content-disposition"],
-                    f'attachment; filename="{encoded_name}"',
+                    expected,
                 )
                 self.assertTrue(handler.done_event.is_set())
 

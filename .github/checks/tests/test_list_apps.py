@@ -112,6 +112,7 @@ TestCase {
     property string searchQuery: ""
     property int focusIdx: -1
     property string currentCat: "all"
+    property string powerConfirmation: ""
     QtObject { id: desktopReader; property bool running: false }
     QtObject { id: searchInput; property string text: "" }
     QtObject { id: wipeHide; function stop() {} }
