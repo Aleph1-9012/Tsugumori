@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
@@ -181,6 +182,63 @@ class InstallerLuaMigrationTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(result.stdout.splitlines()[-1], f"fish={expected}")
+
+    def collect_bashrc(self, answers: list[str]) -> subprocess.CompletedProcess:
+        body = "collect_choices <<'ANSWERS'\n" + "\n".join(answers)
+        body += '\nANSWERS\nprintf "bashrc=%s\\n" "$INSTALL_BASHRC"\n'
+        return self.run_installer_shell(
+            body, extra_env={"TSUGUMORI_VM": "0"})
+
+    def test_bashrc_replacement_without_backups_requires_confirmation(self) -> None:
+        (self.home / ".bashrc").write_text("# personal\n", encoding="utf-8")
+        # backup=n, wallpapers=n, bashrc=y, confirm=<default n>, fish, nautilus, services, vm
+        result = self.collect_bashrc(["n", "n", "y", "", "n", "n", "n", "n"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines()[-1], "bashrc=false")
+
+        result = self.collect_bashrc(["n", "n", "y", "y", "n", "n", "n", "n"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines()[-1], "bashrc=true")
+
+    def test_bashrc_prompt_is_skipped_with_backups_or_no_existing_file(self) -> None:
+        (self.home / ".bashrc").write_text("# personal\n", encoding="utf-8")
+        # Backups on: the extra question is never asked.
+        result = self.collect_bashrc(["y", "n", "y", "n", "n", "n", "n"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines()[-1], "bashrc=true")
+
+        (self.home / ".bashrc").unlink()
+        # Backups off but nothing to replace: still no extra question.
+        result = self.collect_bashrc(["n", "n", "y", "n", "n", "n", "n"])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.splitlines()[-1], "bashrc=true")
+
+    def test_services_prompt_mentions_bluetooth(self) -> None:
+        prompt = re.search(r'ask_yn "([^"]*services[^"]*)"', INSTALLER.read_text())
+        self.assertIsNotNone(prompt)
+        self.assertIn("Bluetooth", prompt[1])
+
+    def test_bashrc_adds_local_bin_once_and_before_personal_overrides(self) -> None:
+        bashrc = REPO_ROOT / "config/bash/.bashrc"
+        (self.home / ".bashrc.local").write_text(
+            'export PATH="/custom/bin:$PATH"\n', encoding="utf-8")
+        local_bin = f"{self.home}/.local/bin"
+        for already_present in (False, True):
+            with self.subTest(already_present=already_present):
+                path = "/usr/bin:/bin"
+                if already_present:
+                    path = f"{local_bin}:{path}"
+                env = {**os.environ, "HOME": str(self.home),
+                       "XDG_CONFIG_HOME": str(self.config_home),
+                       "PATH": path, "TERM": "dumb"}
+                result = subprocess.run(
+                    ["bash", "--rcfile", str(bashrc), "-i", "-c",
+                     'printf "%s\\n" "$PATH"'],
+                    env=env, capture_output=True, text=True, timeout=10)
+                entries = result.stdout.strip().splitlines()[-1].split(":")
+                self.assertEqual(entries[0], "/custom/bin")
+                self.assertEqual(entries[1], local_bin)
+                self.assertEqual(entries.count(local_bin), 1)
 
     def test_package_install_uses_nautilus_without_removed_apps(self) -> None:
         package_log = self.root / "installed-packages"

@@ -147,6 +147,9 @@ collect_choices() {
     BACKUP_OLD=true;          ask_yn "Backup existing configs to $BACKUP_DIR?" y || BACKUP_OLD=false
     INSTALL_WALLPAPERS=true;  ask_yn "Install default wallpapers to ~/Pictures/wallpapers?" y || INSTALL_WALLPAPERS=false
     INSTALL_BASHRC=true;      ask_yn "Install Tsugumori .bashrc (welcome banner + Tsugumori prompt)?" y || INSTALL_BASHRC=false
+    if $INSTALL_BASHRC && ! $BACKUP_OLD && [[ -e "$HOME/.bashrc" || -L "$HOME/.bashrc" ]]; then
+        ask_yn "Backups are off. Replace your existing ~/.bashrc without keeping a copy?" n || INSTALL_BASHRC=false
+    fi
     if ! $INSTALL_FISHRC; then
         if ask_yn "Install Tsugumori Fish config (aliases, PATH)?" n; then
             INSTALL_FISHRC=true
@@ -154,7 +157,7 @@ collect_choices() {
     fi
     INSTALL_NAUTILUS_THEME=true
     ask_yn "Install the Nautilus and file-dialog theme (builds a small GTK module)?" y || INSTALL_NAUTILUS_THEME=false
-    ENABLE_SERVICES=true;     ask_yn "Enable system services (NetworkManager, pipewire)?" y || ENABLE_SERVICES=false
+    ENABLE_SERVICES=true;     ask_yn "Enable system services (NetworkManager, Bluetooth, PipeWire)?" y || ENABLE_SERVICES=false
 
     if $VM_GL_TWEAKS; then
         log "VirtualBox / software-GL mode enabled (--vm or TSUGUMORI_VM=1)."

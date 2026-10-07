@@ -26,8 +26,14 @@ if [[ -x "$_tsugumori_shell_dir/tsugumori-welcome.sh" && ${_tsugumori_welcome_pi
 fi
 unset _tsugumori_shell_dir
 
-# ─── User-specific overrides ───────────────────────────────────────
-[ -f ~/.bashrc.local ] && . ~/.bashrc.local
+# Add user-local executables to PATH (before ~/.bashrc.local so personal
+# overrides can prepend their own directories)
+case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
 
-# Add user-local executables to PATH
-export PATH="$HOME/.local/bin:$PATH"
+# ─── User-specific overrides ───────────────────────────────────────
+if [ -f ~/.bashrc.local ]; then
+    . ~/.bashrc.local
+fi

@@ -39,7 +39,7 @@ if not (":" .. session_path .. ":"):find(":" .. local_bin .. ":", 1, true) then
 end
 hl.env("PATH", session_path)
 hl.env("XCURSOR_SIZE", "24")
-hl.env("QT_QPA_PLATFORM", "wayland")
+hl.env("QT_QPA_PLATFORM", "wayland;xcb")
 hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
 
 hl.config({
@@ -121,9 +121,14 @@ quickshell_command = quickshell_command
     .. "QT_QPA_PLATFORM=wayland "
     .. "QT_WAYLAND_DISABLE_WINDOWDECORATION=1 /usr/bin/qs"
 
+-- Login-time switches. user.lua may change them.
+tsugumori = { lock_at_login = true }
+
 hl.on("hyprland.start", function()
     hl.exec_cmd(quickshell_command)
-    hl.exec_cmd(quickshell_script("lock.sh"))
+    if not (type(tsugumori) == "table" and tsugumori.lock_at_login == false) then
+        hl.exec_cmd(quickshell_script("lock.sh"))
+    end
     hl.exec_cmd("hypridle")
     hl.exec_cmd("udiskie")
     hl.exec_cmd("/usr/bin/waybar")
@@ -138,7 +143,7 @@ end)
 
 -- Launcher and Quickshell panels.
 hl.bind("SUPER + Super_L", exec("qs ipc call tsugumoriShell toggleMenu"), { release = true })
-hl.bind("SUPER + Tab", exec(quickshell_script("ctrl.sh")))
+hl.bind("SUPER + Tab", exec("qs ipc call ctrl toggle"))
 hl.bind("SUPER + N", exec("qs ipc --path " .. shell_quote(quickshell_dir .. "/shell.qml")
     .. " call tsugumoriShell toggleNotes"))
 hl.bind("SUPER + C", exec("qs ipc --path " .. shell_quote(quickshell_dir .. "/shell.qml")
