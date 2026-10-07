@@ -11,6 +11,7 @@ import unittest
 
 REPO_ROOT = Path(__file__).parents[3]
 SET_WALLPAPER = REPO_ROOT / "config/quickshell/setwallpaper.sh"
+PICKER_LAUNCHER = REPO_ROOT / "config/quickshell/wallpaper.sh"
 PICKER_QML = REPO_ROOT / "config/quickshell/widgets/WallpaperPicker.qml"
 QML_TEST_RUNNER = "/usr/lib/qt6/bin/qmltestrunner"
 
@@ -126,6 +127,42 @@ TestCase {
                                      "QT_QUICK_BACKEND": "software"},
                                 capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+class PickerLauncherTests(unittest.TestCase):
+    def test_wallpaper_script_execs_qs_with_no_duplicate(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="tsugumori-picker-test-") as temp:
+            root = Path(temp)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            capture = root / "qs-argv.json"
+            (bin_dir / "qs").write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, os, pathlib, sys\n"
+                "pathlib.Path(os.environ['QS_CAPTURE']).write_text("
+                "json.dumps(sys.argv[1:]), encoding='utf-8')\n",
+                encoding="utf-8")
+            (bin_dir / "qs").chmod(0o755)
+            # pgrep must not gate the picker; --no-duplicate replaces it.
+            (bin_dir / "pgrep").write_text(
+                "#!/bin/sh\nprintf 'pgrep was called\\n' >&2\nexit 99\n",
+                encoding="utf-8")
+            (bin_dir / "pgrep").chmod(0o755)
+            config_home = root / "config"
+            env = {**os.environ,
+                   "PATH": str(bin_dir) + os.pathsep + os.environ["PATH"],
+                   "QS_CAPTURE": str(capture),
+                   "XDG_CONFIG_HOME": str(config_home),
+                   "HOME": str(root / "home")}
+            result = subprocess.run(
+                ["bash", str(PICKER_LAUNCHER)], env=env,
+                capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stderr, "")
+            self.assertEqual(
+                json.loads(capture.read_text(encoding="utf-8")),
+                ["--no-duplicate", "--path",
+                 str(config_home / "quickshell/widgets/WallpaperPicker.qml")])
 
 
 if __name__ == "__main__":

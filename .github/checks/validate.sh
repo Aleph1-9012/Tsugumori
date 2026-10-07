@@ -303,7 +303,7 @@ else
 fi
 
 if [[ -x /usr/lib/qt6/bin/qmltestrunner ]]; then
-    for suite in lockscreen wallpaper wifi; do
+    for suite in lockscreen notifications wallpaper wifi; do
         QML_XHR_ALLOW_FILE_READ=1 QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software QT_SCALE_FACTOR=1.25 \
             /usr/lib/qt6/bin/qmltestrunner -input ".github/checks/qmltests/$suite" -o -,txt
     done
