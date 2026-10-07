@@ -50,27 +50,6 @@ ShellRoot {
                   {key:"dnd",       label:"Do Not Disturb"} ]
     })
 
-    readonly property var details: ({
-        "top.wifi":         {h3:"Wi-Fi",               status:"—",    on:false,
-                              actions:[{key:"toggle",label:"Toggle Wi-Fi"}]},
-        "top.bluetooth":    {h3:"Bluetooth",           status:"—",    on:false,
-                              actions:[{key:"toggle",label:"Toggle Bluetooth"}]},
-        "bottom.output":    {h3:"Audio Output",        status:"—",    on:false,
-                              actions:[{key:"placeholder",label:"Sub-menu coming"}]},
-        "bottom.volume":    {h3:"Volume",              status:"—",    on:false,
-                              actions:[{key:"placeholder",label:"Sub-menu coming"}]},
-        "bottom.brightness":{h3:"Brightness",          status:"—",    on:false,
-                              actions:[]},
-        "left.send":        {h3:"Send Files",          status:"Ready", on:false,
-                              actions:[{key:"placeholder",label:"Sub-menu coming"}]},
-        "left.receive":     {h3:"Receive Files",       status:"—",    on:false,
-                              actions:[{key:"placeholder",label:"Sub-menu coming"}]},
-        "right.history":    {h3:"Notification History",status:"—",    on:false,
-                              actions:[{key:"placeholder",label:"Sub-menu coming"}]},
-        "right.dnd":        {h3:"Do Not Disturb",      status:"—",    on:false,
-                              actions:[{key:"placeholder",label:"Sub-menu coming"}]}
-    })
-
     function detailKey() { return slot + "." + sub }
     function subList(s)  { return root.subs[s] || [] }
 
@@ -198,12 +177,8 @@ ShellRoot {
                     label: n2.summary || "(empty)",
                     body: n2.body || "",
                     app: n2.app || "",
-                    appIcon: n2.appIcon || "",
                     category: n2.category || "",
                     urgency: n2.urgency || "normal",
-                    timeout: n2.timeout >= 0 ? n2.timeout : -1,
-                    desktopEntry: n2.desktopEntry || "",
-                    actions: n2.actions || [],
                     notifId: n2.id
                 })
             }
@@ -213,9 +188,7 @@ ShellRoot {
         if (key === "right.dnd") {
             return [{key:"toggle-dnd", label: dndEnabled ? "Disable do not disturb" : "Enable do not disturb", primary:true}]
         }
-        // Other slots: static actions from the details dictionary.
-        var dd = root.details[key]
-        return dd ? dd.actions : []
+        return []
     }
 
     function detailH3() {
@@ -230,8 +203,7 @@ ShellRoot {
         if (key === "left.receive")      return "Receive Files"
         if (key === "right.history")     return "Notifications"
         if (key === "right.dnd")         return "Do Not Disturb"
-        var d = root.details[key]
-        return d ? d.h3 : ""
+        return ""
     }
     function detailStatus() {
         var key = detailKey()
@@ -283,8 +255,7 @@ ShellRoot {
         if (key === "right.dnd") {
             return dndEnabled ? "Active" : "Off"
         }
-        var d2 = root.details[key]
-        return d2 ? d2.status : ""
+        return ""
     }
     function detailOn() {
         var key = detailKey()
@@ -298,8 +269,7 @@ ShellRoot {
         if (key === "left.receive")      return qshareUrl !== ""
         if (key === "right.history")     return notifications.length > 0
         if (key === "right.dnd")         return dndEnabled
-        var d3 = root.details[key]
-        return d3 ? d3.on : false
+        return false
     }
     // ── Desktop GPU preference (applied by UWSM at the next login) ──
     property var gpuStatus: ({ gpus: [], saved: "auto", session: "auto", active: null, supported: false })

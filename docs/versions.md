@@ -67,8 +67,23 @@ did not redeploy the desktop or repeat the August clean-install VM exercise.
 The follow-up test cleanup removed three brittle UI/source-text tests and one
 Qt case that only rechecked its own fixture. It also trimmed historical
 assertions and focused the upload-page and wallpaper-command checks on token
-wiring and literal arguments. The suite now contains 101 Python test methods and 33 standalone Qt
-cases. Qt case counts exclude setup and cleanup entries.
+wiring and literal arguments. That cleanup left 101 Python test methods and
+33 standalone Qt cases. Qt case counts exclude setup and cleanup entries.
+
+## Validation for v1.1.0
+
+The release validation passed 138 Python tests and 40 standalone Qt behavior
+cases. One shader-render case was skipped because the offscreen software
+backend cannot run it; shader source compilation and bundled shader checks
+passed separately. Qt counts exclude setup and cleanup entries.
+
+Bash, Fish, Lua, and Python syntax checks, Hyprland configuration verification,
+and QML lint/import checks across 31 files passed. ShellCheck was unavailable
+in the local environment; the Arch GitHub Actions job requires it.
+
+The cleanup removed obsolete Control Center placeholder data, notification
+row fields with no consumers, unused imports, and the empty Hyprpaper config.
+The desktop appearance and supported IPC commands remain unchanged.
 
 ## How to install pinned versions
 
