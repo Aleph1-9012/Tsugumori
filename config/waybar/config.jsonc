@@ -12,6 +12,7 @@
     "custom/sidonia"
   ],
   "modules-right": [
+    "custom/kb-layout",
     "cpu",
     "memory",
     "network",
@@ -29,6 +30,13 @@
   "hyprland/window": {
     "format": "<span foreground='#cc1515'>//</span> {title}",
     "max-length": 32
+  },
+
+  "custom/kb-layout": {
+    "exec": "${XDG_CONFIG_HOME:-$HOME/.config}/waybar/scripts/kb-layout.py",
+    "return-type": "json",
+    "restart-interval": 5,
+    "on-click": "hyprctl switchxkblayout all next"
   },
 
   "cpu": {

@@ -66,6 +66,7 @@ window#waybar {
 }
 
 /* Two opposing L corners per reading, not a background grid. */
+#custom-kb-layout,
 #cpu,
 #memory,
 #network,
