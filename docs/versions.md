@@ -85,6 +85,17 @@ The cleanup removed obsolete Control Center placeholder data, notification
 row fields with no consumers, unused imports, and the empty Hyprpaper config.
 The desktop appearance and supported IPC commands remain unchanged.
 
+## Validation for v1.2.0
+
+The artwork regression check passed landscape and portrait SVGs and a small
+336-by-188 PNG thumbnail at 125% display scaling. The PNG reproduces the
+out-of-bounds crop that previously left browser artwork showing a generated
+pattern. The corrected sampler keeps the centred crop and image size limits.
+
+Higher opacity for darker glyphs was checked with a rendered before-and-after
+comparison. QML lint reported no errors for the artwork component. The full
+repository validation remains required in the Arch GitHub Actions job.
+
 ## How to install pinned versions
 
 Pinned manifests are not currently committed to this branch, so `--pinned`

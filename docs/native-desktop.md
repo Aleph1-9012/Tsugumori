@@ -36,6 +36,9 @@ Kitty through a private launcher adapter.
 Kitty windows share a process. The player limits artwork decoding, releases its
 artwork component after closing, and scans local music when the track drawer
 opens. These changes reduce background work without changing the layout.
+Small browser thumbnails retain the same centred crop as larger artwork.
+Darker glyphs have higher opacity so artwork is easier to see before hovering;
+the hover colour reveal keeps the artwork's colours.
 Media state, MPRIS integration, and local mpv playback live in
 `config/quickshell/services/PlayerService.qml`; `shell.qml` owns the windows
 and visibility controls. This separation keeps the existing player visuals.

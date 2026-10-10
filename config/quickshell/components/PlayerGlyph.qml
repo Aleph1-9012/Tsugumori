@@ -72,7 +72,7 @@ Item {
             var gy = raw[Math.min(31, row + 1) * 32 + col] - raw[Math.max(0, row - 1) * 32 + col]
             if (tone > 0.16 && tone < 0.55 && Math.sqrt(gx * gx + gy * gy) > 0.23)
                 glyph = Math.abs(gx) > Math.abs(gy) * 1.8 ? "|" : Math.abs(gy) > Math.abs(gx) * 1.8 ? "=" : gx * gy > 0 ? "\\" : "/"
-            result.push({ glyph: glyph, alpha: 0.24 + 0.76 * Math.sqrt(tone), red: red[index],
+            result.push({ glyph: glyph, alpha: 0.60 + 0.40 * Math.sqrt(tone), red: red[index],
                           rgb: colours ? hoverColour(colours[index]) : null,
                           noise: ((Math.imul(index + 1, 2654435761) ^ seed) >>> 0) / 4294967296 })
         }
@@ -306,8 +306,11 @@ Item {
             var sw = cover.implicitWidth, sh = cover.implicitHeight
             if (sw <= 0 || sh <= 0) return
             var side = Math.min(sw, sh)
+            var drawWidth = sw * 128 / side, drawHeight = sh * 128 / side
             ctx.reset(); ctx.clearRect(0, 0, 128, 128)
-            ctx.drawImage(sampleUrl, (sw - side) / 2, (sh - side) / 2, side, side, 0, 0, 128, 128)
+            // Image can upscale a small raster while Canvas keeps its native size.
+            // Draw the whole image and let the canvas clip the centred crop.
+            ctx.drawImage(sampleUrl, (128 - drawWidth) / 2, (128 - drawHeight) / 2, drawWidth, drawHeight)
             var pixels = ctx.getImageData(0, 0, 128, 128).data, raw = [], red = [], colours = []
             for (var row = 0; row < 32; ++row) for (var col = 0; col < 32; ++col) {
                 var r = 0, g = 0, b = 0

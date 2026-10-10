@@ -17,12 +17,13 @@ Item {
 
         function test_bounded_decode_preserves_centre_crop_data() {
             return [
-                {tag: "landscape", width: 256, height: 128},
-                {tag: "portrait", width: 128, height: 256}
+                {tag: "landscape", file: "landscape.svg", width: 256, height: 128},
+                {tag: "portrait", file: "portrait.svg", width: 128, height: 256},
+                {tag: "browser-thumbnail", file: "browser-thumbnail.png", width: 336, height: 188}
             ]
         }
         function test_bounded_decode_preserves_centre_crop(data) {
-            glyph.artworkUrl = Qt.resolvedUrl("fixtures/" + data.tag + ".svg")
+            glyph.artworkUrl = Qt.resolvedUrl("fixtures/" + data.file)
             glyph.mediaKey = data.tag
             var cover = findChild(glyph, "decodedCover")
             var sampler = findChild(glyph, "artworkSampler")
@@ -33,7 +34,8 @@ Item {
             // Qt may rasterize vector artwork at an integer HiDPI scale.
             verify(cover.implicitWidth <= data.width * 2)
             verify(cover.implicitHeight <= data.height * 2)
-            compare(cover.implicitWidth / cover.implicitHeight, data.width / data.height)
+            // Raster decoding rounds scaled dimensions to whole pixels.
+            verify(Math.abs(cover.implicitWidth / cover.implicitHeight - data.width / data.height) < 0.01)
             // The blue margins must be cropped, not stretched into the glyphs.
             for (var i = 0; i < glyph.cells.length; ++i) {
                 verify(glyph.cells[i].rgb.r > 0.95)
