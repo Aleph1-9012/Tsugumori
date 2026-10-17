@@ -18,7 +18,6 @@ FocusScope {
     property bool hiding: false
     property bool powerBusy: false
     property string powerError: ""
-    property string powerConfirmation: ""
     readonly property bool controlsReady: inputReady && !pending && !hiding && !powerBusy
     property date now: new Date()
     signal passwordEdited(string value)
@@ -49,23 +48,7 @@ FocusScope {
     focus: true
 
     function focusPassword() {
-        if (controlsReady && powerConfirmation === "") passwordInput.forceActiveFocus();
-    }
-    function choosePower(action) {
-        if (!controlsReady || (action !== "reboot" && action !== "poweroff")) return;
-        if (powerConfirmation === action) {
-            powerConfirmation = "";
-            powerRequested(action);
-        } else if (powerConfirmation !== "") {
-            powerConfirmation = "";
-            focusPassword();
-        } else {
-            powerConfirmation = action;
-        }
-    }
-    function cancelPower() {
-        powerConfirmation = "";
-        focusPassword();
+        if (controlsReady) passwordInput.forceActiveFocus();
     }
     function useCpuFallback(description) {
         if (shaderFailed) return;
@@ -81,13 +64,9 @@ FocusScope {
         glyphAnimation.start();
     }
     onGlyphLengthChanged: animateGlyph()
-    onControlsReadyChanged: {
-        if (!controlsReady) powerConfirmation = "";
-        focusPassword();
-    }
+    onControlsReadyChanged: focusPassword()
     Keys.onEscapePressed: event => {
-        if (powerConfirmation !== "") cancelPower();
-        else cleared();
+        cleared();
         event.accepted = true;
     }
     Component.onCompleted: { glyphPhase = Math.min(64, glyphLength); focusPassword(); }
@@ -103,7 +82,7 @@ FocusScope {
         property int attempts: 0
         interval: 50
         repeat: true
-        running: view.controlsReady && view.powerConfirmation === "" && attempts < 8
+        running: view.controlsReady && attempts < 8
         onTriggered: { attempts++; view.focusPassword(); }
     }
 
@@ -384,10 +363,9 @@ FocusScope {
                         Accessible.name: "Password"
                         Accessible.role: Accessible.EditableText
                         onTextEdited: view.passwordEdited(text)
-                        onAccepted: if (enabled) { view.cancelPower(); view.submitted(); }
+                        onAccepted: if (enabled) view.submitted();
                         Keys.onEscapePressed: event => {
-                            if (view.powerConfirmation !== "") view.cancelPower();
-                            else view.cleared();
+                            view.cleared();
                             event.accepted = true;
                         }
                     }
@@ -412,7 +390,7 @@ FocusScope {
                             font { family: view.mono; pixelSize: 20 }
                             renderType: Text.CurveRendering
                         }
-                        onClicked: { view.cancelPower(); view.submitted(); }
+                        onClicked: view.submitted()
                     }
                 }
                 Text {
@@ -442,20 +420,16 @@ FocusScope {
                         PowerButton {
                             objectName: "restartButton"
                             width: (parent.width - parent.spacing) / 2; height: parent.height
-                            text: view.powerConfirmation === "reboot" ? "RESTART?"
-                                : view.powerConfirmation !== "" ? "CANCEL" : "RESTART"
-                            Accessible.name: view.powerConfirmation === "reboot" ? "Confirm restart"
-                                : view.powerConfirmation !== "" ? "Cancel shutdown" : "Restart"
-                            onClicked: view.choosePower("reboot")
+                            text: "RESTART"
+                            Accessible.name: "Restart"
+                            onClicked: view.powerRequested("reboot")
                         }
                         PowerButton {
                             objectName: "shutdownButton"
                             width: (parent.width - parent.spacing) / 2; height: parent.height
-                            text: view.powerConfirmation === "poweroff" ? "SHUT DOWN?"
-                                : view.powerConfirmation !== "" ? "CANCEL" : "SHUT DOWN"
-                            Accessible.name: view.powerConfirmation === "poweroff" ? "Confirm shutdown"
-                                : view.powerConfirmation !== "" ? "Cancel restart" : "Shut down"
-                            onClicked: view.choosePower("poweroff")
+                            text: "SHUT DOWN"
+                            Accessible.name: "Shut down"
+                            onClicked: view.powerRequested("poweroff")
                         }
                     }
                 }

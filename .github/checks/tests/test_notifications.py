@@ -11,7 +11,6 @@ import unittest
 REPO_ROOT = Path(__file__).parents[3]
 QUICKSHELL = REPO_ROOT / "config/quickshell"
 NOTIFICATIONS_QML = QUICKSHELL / "widgets/Notifications.qml"
-MENU_QML = QUICKSHELL / "widgets/Menu.qml"
 CONTROLCENTER_QML = QUICKSHELL / "widgets/ControlCenter.qml"
 QML_TEST_RUNNER = "/usr/lib/qt6/bin/qmltestrunner"
 
@@ -306,65 +305,6 @@ class NotificationStaticTests(unittest.TestCase):
             if re.search(r"text:\s*[^\n]*\b(notif\.notification|modelData)\b", block):
                 self.assertIn("textFormat", block,
                               "Text block without textFormat: " + block[:120])
-
-
-MENU_CHOOSE_POWER = extract_functions(
-    MENU_QML.read_text(encoding="utf-8"), "choosePower")
-
-
-@unittest.skipUnless(Path(QML_TEST_RUNNER).is_file(),
-                     "qmltestrunner is not installed")
-class MenuPowerTests(unittest.TestCase):
-    def run_case(self, tests: str) -> str:
-        body = """import QtQuick
-import QtTest
-TestCase {
-    id: root
-    name: "MenuPower"
-    property string powerConfirmation: ""
-    property var launches: []
-    function launch(cmd) { launches.push(cmd) }
-""" + MENU_CHOOSE_POWER + tests + """
-}
-"""
-        result = run_qml_case(body, "MenuPower")
-        output = result.stdout + result.stderr
-        self.assertEqual(result.returncode, 0, output)
-        return output
-
-    def test_two_press_poweroff(self) -> None:
-        self.run_case("""
-    function test_poweroff() {
-        choosePower("poweroff")
-        compare(powerConfirmation, "poweroff")
-        compare(launches, [])
-        choosePower("poweroff")
-        compare(powerConfirmation, "")
-        compare(launches, ["systemctl poweroff"])
-    }
-""")
-
-    def test_two_press_reboot(self) -> None:
-        self.run_case("""
-    function test_reboot() {
-        choosePower("reboot"); choosePower("reboot")
-        compare(launches, ["systemctl reboot"])
-    }
-""")
-
-    def test_other_button_cancels(self) -> None:
-        self.run_case("""
-    function test_cancel() {
-        choosePower("poweroff")
-        choosePower("reboot")
-        compare(powerConfirmation, "")
-        compare(launches, [])
-        choosePower("poweroff")
-        compare(launches, [])
-        choosePower("logout")
-        compare(powerConfirmation, "poweroff")
-    }
-""")
 
 
 AUDIO_PARSER = extract_functions(

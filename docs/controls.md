@@ -152,13 +152,10 @@ if it is missing.
 
 ## Lock screen power controls
 
-The bottom-right RESTART and SHUT DOWN buttons require a second press to
-confirm. Choose CANCEL or press Escape to cancel. A failed power request leaves
-the session locked and allows another password attempt. System permissions
-determine whether shutdown or restart is available.
+The bottom-right RESTART and SHUT DOWN buttons act on a single press. A failed
+power request leaves the session locked and allows another password attempt.
+System permissions determine whether shutdown or restart is available.
 
 ## App menu power controls
 
-The app menu's SHUTDOWN and RESTART buttons also need a second press to
-confirm. The other button becomes CANCEL while one is armed, and closing the
-menu cancels the armed action.
+The app menu's SHUTDOWN and RESTART buttons also act on a single press.

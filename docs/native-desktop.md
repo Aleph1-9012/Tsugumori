@@ -65,8 +65,8 @@ usable by anyone who has it while the transfer session is active.
 The lock replaces the old video wave with native Phase drawing. It has the K
 glyph's stronger red typing response, a panel scaled to 132.25% of its original
 size with a small-screen fit guard, and four animated corners. The username, clock, date, and password field use the approved layout.
-Compact restart and shutdown buttons sit at the panel's bottom right and require
-confirmation. Power requests do not release the compositor lock.
+Compact restart and shutdown buttons sit at the panel's bottom right and act on
+a single press. Power requests do not release the compositor lock.
 Opening takes 1450 ms and closing takes 950 ms. The animation targets 60 fps;
 offscreen tests do not measure frame rate on a real GPU.
 

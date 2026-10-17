@@ -18,7 +18,6 @@ Item {
     property string searchQuery: ""
     property int    focusIdx:   -1
     property string clockStr:   "--:--:--"
-    property string powerConfirmation: ""
 
     implicitWidth:  screenW
     implicitHeight: screenH
@@ -145,19 +144,6 @@ Item {
         launchProc.command = ["python3", Quickshell.shellPath("scripts/launch_desktop.py"), desktopFile]
         launchProc.running = true
         root.closeMenu()
-    }
-
-    // Two-press confirmation for session power actions.
-    function choosePower(action) {
-        if (action !== "poweroff" && action !== "reboot") return
-        if (powerConfirmation === action) {
-            powerConfirmation = ""
-            launch("systemctl " + action)
-        } else if (powerConfirmation !== "") {
-            powerConfirmation = ""
-        } else {
-            powerConfirmation = action
-        }
     }
 
     // Launch a direct command (footer).
@@ -715,20 +701,16 @@ Item {
                         onClicked: root.launch("${XDG_CONFIG_HOME:-$HOME/.config}/quickshell/lock.sh")
                     }
                     MenuFooterButton {
-                        text: root.powerConfirmation === "poweroff" ? "SHUT DOWN?"
-                            : root.powerConfirmation !== "" ? "CANCEL" : "SHUTDOWN"
-                        Accessible.name: root.powerConfirmation === "poweroff" ? "Confirm shutdown"
-                            : root.powerConfirmation !== "" ? "Cancel restart" : "Shut down"
+                        text: "SHUTDOWN"
+                        Accessible.name: "Shut down"
                         reducedMotion: footer.reducedMotion
-                        onClicked: root.choosePower("poweroff")
+                        onClicked: root.launch("systemctl poweroff")
                     }
                     MenuFooterButton {
-                        text: root.powerConfirmation === "reboot" ? "RESTART?"
-                            : root.powerConfirmation !== "" ? "CANCEL" : "RESTART"
-                        Accessible.name: root.powerConfirmation === "reboot" ? "Confirm restart"
-                            : root.powerConfirmation !== "" ? "Cancel shutdown" : "Restart"
+                        text: "RESTART"
+                        Accessible.name: "Restart"
                         reducedMotion: footer.reducedMotion
-                        onClicked: root.choosePower("reboot")
+                        onClicked: root.launch("systemctl reboot")
                     }
                 }
             }
@@ -805,7 +787,6 @@ Item {
         searchQuery = ""
         focusIdx    = -1
         currentCat  = "all"
-        powerConfirmation = ""
         // Sync TextInput text with the empty property.
         searchInput.text = ""
         if (!desktopReader.running) desktopReader.running = true
@@ -816,7 +797,6 @@ Item {
     function closeMenu() {
         if (!menuOpen) return
         menuOpen         = false
-        powerConfirmation = ""
         wipeHideRunning  = true
         wipeReveal.stop()
         wipeHide.start()
