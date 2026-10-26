@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import "../components"
 import "../theme"
+import "../services"
 
 Item {
     id: root
@@ -46,8 +47,14 @@ Item {
                                            ? menuMediumFont.name : root.listFont
 
     // Apps
-    property var  apps: []
-    property bool appsLoaded: false
+    readonly property var apps: catalogRows(AppCatalog.entries)
+    readonly property bool appsLoaded: AppCatalog.loaded
+
+    onMenuOpenChanged: {
+        if (menuOpen) AppCatalog.open()
+        else AppCatalog.close()
+    }
+    Component.onDestruction: if (menuOpen) AppCatalog.close()
 
     readonly property var catLabels: ({
         "all":"ALL","dev":"DEVELOP","sys":"SYSTEM","net":"NETWORK",
@@ -72,66 +79,51 @@ Item {
         })
     }
 
-    // ── Read .desktop entries ──
-    Process {
-        id: desktopReader
-        command: ["bash", Qt.resolvedUrl("../list-apps.sh").toString().replace("file://","")]
-        running: false
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var entries
-                try {
-                    entries = JSON.parse(this.text)
-                } catch (error) {
-                    return
-                }
+    // Convert the shared catalog only when its entries change.
+    function catalogRows(entries) {
+        var result = []
+        for (var i = 0; i < entries.length; i++) {
+            var entry = entries[i]
+            var name = entry.name
+            var cats = entry.categories
 
-                var result = []
-                for (var i = 0; i < entries.length; i++) {
-                    var entry = entries[i]
-                    var name = entry.name
-                    var cats = entry.categories
+            var cat = "other"
+            if (/Development|IDE|TextEditor|Debugger/i.test(cats))          cat = "dev"
+            else if (/WebBrowser|Email|Chat|Network|FileTransfer/i.test(cats)) cat = "net"
+            else if (/Audio|Video|Player|Music/i.test(cats))                cat = "media"
+            else if (/Office|Spreadsheet|WordProcessor|Presentation/i.test(cats)) cat = "office"
+            else if (/Graphics|Photography|2DGraphics/i.test(cats))         cat = "graphics"
+            else if (/Game|Emulator/i.test(cats))                           cat = "games"
+            else if (/System|Utility|Monitor|Settings/i.test(cats))         cat = "sys"
 
-                    var cat = "other"
-                    if (/Development|IDE|TextEditor|Debugger/i.test(cats))          cat = "dev"
-                    else if (/WebBrowser|Email|Chat|Network|FileTransfer/i.test(cats)) cat = "net"
-                    else if (/Audio|Video|Player|Music/i.test(cats))                cat = "media"
-                    else if (/Office|Spreadsheet|WordProcessor|Presentation/i.test(cats)) cat = "office"
-                    else if (/Graphics|Photography|2DGraphics/i.test(cats))         cat = "graphics"
-                    else if (/Game|Emulator/i.test(cats))                           cat = "games"
-                    else if (/System|Utility|Monitor|Settings/i.test(cats))         cat = "sys"
+            var nl = name.toLowerCase()
+            var ico = "·"
+            if (/terminal|kitty|alacritty|console/.test(nl)) ico = "▸"
+            else if (/firefox|chromium|browser/.test(nl))     ico = "○"
+            else if (/nvim|vim|editor|code|helix/.test(nl))   ico = "⌥"
+            else if (/file|yazi|ranger/.test(nl))             ico = "▤"
+            else if (/btop|htop|monitor/.test(nl))            ico = "▲"
+            else if (/music|audio|pulse/.test(nl))            ico = "♪"
+            else if (/video|mpv|vlc/.test(nl))                ico = "▶"
+            else if (/lock|hyprlock/.test(nl))                ico = "⬡"
+            else if (/libre|office|calc|writer/.test(nl))     ico = "≡"
+            else if (/gimp|inkscape|image/.test(nl))          ico = "⬜"
+            else if (cat === "dev")      ico = "⌥"
+            else if (cat === "net")      ico = "○"
+            else if (cat === "media")    ico = "▶"
+            else if (cat === "sys")      ico = "◈"
+            else if (cat === "office")   ico = "≡"
 
-                    var nl = name.toLowerCase()
-                    var ico = "·"
-                    if (/terminal|kitty|alacritty|console/.test(nl)) ico = "▸"
-                    else if (/firefox|chromium|browser/.test(nl))     ico = "○"
-                    else if (/nvim|vim|editor|code|helix/.test(nl))   ico = "⌥"
-                    else if (/file|yazi|ranger/.test(nl))             ico = "▤"
-                    else if (/btop|htop|monitor/.test(nl))            ico = "▲"
-                    else if (/music|audio|pulse/.test(nl))            ico = "♪"
-                    else if (/video|mpv|vlc/.test(nl))                ico = "▶"
-                    else if (/lock|hyprlock/.test(nl))                ico = "⬡"
-                    else if (/libre|office|calc|writer/.test(nl))     ico = "≡"
-                    else if (/gimp|inkscape|image/.test(nl))          ico = "⬜"
-                    else if (cat === "dev")      ico = "⌥"
-                    else if (cat === "net")      ico = "○"
-                    else if (cat === "media")    ico = "▶"
-                    else if (cat === "sys")      ico = "◈"
-                    else if (cat === "office")   ico = "≡"
-
-                    result.push({
-                        id:        String(i+1).padStart(2,"0"),
-                        name:      name,
-                        cat:       cat,
-                        meta:      entry.desktopId,
-                        desktopFile: entry.desktopFile,
-                        icon:      ico
-                    })
-                }
-                root.apps = result
-                root.appsLoaded = true
-            }
+            result.push({
+                id:        String(i+1).padStart(2,"0"),
+                name:      name,
+                cat:       cat,
+                meta:      entry.desktopId,
+                desktopFile: entry.desktopFile,
+                icon:      ico
+            })
         }
+        return result
     }
 
     Process {
@@ -789,7 +781,6 @@ Item {
         currentCat  = "all"
         // Sync TextInput text with the empty property.
         searchInput.text = ""
-        if (!desktopReader.running) desktopReader.running = true
         wipeHide.stop()
         wipeReveal.start()
     }

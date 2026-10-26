@@ -1,4 +1,4 @@
-"""Notification history, menu power confirmation, and audio parsing tests."""
+"""Notification history and menu power action tests."""
 from __future__ import annotations
 
 import os
@@ -305,89 +305,6 @@ class NotificationStaticTests(unittest.TestCase):
             if re.search(r"text:\s*[^\n]*\b(notif\.notification|modelData)\b", block):
                 self.assertIn("textFormat", block,
                               "Text block without textFormat: " + block[:120])
-
-
-AUDIO_PARSER = extract_functions(
-    CONTROLCENTER_QML.read_text(encoding="utf-8"), "parseAudioState")
-
-
-@unittest.skipUnless(Path(QML_TEST_RUNNER).is_file(),
-                     "qmltestrunner is not installed")
-class AudioParseTests(unittest.TestCase):
-    def run_case(self, tests: str) -> str:
-        body = """import QtQuick
-import QtTest
-TestCase {
-    id: root
-    name: "AudioParse"
-""" + AUDIO_PARSER + tests + """
-}
-"""
-        result = run_qml_case(body, "AudioParse")
-        output = result.stdout + result.stderr
-        self.assertEqual(result.returncode, 0, output)
-        return output
-
-    def test_normal_two_sink_output(self) -> None:
-        self.run_case("""
-    function test_normal() {
-        var state = parseAudioState(
-            "DEFAULT:sink-b\\n" +
-            '[{"name":"sink-a","description":"Speakers","mute":false,' +
-            ' "volume":{"front-left":{"value_percent":"40%"}}},' +
-            '{"name":"sink-b","description":"Headphones","mute":false,' +
-            ' "volume":{"front-left":{"value_percent":"66%"},"front-right":{"value_percent":"66%"}}}]')
-        compare(state.defaultSink, "sink-b")
-        compare(state.volume, 66)
-        compare(state.muted, false)
-        compare(state.sinks, [
-            {name: "sink-a", description: "Speakers", isDefault: false},
-            {name: "sink-b", description: "Headphones", isDefault: true}])
-    }
-""")
-
-    def test_muted_and_missing_description(self) -> None:
-        self.run_case("""
-    function test_muted() {
-        var state = parseAudioState(
-            "DEFAULT:sink-a\\n" +
-            '[{"name":"sink-a","mute":true,"volume":{"front-left":{"value_percent":"10%"}}}]')
-        compare(state.muted, true)
-        compare(state.sinks[0].description, "sink-a")
-    }
-""")
-
-    def test_null_channel_does_not_throw(self) -> None:
-        self.run_case("""
-    function test_null_channel() {
-        var state = parseAudioState(
-            "DEFAULT:sink-a\\n" +
-            '[{"name":"sink-a","mute":false,' +
-            ' "volume":{"front-left":null}}]')
-        compare(state.volume, -1)
-        compare(state.sinks.length, 1)
-    }
-""")
-
-    def test_empty_and_malformed_output(self) -> None:
-        self.run_case("""
-    function test_malformed() {
-        var empty = {defaultSink: "", volume: -1, muted: false, sinks: []}
-        compare(parseAudioState(""), empty)
-        compare(parseAudioState("DEFAULT:sink-a"), empty)
-        compare(parseAudioState("no header\\n[]"), empty)
-        compare(parseAudioState("DEFAULT:sink-a\\nnot json"), empty)
-        compare(parseAudioState("DEFAULT:sink-a\\n[]"),
-            {defaultSink: "sink-a", volume: -1, muted: false, sinks: []})
-    }
-""")
-
-
-class AudioStaticTests(unittest.TestCase):
-    def test_dispatch_uses_argv_not_a_shell_string(self) -> None:
-        source = CONTROLCENTER_QML.read_text(encoding="utf-8")
-        self.assertNotIn('cmd = "', source)
-        self.assertNotIn("set-default-sink '", source)
 
 
 if __name__ == "__main__":

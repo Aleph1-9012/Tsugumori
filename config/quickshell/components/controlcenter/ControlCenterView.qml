@@ -7,7 +7,9 @@ Item {
     required property var controller
     property real availableHeight: 800
     property bool reducedMotion: false
-    readonly property bool expanded: controller.level === 3 && controller.open && !controller.closing
+    property bool active: true
+    property bool refreshPending: false
+    readonly property bool expanded: active && controller.level === 3 && controller.open && !controller.closing
     readonly property bool compact: width < 660
     readonly property real cardWidth: compact ? Math.min(300, width - 64) : (width - 140) / 3
     readonly property real branchWidth: compact ? Math.min(376, width - 24) : Math.min(240, (width - 36) * 0.4)
@@ -21,7 +23,7 @@ Item {
     property string detailStatus: ""
     property bool detailOn: false
     property real expansion: expanded ? 1 : 0
-    property real spread: controller.open && !controller.closing ? 1 : 0
+    property real spread: active && controller.open && !controller.closing ? 1 : 0
     readonly property var slots: [
         {key:"top",number:"01",title:"Connection"},
         {key:"left",number:"02",title:"Quickshare"},
@@ -36,8 +38,19 @@ Item {
 
     Behavior on expansion { NumberAnimation { duration: view.reducedMotion ? 0 : 380; easing.type: Easing.InOutQuint } }
     Behavior on spread { NumberAnimation { duration: view.reducedMotion ? 0 : 250; easing.type: Easing.InCirc } }
-    onExpandedChanged: if (expanded) refresh()
+    onExpandedChanged: if (expanded) requestRefresh()
 
+    function requestRefresh(slot = "", sub = "") {
+        if (!active || !expanded || refreshPending) return
+        if (slot && controller.slot !== slot) return
+        if (sub && controller.sub !== sub) return
+        refreshPending = true
+        Qt.callLater(flushRefresh)
+    }
+    function flushRefresh() {
+        refreshPending = false
+        refresh()
+    }
     function selectSub(key) {
         controller.keyboardNavigation = false
         if (!expanded || controller.sub === key) return
@@ -53,7 +66,7 @@ Item {
         controller.action = controller.firstAction()
     }
     function refresh() {
-        if (!expanded) return
+        if (!active || !expanded) return
         displaySlot = controller.slot
         displaySub = controller.sub
         detailTitle = controller.detailH3().toUpperCase()
@@ -94,33 +107,33 @@ Item {
     }
     Connections {
         target: view.controller
-        function onLevelChanged() { view.refresh() }
-        function onSlotChanged() { view.refresh() }
-        function onSubChanged() { view.refresh(); detailScroll.contentY = 0 }
-        function onWifiNetworksChanged() { view.refresh() }
-        function onWifiEnabledChanged() { view.refresh() }
-        function onWifiCurrentSSIDChanged() { view.refresh() }
-        function onBtDevicesChanged() { view.refresh() }
-        function onBtEnabledChanged() { view.refresh() }
-        function onBtScanningChanged() { view.refresh() }
-        function onAudioSinksChanged() { view.refresh() }
-        function onAudioVolumeChanged() { view.refresh() }
-        function onAudioMutedChanged() { view.refresh() }
-        function onBrightnessLevelChanged() { view.refresh() }
-        function onBrightnessAvailableChanged() { view.refresh() }
-        function onGpuStatusChanged() { view.refresh() }
-        function onGpuActiveIdChanged() { view.refresh() }
-        function onGpuSelectionChanged() { view.refresh() }
-        function onGpuBusyChanged() { view.refresh() }
-        function onGpuFailedChanged() { view.refresh() }
-        function onGpuCanSaveChanged() { view.refresh() }
-        function onNotificationsChanged() { view.refresh() }
-        function onDndEnabledChanged() { view.refresh() }
-        function onPendingFilePathChanged() { view.refresh() }
-        function onQshareTunnelChanged() { view.refresh() }
-        function onQshareKeepAliveChanged() { view.refresh() }
-        function onQshareOutputDirChanged() { view.refresh() }
-        function onQshareUrlChanged() { view.refresh() }
+        function onLevelChanged() { view.requestRefresh() }
+        function onSlotChanged() { view.requestRefresh() }
+        function onSubChanged() { view.requestRefresh(); detailScroll.contentY = 0 }
+        function onWifiNetworksChanged() { view.requestRefresh("top", "wifi") }
+        function onWifiEnabledChanged() { view.requestRefresh("top", "wifi") }
+        function onWifiCurrentSSIDChanged() { view.requestRefresh("top", "wifi") }
+        function onBtDevicesChanged() { view.requestRefresh("top", "bluetooth") }
+        function onBtEnabledChanged() { view.requestRefresh("top", "bluetooth") }
+        function onBtScanningChanged() { view.requestRefresh("top", "bluetooth") }
+        function onAudioSinksChanged() { view.requestRefresh("bottom", "output") }
+        function onAudioVolumeChanged() { view.requestRefresh("bottom", "volume") }
+        function onAudioMutedChanged() { view.requestRefresh("bottom", "volume") }
+        function onBrightnessLevelChanged() { view.requestRefresh("bottom", "brightness") }
+        function onBrightnessAvailableChanged() { view.requestRefresh("bottom", "brightness") }
+        function onGpuStatusChanged() { view.requestRefresh("bottom", "gpu") }
+        function onGpuActiveIdChanged() { view.requestRefresh("bottom", "gpu") }
+        function onGpuSelectionChanged() { view.requestRefresh("bottom", "gpu") }
+        function onGpuBusyChanged() { view.requestRefresh("bottom", "gpu") }
+        function onGpuFailedChanged() { view.requestRefresh("bottom", "gpu") }
+        function onGpuCanSaveChanged() { view.requestRefresh("bottom", "gpu") }
+        function onNotificationsChanged() { view.requestRefresh("right", "history") }
+        function onDndEnabledChanged() { view.requestRefresh("right", "dnd") }
+        function onPendingFilePathChanged() { view.requestRefresh("left") }
+        function onQshareTunnelChanged() { view.requestRefresh("left") }
+        function onQshareKeepAliveChanged() { view.requestRefresh("left") }
+        function onQshareOutputDirChanged() { view.requestRefresh("left") }
+        function onQshareUrlChanged() { view.requestRefresh("left") }
     }
     ListModel { id: actionModel; dynamicRoles: true }
 

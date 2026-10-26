@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import select
 from pathlib import Path
 import subprocess
 import sys
@@ -52,12 +53,12 @@ class AppCatalogTests(unittest.TestCase):
         self.entry(self.system, "empty.desktop", "Name=Missing command\n")
         self.assertEqual([row["name"] for row in apps.list_apps([self.user, self.system])], ["Personal"])
 
-    def test_wrapper_uses_xdg_paths_and_nested_desktop_ids(self) -> None:
+    def test_scanner_uses_xdg_paths_and_nested_desktop_ids(self) -> None:
         self.entry(self.user, "tools/editor.desktop", "Name=Editor\nExec=/usr/bin/true --new\n")
         self.entry(self.system, "browser.desktop", "Name=Browser\nExec=/usr/bin/true %U\nCategories=Network;\n")
         env = {**os.environ, "XDG_DATA_HOME": str(self.user.parent),
                "XDG_DATA_DIRS": str(self.system.parent)}
-        result = subprocess.run(["bash", str(SHELL / "list-apps.sh")], env=env,
+        result = subprocess.run([sys.executable, str(SHELL / "scripts/list_apps.py")], env=env,
                                 capture_output=True, text=True, check=True)
         rows = json.loads(result.stdout)
         self.assertEqual([(row["name"], row["desktopId"]) for row in rows],
@@ -98,42 +99,53 @@ class AppCatalogTests(unittest.TestCase):
         self.entry(self.user, "second.desktop", "Hidden=true\n")
         self.assertEqual(apps.list_apps([self.user, self.system]), [])
 
-    @unittest.skipUnless(Path("/usr/lib/qt6/bin/qmltestrunner").exists(), "qmltestrunner is unavailable")
-    def test_menu_requests_catalog_again_on_reopen(self) -> None:
-        source = (SHELL / "widgets/Menu.qml").read_text()
-        method = source.split("    function openMenu() {", 1)[1].split("\n    function closeMenu", 1)[0]
-        qml = '''import QtQuick
-import QtTest
-TestCase {
-    id: root
-    name: "MenuCatalogRefresh"
-    property bool menuOpen: false
-    property bool appsLoaded: false
-    property string searchQuery: ""
-    property int focusIdx: -1
-    property string currentCat: "all"
-    QtObject { id: desktopReader; property bool running: false }
-    QtObject { id: searchInput; property string text: "" }
-    QtObject { id: wipeHide; function stop() {} }
-    QtObject { id: wipeReveal; function start() {} }
-    function openMenu() {__METHOD__
-    function test_reopen_refreshes_loaded_catalog() {
-        openMenu()
-        compare(desktopReader.running, true)
-        desktopReader.running = false
-        appsLoaded = true
-        menuOpen = false
-        openMenu()
-        compare(desktopReader.running, true)
-    }
-}
-'''.replace("__METHOD__", method)
-        path = self.root / "tst_MenuCatalog.qml"
-        path.write_text(qml)
-        result = subprocess.run(["/usr/lib/qt6/bin/qmltestrunner", "-input", str(path)],
-            env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "QT_QUICK_BACKEND": "software"},
-            capture_output=True, text=True, timeout=15)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+    def test_watcher_caches_until_install_remove_or_override_changes(self) -> None:
+        self.entry(self.system, "first.desktop", "Name=First\nExec=/usr/bin/true\n")
+        env = {**os.environ, "XDG_DATA_HOME": str(self.user.parent),
+               "XDG_DATA_DIRS": str(self.system.parent), "GIO_USE_VFS": "local"}
+        process = subprocess.Popen([sys.executable, str(SHELL / "scripts/list_apps.py"), "--watch"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, bufsize=0)
+
+        def receive(kind: str) -> dict:
+            deadline = time.monotonic() + 4
+            while time.monotonic() < deadline:
+                if select.select([process.stdout], [], [], max(0, deadline - time.monotonic()))[0]:
+                    line = process.stdout.readline()
+                    self.assertTrue(line, "Catalog worker exited before replying")
+                    message = json.loads(line)
+                    if message["type"] == kind:
+                        return message
+            self.fail("Catalog worker did not emit " + kind)
+
+        def refresh() -> list:
+            process.stdin.write(b"refresh\n")
+            process.stdin.flush()
+            return receive("entries")["entries"]
+
+        try:
+            self.assertEqual([row["name"] for row in refresh()], ["First"])
+            process.stdin.write(b"refresh\n")
+            process.stdin.flush()
+            self.assertFalse(select.select([process.stdout], [], [], 0.2)[0],
+                             "Unchanged catalog was emitted again")
+            self.entry(self.system, "second.desktop", "Name=Second\nExec=/usr/bin/true\n")
+            receive("changed")
+            self.assertFalse(select.select([process.stdout], [], [], 0.2)[0],
+                             "Hidden catalog was eagerly rebuilt")
+            self.assertEqual([row["name"] for row in refresh()], ["First", "Second"])
+            (self.system / "first.desktop").unlink()
+            self.entry(self.user, "second.desktop", "Hidden=true\n")
+            receive("changed")
+            self.assertEqual(refresh(), [])
+        finally:
+            process.stdin.close()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+            process.stdout.close()
+            process.stderr.close()
 
 
 class DesktopLaunchTests(unittest.TestCase):

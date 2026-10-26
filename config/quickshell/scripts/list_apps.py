@@ -6,11 +6,12 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import json
+import sys
 
 import gi
 
 gi.require_version("GioUnix", "2.0")
-from gi.repository import GioUnix
+from gi.repository import Gio, GioUnix, GLib
 
 
 def application_dirs() -> list[Path]:
@@ -44,5 +45,60 @@ def list_apps(directories: list[Path]) -> list[dict[str, str]]:
     return sorted(rows, key=lambda row: (row["name"], row["desktopId"]))
 
 
+class CatalogWatcher:
+    """Keep one catalog for the shell; invalidate it through GIO notifications."""
+
+    def __init__(self) -> None:
+        self.directories = application_dirs()
+        self.dirty = True
+        self.entries = None
+        self.pending = b""
+        self.loop = GLib.MainLoop()
+        self.monitor = Gio.AppInfoMonitor.get()
+        self.monitor.connect("changed", self.changed)
+
+    @staticmethod
+    def emit(message: dict) -> None:
+        print(json.dumps(message, ensure_ascii=True), flush=True)
+
+    def changed(self, _monitor) -> None:
+        if not self.dirty:
+            self.dirty = True
+            self.emit({"type": "changed"})
+
+    def refresh(self) -> None:
+        if not self.dirty:
+            return
+        self.dirty = False
+        # Re-arm GIO even when there are no desktop entries to read.
+        Gio.AppInfo.get_all()
+        entries = list_apps(self.directories)
+        if entries != self.entries:
+            self.entries = entries
+            self.emit({"type": "entries", "entries": entries})
+
+    def read_requests(self, _fd, condition) -> bool:
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            self.loop.quit()
+            return False
+        block = os.read(sys.stdin.fileno(), 4096)
+        if not block:
+            self.loop.quit()
+            return False
+        self.pending += block
+        while b"\n" in self.pending:
+            line, self.pending = self.pending.split(b"\n", 1)
+            if line == b"refresh":
+                self.refresh()
+        return True
+
+    def run(self) -> None:
+        GLib.io_add_watch(sys.stdin, GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, self.read_requests)
+        self.loop.run()
+
+
 if __name__ == "__main__":
-    print(json.dumps(list_apps(application_dirs()), ensure_ascii=True))
+    if sys.argv[1:] == ["--watch"]:
+        CatalogWatcher().run()
+    else:
+        print(json.dumps(list_apps(application_dirs()), ensure_ascii=True))

@@ -27,8 +27,10 @@ and animated footer buttons. IBM Plex Mono is bundled for the menu and Waybar.
 Share Tech Mono remains bundled as an optional font. Font licenses stay beside
 their respective font files.
 
-The menu refreshes application entries each time it opens and pauses its clock
-while closed. User desktop entries override system entries, including hidden apps.
+The menu shares a cached application catalog across monitors and pauses its clock
+while closed. A GIO monitor invalidates the catalog when application files change;
+it refreshes while the menu is open or on the next opening. User desktop entries
+override system entries, including hidden apps.
 GIO reads and launches desktop files, including their working directory,
 activation settings, and quoted arguments. Terminal applications open in
 Kitty through a private launcher adapter.
@@ -44,7 +46,10 @@ Media state, MPRIS integration, and local mpv playback live in
 and visibility controls. This separation keeps the existing player visuals.
 
 The B2 Control Center uses separate components, summary cards, remembered
-submenus, queued slider writes, and less background polling. Per-monitor
+submenus, and queued slider writes. Bluetooth status and audio controls use native
+Quickshell services instead of polling commands. Detail-list refreshes are batched
+and run only for the relevant view on the active monitor.
+Wi-Fi discovery still polls while the Control Center is open. Per-monitor
 brightness is software dimming. It does not change a panel's backlight or save
 backlight power. Runtime state remains outside the repository.
 

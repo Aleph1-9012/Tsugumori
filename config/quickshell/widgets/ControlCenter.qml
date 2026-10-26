@@ -2,6 +2,8 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import Quickshell.Bluetooth
+import Quickshell.Services.Pipewire
 import "../services"
 import "../components/controlcenter"
 
@@ -385,108 +387,69 @@ ShellRoot {
         onPasswordConsumed: root.wifiPasswordClearSerial += 1
     }
 
-    // ── System data: Bluetooth ──
-    property bool   btEnabled: false
-    property var    btDevices: []   // [{name, mac, connected, paired}]
-    property bool   btScanning: false
+    // Native service bindings update only when Bluetooth/PipeWire state changes.
+    readonly property var btAdapter: Bluetooth.defaultAdapter
+    readonly property bool btEnabled: btAdapter ? btAdapter.enabled : false
+    readonly property bool btScanning: btScanProc.running
+    readonly property var btDevices: bluetoothRows(btAdapter ? btAdapter.devices.values : [])
 
-    // ── System data: Audio ──
-    property var    audioSinks: []        // [{name, description, default}]
-    property string audioDefaultSink: ""
-    property real   audioVolume: 0.5      // 0.0 - 1.0
-    property bool   audioMuted: false
+    function bluetoothRows(devices) {
+        var rows = []
+        for (var i = 0; i < devices.length; ++i) {
+            var device = devices[i]
+            rows.push({mac: device.address, name: device.name || device.address,
+                connected: device.connected, paired: device.paired, trusted: device.trusted})
+        }
+        rows.sort(function(a, b) {
+            if (a.connected !== b.connected) return a.connected ? -1 : 1
+            if (a.paired !== b.paired) return a.paired ? -1 : 1
+            return a.name.localeCompare(b.name)
+        })
+        return rows
+    }
+
+    readonly property var defaultAudioNode: Pipewire.defaultAudioSink
+    readonly property bool audioReady: defaultAudioNode !== null && defaultAudioNode.ready && defaultAudioNode.audio !== null
+    readonly property string audioDefaultSink: defaultAudioNode ? defaultAudioNode.name : ""
+    readonly property bool audioMuted: audioReady ? defaultAudioNode.audio.muted : false
+    readonly property real audioVolume: pendingAudioPercent >= 0 ? pendingAudioPercent / 100
+        : audioReady ? defaultAudioNode.audio.volume : 0
+    readonly property var audioSinks: audioRows(Pipewire.nodes.values, audioDefaultSink)
     property int pendingAudioPercent: -1
 
-    Timer {
-        interval: 1500; running: root.open; repeat: true; triggeredOnStart: true
-        onTriggered: pollAudio.running = true
-    }
-    Process {
-        id: pollAudio
-        command: ["sh","-c",
-            "printf 'DEFAULT:%s\\n' \"$(pactl get-default-sink 2>/dev/null)\"; " +
-            "pactl --format=json list sinks 2>/dev/null"
-        ]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var state = root.parseAudioState(this.text)
-                root.audioDefaultSink = state.defaultSink
-                if (state.volume >= 0 && root.pendingAudioPercent < 0
-                        && !volumeWriteTimer.running && !setVolumeProc.running)
-                    root.audioVolume = state.volume / 100
-                root.audioMuted = state.muted
-                root.audioSinks = state.sinks
+    PwObjectTracker { objects: [root.defaultAudioNode] }
+
+    function audioRows(nodes, defaultName) {
+        var rows = []
+        for (var i = 0; i < nodes.length; ++i) {
+            var node = nodes[i]
+            if (node.isSink && !node.isStream && node.audio) {
+                rows.push({name: node.name, description: node.description || node.name,
+                    isDefault: node.name === defaultName})
             }
         }
+        return rows
     }
 
-    // Parse "DEFAULT:name" plus `pactl --format=json list sinks` output.
-    function parseAudioState(text) {
-        var empty = {defaultSink: "", volume: -1, muted: false, sinks: []}
-        if (!text) return empty
-        var newline = text.indexOf("\n")
-        if (newline < 0) return empty
-        var header = text.substring(0, newline)
-        if (header.indexOf("DEFAULT:") !== 0) return empty
-        var defaultSink = header.substring(8).trim()
-        var list
-        try {
-            list = JSON.parse(text.substring(newline + 1))
-        } catch (e) {
-            return empty
-        }
-        if (!Array.isArray(list)) return empty
-        var sinks = []
-        var volume = -1
-        var muted = false
-        for (var i = 0; i < list.length; i++) {
-            var sink = list[i]
-            if (!sink || !sink.name) continue
-            var name = String(sink.name)
-            var isDefault = name === defaultSink
-            sinks.push({
-                name: name,
-                description: sink.description ? String(sink.description) : name,
-                isDefault: isDefault
-            })
-            if (isDefault) {
-                muted = sink.mute === true
-                if (sink.volume) {
-                    for (var channel in sink.volume) {
-                        var level = sink.volume[channel]
-                        var percent = level ? parseInt(level.value_percent, 10) : NaN
-                        if (!isNaN(percent)) { volume = percent; break }
-                    }
-                }
-            }
-        }
-        return {defaultSink: defaultSink, volume: volume, muted: muted, sinks: sinks}
-    }
-
-    // Keep the last slider value even while a previous write is still running.
     function setAudioPercent(value) {
-        var percent = Math.max(0, Math.min(100, Math.round(value)))
-        audioVolume = percent / 100
-        pendingAudioPercent = percent
+        if (!audioReady || !Number.isFinite(value)) return
+        pendingAudioPercent = Math.max(0, Math.min(100, Math.round(value)))
         if (!volumeWriteTimer.running) volumeWriteTimer.start()
     }
+
     function flushVolume() {
-        if (setVolumeProc.running || pendingAudioPercent < 0) return
+        if (pendingAudioPercent < 0) return
         var percent = pendingAudioPercent
+        if (audioReady) defaultAudioNode.audio.volume = percent / 100
         pendingAudioPercent = -1
-        setVolumeProc.command = ["pactl", "set-sink-volume", "@DEFAULT_SINK@", percent + "%"]
-        setVolumeProc.running = true
     }
+
+    onDefaultAudioNodeChanged: {
+        pendingAudioPercent = -1
+        volumeWriteTimer.stop()
+    }
+
     Timer { id: volumeWriteTimer; interval: 60; onTriggered: root.flushVolume() }
-    Process {
-        id: setVolumeProc
-        running: false
-        onExited: exitCode => {
-            if (exitCode !== 0) console.warn("ControlCenter: volume update failed")
-            if (root.pendingAudioPercent >= 0) root.flushVolume()
-            else pollAudio.running = true
-        }
-    }
 
     // ── System data: Display brightness ──
     property real   brightnessLevel: 1.0
@@ -813,76 +776,11 @@ ShellRoot {
         }
     }
 
-    Timer {
-        interval: 3000; running: root.open; repeat: true; triggeredOnStart: true
-        onTriggered: pollBt.running = true
-    }
-    Process {
-        id: pollBt
-        // Fetch powered state and all devices (paired and discovered),
-        // including connected and paired state for differentiation.
-        command: ["sh","-c",
-            "echo \"$(bluetoothctl show 2>/dev/null | grep -i 'powered:' | awk '{print $2}')\"; " +
-            "bluetoothctl devices 2>/dev/null | while read line; do " +
-            "  mac=$(echo \"$line\" | awk '{print $2}'); " +
-            "  name=$(echo \"$line\" | cut -d' ' -f3-); " +
-            "  info=$(bluetoothctl info \"$mac\" 2>/dev/null); " +
-            "  conn=$(echo \"$info\" | grep -i 'Connected:' | awk '{print $2}'); " +
-            "  paired=$(echo \"$info\" | grep -i 'Paired:' | awk '{print $2}'); " +
-            "  trusted=$(echo \"$info\" | grep -i 'Trusted:' | awk '{print $2}'); " +
-            "  echo \"$mac|$name|$conn|$paired|$trusted\"; " +
-            "done"
-        ]
-        stdout: StdioCollector {
-            onStreamFinished: {
-                var lines = this.text.trim().split("\n")
-                root.btEnabled = (lines[0] || "").trim() === "yes"
-                var seen = ({})
-                for (var i = 1; i < lines.length; i++) {
-                    var parts = lines[i].split("|")
-                    if (parts.length < 4) continue
-                    var mac = parts[0]
-                    if (!mac || seen[mac]) continue
-                    seen[mac] = {
-                        mac: mac,
-                        name: parts[1] || mac,
-                        connected: (parts[2] || "").trim() === "yes",
-                        paired:    (parts[3] || "").trim() === "yes",
-                        trusted:   (parts[4] || "").trim() === "yes"
-                    }
-                }
-                var devices = []
-                for (var k in seen) devices.push(seen[k])
-                // Sort: connected > paired > non-paired (discovered), then name.
-                devices.sort(function(a,b){
-                    if (a.connected !== b.connected) return a.connected ? -1 : 1
-                    if (a.paired    !== b.paired)    return a.paired ? -1 : 1
-                    return a.name.localeCompare(b.name)
-                })
-                root.btDevices = devices
-            }
-        }
-    }
-
-    // Process for Bluetooth scanning.
+    // This client owns only its requested discovery session and exits after 30s.
     Process {
         id: btScanProc
-        command: ["sh","-c","bluetoothctl --timeout 30 scan on"]
+        command: ["bluetoothctl", "--timeout", "30", "scan", "on"]
         running: false
-    }
-    // Stop the automatic scan after 30s.
-    Timer {
-        id: btScanStopTimer
-        interval: 30000
-        repeat: false
-        onTriggered: { root.btScanning = false }
-    }
-    // Poll more frequently while scanning.
-    Timer {
-        interval: 1500
-        running: root.btScanning && root.open
-        repeat: true
-        onTriggered: pollBt.running = true
     }
 
     // ── Process for executing actions ──
@@ -891,9 +789,8 @@ ShellRoot {
     // Refresh state when changing slots.
     onSlotChanged: {
         cancelWifiPrompt()
-        if (slot === "top")    { wifiService.refresh(); pollBt.running = true }
+        if (slot === "top") wifiService.refresh()
         if (slot === "bottom") {
-            pollAudio.running = true
             root.loadBrightness()
         }
     }
@@ -986,14 +883,7 @@ ShellRoot {
             if (actionKey === "toggle") {
                 cmd = ["bluetoothctl", "power", btEnabled ? "off" : "on"]
             } else if (actionKey === "scan") {
-                btScanning = !btScanning
-                if (btScanning) {
-                    btScanProc.running = true
-                    btScanStopTimer.restart()
-                } else {
-                    actProc.command = ["bluetoothctl", "--timeout", "1", "scan", "off"]
-                    actProc.running = true
-                }
+                btScanProc.running = !btScanProc.running
                 return
             } else if (actionKey.indexOf("connect:") === 0) {
                 var mac = actionKey.substring(8)
@@ -1017,13 +907,21 @@ ShellRoot {
         else if (slotKey === "bottom" && subKey === "output") {
             if (actionKey.indexOf("set-sink:") === 0) {
                 var sink = actionKey.substring(9)
-                cmd = ["pactl", "set-default-sink", sink]
+                var nodes = Pipewire.nodes.values
+                for (var ni = 0; ni < nodes.length; ++ni) {
+                    if (nodes[ni].name === sink && nodes[ni].isSink && !nodes[ni].isStream && nodes[ni].audio) {
+                        Pipewire.preferredDefaultAudioSink = nodes[ni]
+                        break
+                    }
+                }
+                return
             }
         }
         // ── Audio Volume ──
         else if (slotKey === "bottom" && subKey === "volume") {
             if (actionKey === "mute-toggle") {
-                cmd = ["pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle"]
+                if (audioReady) defaultAudioNode.audio.muted = !defaultAudioNode.audio.muted
+                return
             } else if (actionKey.indexOf("set-volume:") === 0) {
                 var vol = actionKey.substring(11)
                 root.setAudioPercent(Number(vol))
@@ -1095,30 +993,6 @@ ShellRoot {
         if (cmd) {
             actProc.command = cmd
             actProc.running = true
-            // Refresh state after one second.
-            refreshTimer.restart()
-            // Repeat refreshes for BT pair/connect/disconnect/remove actions.
-            if (slotKey === "top" && subKey === "bluetooth" && actionKey !== "toggle" && actionKey !== "scan") {
-                btRepeatRefresh.count = 0
-                btRepeatRefresh.running = true
-            }
-        }
-    }
-    Timer {
-        id: refreshTimer
-        interval: 800; repeat: false
-        onTriggered: { wifiService.refresh(); pollBt.running = true }
-    }
-    // Repeat BT refreshes after pair/connect actions (may take 5–10s).
-    Timer {
-        id: btRepeatRefresh
-        interval: 1500
-        repeat: true
-        property int count: 0
-        onTriggered: {
-            pollBt.running = true
-            count += 1
-            if (count >= 6) { running = false; count = 0 }
         }
     }
 
@@ -1360,6 +1234,7 @@ ShellRoot {
                 }
 
                 ControlCenterView {
+                    active: controlPanel.isActive
                     id: controlView
                     controller: root
                     enabled: !qrOverlay.blocking
