@@ -22,6 +22,18 @@ configuration if you want to use Tsugumori's notification panel.
 Press `SUPER + R`. This restarts the desktop shell without terminating the
 separate secure lock process.
 
+## Control Center does not open after an update
+
+The default `SUPER + Tab` binding runs `qs ipc call ctrl toggle`.
+The `quickshell/ctrl.sh` entry point remains available for older shortcuts and
+personal overrides, including its `open` and `close` arguments. Keep that file
+when updating Quickshell separately from the Hyprland configuration.
+
+If you edit an older binding, reload it with `hyprctl reload`, then check
+`hyprctl configerrors`. This reloads the configuration without ending the session.
+The Control Center uses an available monitor while cursor lookup is pending or
+unavailable, and falls back when the previously selected monitor is disconnected.
+
 ## The wallpaper picker is empty
 
 Place JPG, PNG, or WebP files in `~/Pictures/wallpapers/`, then open the picker

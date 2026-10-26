@@ -1118,7 +1118,18 @@ ShellRoot {
     }
 
     // ── Active screen detection ──
-    property string activeMonitor: ""
+    property string requestedMonitor: ""
+    readonly property string activeMonitor: selectMonitor(requestedMonitor, Quickshell.screens)
+
+    // Keep the panel reachable while cursor lookup is pending or unavailable,
+    // including when a previously selected monitor has been disconnected.
+    function selectMonitor(preferred, screens) {
+        for (var i = 0; i < screens.length; ++i) {
+            if (screens[i].name === preferred) return preferred
+        }
+        return screens.length ? screens[0].name : ""
+    }
+
     onActiveMonitorChanged: {
         root.brightnessAvailable = false
         if (root.open)
@@ -1131,7 +1142,7 @@ ShellRoot {
         stdout: StdioCollector {
             onStreamFinished: {
                 var n = this.text.trim()
-                if (n !== "") root.activeMonitor = n
+                if (n !== "") root.requestedMonitor = n
             }
         }
     }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import re
@@ -400,6 +401,52 @@ class InstallerLuaMigrationTests(unittest.TestCase):
         self.assertIn("legacy=preserved-legacy\n", result.stdout)
         self.assertIn("settings=preserved-settings\n", result.stdout)
         self.assertIn("managed=managed-config\n", result.stdout)
+
+    def test_upgrade_keeps_the_legacy_control_center_shortcut_working(self) -> None:
+        config_home = self.root / "config with spaces"
+        legacy_wrapper = config_home / "quickshell/ctrl.sh"
+        legacy_wrapper.parent.mkdir(parents=True)
+        legacy_wrapper.write_text("#!/bin/sh\nexit 99\n")
+        user_config = config_home / "hypr/user.lua"
+        user_config.parent.mkdir()
+        legacy_binding = 'hl.bind("SUPER + Tab", hl.dsp.exec_cmd(' + json.dumps(
+            f'"{legacy_wrapper}"') + '))\n'
+        user_config.write_text(legacy_binding)
+        self.write_executable("qs", """
+            #!/usr/bin/env python3
+            import json, os, sys
+            print(json.dumps(sys.argv[1:]))
+            sys.exit(int(os.environ.get("FAKE_QS_EXIT", "0")))
+        """)
+        env = {"XDG_CONFIG_HOME": str(config_home),
+               "PATH": f"{self.fake_bin}{os.pathsep}{self.env['PATH']}",
+               "TSUGUMORI_TEST_REPO": str(REPO_ROOT)}
+        result = self.run_installer_shell("""
+            mkdir -p "$CLONE_DIR/config/hypr" "$CLONE_DIR/config/quickshell"
+            cp "$TSUGUMORI_TEST_REPO/config/hypr/hyprland.lua" "$CLONE_DIR/config/hypr/"
+            cp "$TSUGUMORI_TEST_REPO/config/quickshell/ctrl.sh" "$CLONE_DIR/config/quickshell/"
+            BACKUP_OLD=true
+            deploy_configs
+        """, extra_env=env)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(user_config.read_text(), legacy_binding)
+
+        for arguments, expected in [((), "toggle"), (("toggle",), "toggle"),
+                                    (("open",), "show"), (("close",), "hide")]:
+            with self.subTest(arguments=arguments):
+                invoked = subprocess.run([str(legacy_wrapper), *arguments],
+                    env={**self.env, **env}, capture_output=True, text=True, timeout=5)
+                self.assertEqual(invoked.returncode, 0, invoked.stderr)
+                self.assertEqual(json.loads(invoked.stdout), ["ipc", "--path",
+                    str(config_home / "quickshell/shell.qml"), "call", "--", "ctrl", expected])
+
+        invalid = subprocess.run([str(legacy_wrapper), "invalid"], env={**self.env, **env},
+                                 capture_output=True, text=True, timeout=5)
+        self.assertEqual(invalid.returncode, 2)
+        self.assertEqual(invalid.stdout, "")
+        failed = subprocess.run([str(legacy_wrapper)], env={**self.env, **env, "FAKE_QS_EXIT": "7"},
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(failed.returncode, 7)
 
     def test_install_lock_background_prefers_the_bundled_tsugumori_asset(self) -> None:
         result = self.run_installer_shell(

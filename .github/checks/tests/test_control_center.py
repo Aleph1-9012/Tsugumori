@@ -121,6 +121,34 @@ TestCase {
 }
 ''')
 
+    def test_panel_keeps_a_monitor_when_cursor_lookup_is_unavailable(self) -> None:
+        source = (SHELL / "widgets/ControlCenter.qml").read_text()
+        selection = source.split("    // ── Active screen detection ──", 1)[1].split(
+            "    onActiveMonitorChanged:", 1)[0].replace("Quickshell.screens", "screens")
+        self.check('''import QtQuick
+import QtTest
+TestCase {
+    id: root
+    name: "ControlCenterMonitor"
+    property var screens: [{name:"eDP-1"}, {name:"DP-1"}]
+''' + selection + '''
+    function test_lookup_and_hotplug() {
+        compare(activeMonitor, "eDP-1")
+        requestedMonitor = "DP-1"
+        compare(activeMonitor, "DP-1")
+        requestedMonitor = "missing-output"
+        compare(activeMonitor, "eDP-1")
+        requestedMonitor = "DP-1"
+        screens = [{name:"eDP-1"}]
+        compare(activeMonitor, "eDP-1")
+        screens = []
+        compare(activeMonitor, "")
+        screens = [{name:"HDMI-A-1"}]
+        compare(activeMonitor, "HDMI-A-1")
+    }
+}
+''')
+
 
 class ControlCenterStaticTests(unittest.TestCase):
     def test_dispatch_uses_argv_not_a_shell_string(self) -> None:
