@@ -250,11 +250,16 @@ PY
 if command -v Hyprland >/dev/null 2>&1; then
     VERIFY_RUNTIME=$(mktemp -d)
     chmod 700 "$VERIFY_RUNTIME"
-    HYPRLAND_VERIFY_ARGS=(--verify-config --config config/hypr/hyprland.lua)
+    HYPRLAND_VERIFY_COMMAND=(env XDG_RUNTIME_DIR="$VERIFY_RUNTIME"
+                            Hyprland --verify-config --config "$REPO_ROOT/config/hypr/hyprland.lua")
     if (( EUID == 0 )); then
-        HYPRLAND_VERIFY_ARGS+=(--i-am-really-stupid)
+        # Hyprland 0.57's verifier can create /.socket2.sock as root, then
+        # crash while registering it with an uninitialized Wayland event loop.
+        chown nobody "$VERIFY_RUNTIME"
+        HYPRLAND_VERIFY_COMMAND=(runuser -u nobody -- "${HYPRLAND_VERIFY_COMMAND[@]}")
     fi
-    if ! XDG_RUNTIME_DIR="$VERIFY_RUNTIME" Hyprland "${HYPRLAND_VERIFY_ARGS[@]}" >/dev/null; then
+    if ! "${HYPRLAND_VERIFY_COMMAND[@]}" >"$VERIFY_RUNTIME/verify.log" 2>&1; then
+        cat "$VERIFY_RUNTIME/verify.log" >&2
         rm -rf -- "$VERIFY_RUNTIME"
         exit 1
     fi
