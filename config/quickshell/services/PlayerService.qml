@@ -82,6 +82,7 @@ Scope {
 
     function clearExternalState() {
         if (root.localMode) return
+        if (root.restoreLocalPlayback()) return
         if (root.mpTitle !== "NO MEDIA") root.mediaRevision++
         root.externalMediaKey = ""
         root.externalServiceKey = ""
@@ -275,9 +276,9 @@ Scope {
         }
         if (player.isPlaying && root.localMode
                 && Date.now() >= root.localPreferenceUntil) {
-            root.localMode = false
-            root.mpvSend(["set_property", "pause", true])
+            root.suspendLocalPlayback()
         }
+        if (!player.isPlaying) root.restoreLocalPlayback()
         if (root.localMode) return
 
         var candidateKey = root.mediaKeyForPlayer(player)
@@ -442,6 +443,7 @@ Scope {
     readonly property string runtimeDir: runtimeBase + (Quickshell.env("XDG_RUNTIME_DIR") ? "/tsugumori" : "")
     property var    localTracks: []
     property bool   localMode: false
+    property var    suspendedLocalPlayback: null
     readonly property string mpvSocket: runtimeDir + "/mpv.sock"
 
     Process {
@@ -511,7 +513,7 @@ Scope {
         }
         onExited: function(exitCode, exitStatus) {
             root.mpvReady = false
-            if (root.localMode) mpvBridgeRestart.start()
+            if (root.localMode || root.suspendedLocalPlayback) mpvBridgeRestart.start()
         }
     }
 
@@ -519,7 +521,7 @@ Scope {
         id: mpvBridgeRestart
         interval: 300
         repeat: false
-        onTriggered: if (root.localMode && !mpvBridge.running) mpvBridge.running = true
+        onTriggered: if ((root.localMode || root.suspendedLocalPlayback) && !mpvBridge.running) mpvBridge.running = true
     }
 
     property bool mpvReady: false
@@ -560,34 +562,80 @@ Scope {
             // Only natural completion advances the library, never a stop,
             // failed load, or an event from a file replaced by a manual skip.
             var entry = message.entryId
-            if (root.localMode && message.reason === "eof" && message.path
+            if ((root.localMode || root.suspendedLocalPlayback) && message.reason === "eof" && message.path
                     && message.path === root.localTrackPath
                     && Number.isInteger(entry) && entry >= 0 && entry !== root.lastMpvEndEntry) {
                 root.lastMpvEndEntry = entry
-                root.nextLocalTrack()
+                if (root.localMode) root.nextLocalTrack()
+                else root.suspendedLocalPlayback.finished = true
             }
             return
         }
         if (message.type !== "state") return
 
-        if (root.localMode) {
+        // Keep the paused local track current while browser metadata is displayed.
+        var local = root.localMode ? root : root.suspendedLocalPlayback
+        if (local) {
             // Every timing/metadata snapshot belongs to one file. Ignore replies
             // for a file that was replaced while the bridge was catching up.
             if (String(message.path || "") !== root.localTrackPath) return
             if (message.metadataPath === root.localTrackPath) {
                 var tags = message.metadata || {}
-                root.mpTitle = root.localTag(tags, "title") || root.localTrackPath.split("/").pop().replace(/\.[^.]+$/, "")
-                root.mpArtist = root.localTag(tags, "artist") || "LOCAL FILE"
-                root.mpAlbum = root.localTag(tags, "album")
+                local.mpTitle = root.localTag(tags, "title") || root.localTrackPath.split("/").pop().replace(/\.[^.]+$/, "")
+                local.mpArtist = root.localTag(tags, "artist") || "LOCAL FILE"
+                local.mpAlbum = root.localTag(tags, "album")
             }
             var pos = Number(message.position)
             var len = Number(message.duration)
             var ended = Boolean(message.eofReached) || Boolean(message.idleActive)
-            if (isFinite(len) && len > 0) root.mpLength = len
-            if (!ended && isFinite(pos) && pos >= 0) root.mpPosition = pos
-            root.mpPlaying = !Boolean(message.pause) && !ended
-            if (ended && root.mpLength > 0) root.mpPosition = root.mpLength
+            if (isFinite(len) && len > 0) local.mpLength = len
+            if (!ended && isFinite(pos) && pos >= 0) local.mpPosition = pos
+            local.mpPlaying = !Boolean(message.pause) && !ended
+            if (ended && local.mpLength > 0) local.mpPosition = local.mpLength
         }
+    }
+
+    function suspendLocalPlayback() {
+        root.suspendedLocalPlayback = {
+            path: root.localTrackPath, resume: root.mpPlaying, finished: false,
+            mpTitle: root.mpTitle, mpArtist: root.mpArtist, mpAlbum: root.mpAlbum,
+            mpTrackNumber: root.mpTrackNumber, mpCoverUrl: root.mpCoverUrl,
+            mpPosition: root.mpPosition, mpLength: root.mpLength, mpPlaying: root.mpPlaying
+        }
+        root.localMode = false
+        root.mpvSend(["set_property", "pause", true])
+    }
+
+    function restoreLocalPlayback() {
+        var local = root.suspendedLocalPlayback
+        if (!local) return false
+
+        root.suspendedLocalPlayback = null
+        if (!local.path || local.path !== root.localTrackPath) return false
+
+        root.localMode = true
+        root.externalMediaKey = ""
+        root.externalTrackChangePending = false
+        root.externalTrackChangePlayer = null
+        root.externalPositionAwaitingFresh = false
+        root.mediaRevision++
+        root.mpTitle = local.mpTitle
+        root.mpArtist = local.mpArtist
+        root.mpAlbum = local.mpAlbum
+        root.mpTrackNumber = local.mpTrackNumber
+        root.mpCoverUrl = local.mpCoverUrl
+        root.mpPosition = local.mpPosition
+        root.mpLength = local.mpLength
+        root.mpPlaying = local.resume
+
+        if (local.resume) {
+            // EOF can race with the pause command. Advance only after the
+            // browser releases playback, without reloading a paused track.
+            if (local.finished) root.nextLocalTrack()
+            else root.mpvSend(["set_property", "pause", false])
+        }
+
+        return true
     }
 
     function mpvSend(cmdArr) {
@@ -644,6 +692,7 @@ Scope {
 
     function playLocalTrack(path) {
         if (!root.localMode || path !== root.localTrackPath) root.mediaRevision++
+        root.suspendedLocalPlayback = null
         root.externalMediaKey = ""
         root.localTrackPath = path
         root.localTrackIndex = root.localTracks.indexOf(path)

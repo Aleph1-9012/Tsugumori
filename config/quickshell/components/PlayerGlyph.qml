@@ -178,20 +178,23 @@ Item {
             var top = Math.max(0, Math.floor((y - radius) / cellH))
             var bottom = Math.min(31, Math.floor((y + radius) / cellH))
             for (var row = top; row <= bottom; ++row) for (var col = left; col <= right; ++col) {
+                var index = row * 32 + col
+                // A stamp cannot exceed its strength, even at its centre.
+                if (amounts[index] >= strength) continue
                 var dx = (col + 0.5) * cellW - x, dy = (row + 0.5) * cellH - y
                 var distance = Math.sqrt(dx * dx + dy * dy)
                 if (distance >= radius) continue
-                var index = row * 32 + col
                 var amount = strength * (1 - smoothStep(radius * 0.22, radius, distance))
                 amounts[index] = Math.max(amounts[index], amount)
             }
         }
-        for (var i = 0; i < trailPoints.length; ++i) {
+        // Stronger, newer stamps let older overlapping stamps skip covered cells.
+        if (pointerPresent) stamp(pointerX, pointerY, 1)
+        for (var i = trailPoints.length - 1; i >= 0; --i) {
             var point = trailPoints[i]
             var strength = Math.pow(1 - clamp((now - point.born) / trailDuration, 0, 1), 1.7) * point.strength
             if (strength > 0) stamp(point.x, point.y, strength)
         }
-        if (pointerPresent) stamp(pointerX, pointerY, 1)
         return amounts
     }
     function drawCells(ctx, frame, progress, outgoing, colourAmounts) {
@@ -199,7 +202,10 @@ Item {
         ctx.font = (cellW * 0.95) + 'px "' + Theme.mono + '"'
         ctx.textAlign = "center"; ctx.textBaseline = "middle"
         for (var i = 0; i < frame.length; ++i) {
-            var g = frame[i], x = (i % 32 + 0.5) * cellW, y = (Math.floor(i / 32) + 0.5) * cellH, alpha = 1
+            var g = frame[i]
+            // Spaces have no ink. Avoid text layout and motion work for empty cells.
+            if (g.glyph === " ") continue
+            var x = (i % 32 + 0.5) * cellW, y = (Math.floor(i / 32) + 0.5) * cellH, alpha = 1
             if (progress < 1) {
                 var u = clamp((progress - g.noise * 0.16) / 0.84, 0, 1)
                 var motion = outgoing ? smoothStep(0.04, 0.65, u) : 1 - smoothStep(0.32, 1, u)

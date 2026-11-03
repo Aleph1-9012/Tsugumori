@@ -1,0 +1,208 @@
+import QtQuick
+import QtTest
+
+TestCase {
+    id: root
+    name: "PlayerSources"
+    __PROPERTIES__
+    __FUNCTIONS__
+    __TIMERS__
+
+    property var testPlayers: []
+    property var commands: []
+    property bool eventsEnabled: false
+
+    function mpvSend(command) { commands.push(command) }
+
+    component BrowserPlayer: QtObject {
+        property string dbusName: "org.mpris.MediaPlayer2.browser"
+        property bool canControl: true
+        property bool canPause: true
+        property bool canTogglePlaying: true
+        property bool canGoNext: true
+        property bool canGoPrevious: true
+        property bool canSeek: true
+        property bool isPlaying: false
+        property string trackTitle: "Browser video"
+        property string trackArtist: "Browser artist"
+        property string trackAlbum: ""
+        property string trackArtUrl: ""
+        property var metadata: ({"xesam:url": "https://example.test/video"})
+        property bool positionSupported: true
+        property bool lengthSupported: true
+        property real position: 3
+        property real length: 100
+        property int transportCalls: 0
+
+        function pause() { isPlaying = false }
+        function togglePlaying() { transportCalls++; isPlaying = !isPlaying }
+        function next() { transportCalls++ }
+        function previous() { transportCalls++ }
+    }
+
+    BrowserPlayer { id: browser }
+    BrowserPlayer { id: secondBrowser; dbusName: "org.mpris.MediaPlayer2.other" }
+
+    Connections {
+        target: browser
+        enabled: root.eventsEnabled
+        function onIsPlayingChanged() { root.reselectExternalPlayer() }
+    }
+
+    Connections {
+        target: secondBrowser
+        enabled: root.eventsEnabled
+        function onIsPlayingChanged() { root.reselectExternalPlayer() }
+    }
+
+    function localState(path, position, paused) {
+        handleMpvMessage(JSON.stringify({
+            type: "state", path: path, metadataPath: path,
+            metadata: {title: "Local song", artist: "Local artist", album: "Local album"},
+            position: position, duration: 180, pause: paused,
+            eofReached: false, idleActive: false
+        }))
+    }
+
+    function ended(path, entry) {
+        handleMpvMessage(JSON.stringify({type: "track-ended", path: path, reason: "eof", entryId: entry}))
+    }
+
+    function init() {
+        eventsEnabled = false
+        externalSettleTimer.stop()
+        noPlayerGraceTimer.stop()
+        externalPlayer = null
+        externalServiceKey = ""
+        externalMediaKey = ""
+        externalPositionAwaitingFresh = false
+        lastMpvEndEntry = -1
+        testPlayers = []
+        browser.isPlaying = false
+        secondBrowser.isPlaying = false
+        browser.transportCalls = secondBrowser.transportCalls = 0
+        localTracks = ["/music/one.flac", "/music/two.flac", "/music/three.flac"]
+        playLocalTrack(localTracks[0])
+        localState(localTracks[0], 42, false)
+        localPreferenceUntil = 0
+        commands = []
+        eventsEnabled = true
+    }
+
+    function cleanup() {
+        eventsEnabled = false
+        externalSettleTimer.stop()
+        noPlayerGraceTimer.stop()
+    }
+
+    function test_preview_returns_to_queue_data() {
+        return [{tag: "paused", removed: false}, {tag: "service-removed", removed: true}]
+    }
+
+    function test_preview_returns_to_queue(data) {
+        testPlayers = [browser]
+        browser.isPlaying = true
+        verify(!localMode)
+        compare(commands, [["set_property", "pause", true]])
+        compare(mpTitle, "Browser video")
+
+        // mpv reports the position where the pause actually took effect.
+        localState(localTracks[0], 43, true)
+        localState("/music/stale.flac", 99, true)
+        compare(mpTitle, "Browser video")
+        if (data.removed) {
+            testPlayers = []
+            reselectExternalPlayer()
+            verify(!localMode)
+            tryCompare(root, "localMode", true, 1200)
+        } else {
+            browser.isPlaying = false
+            verify(localMode)
+        }
+
+        compare(mpTitle, "Local song")
+        compare(mpArtist, "Local artist")
+        compare(mpAlbum, "Local album")
+        compare(mpPosition, 43)
+        compare(mpLength, 180)
+        verify(mpPlaying)
+        compare(localTrackIndex, 0)
+        compare(commands, [["set_property", "pause", true], ["set_property", "pause", false]])
+
+        togglePlayback()
+        compare(commands[2], ["cycle", "pause"])
+        nextTrack()
+        compare(localTrackPath, localTracks[1])
+        previousTrack()
+        compare(localTrackPath, localTracks[0])
+        compare(browser.transportCalls, 0)
+    }
+
+    function test_user_paused_music_stays_paused() {
+        localState(localTracks[0], 42, true)
+        testPlayers = [browser]
+        browser.isPlaying = true
+        browser.isPlaying = false
+        verify(localMode)
+        verify(!mpPlaying)
+        compare(mpPosition, 42)
+        compare(commands, [["set_property", "pause", true]])
+    }
+
+    function test_local_selection_replaces_suspended_track() {
+        testPlayers = [browser]
+        browser.isPlaying = true
+        playLocalTrack(localTracks[2])
+        verify(localMode)
+        verify(!browser.isPlaying)
+        compare(localTrackIndex, 2)
+        compare(mpPosition, 0)
+        // A later browser disappearance cannot restore the old selection.
+        testPlayers = []
+        reselectExternalPlayer()
+        compare(localTrackPath, localTracks[2])
+        compare(mpPosition, 0)
+    }
+
+    function test_eof_during_handoff_advances_once_after_browser_stops() {
+        testPlayers = [browser]
+        browser.isPlaying = true
+        ended(localTracks[0], 7)
+        ended(localTracks[0], 7)
+        compare(localTrackIndex, 0)
+        compare(commands.length, 1)
+        browser.isPlaying = false
+        verify(localMode)
+        compare(localTrackIndex, 1)
+        compare(commands, [["set_property", "pause", true],
+                           ["loadfile", localTracks[1], "replace"], ["set_property", "pause", false]])
+        ended(localTracks[0], 7)
+        compare(localTrackIndex, 1)
+        ended(localTracks[1], 8)
+        compare(localTrackIndex, 2)
+    }
+
+    function test_another_playing_browser_keeps_music_suspended() {
+        testPlayers = [browser, secondBrowser]
+        browser.isPlaying = true
+        secondBrowser.isPlaying = true
+        browser.isPlaying = false
+        verify(!localMode)
+        compare(externalPlayer, secondBrowser)
+        compare(commands.length, 1)
+        secondBrowser.isPlaying = false
+        verify(localMode)
+        compare(localTrackIndex, 0)
+        compare(commands.length, 2)
+    }
+
+    function test_browser_without_local_playback_does_not_start_music() {
+        localMode = false
+        localTrackPath = ""
+        testPlayers = [browser]
+        browser.isPlaying = true
+        browser.isPlaying = false
+        verify(!localMode)
+        compare(commands.length, 0)
+    }
+}

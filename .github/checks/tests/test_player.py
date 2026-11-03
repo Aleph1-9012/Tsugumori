@@ -175,6 +175,40 @@ TestCase {
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     @unittest.skipUnless(Path(QML_TEST_RUNNER).is_file(), "qmltestrunner is not installed")
+    def test_local_queue_survives_browser_interruption(self) -> None:
+        source = (SHELL / "services/PlayerService.qml").read_text()
+        # Run the service's source selection and queue logic with explicit
+        # browser players and a recording mpv transport, without desktop IPC.
+        properties = re.findall(r"^    property (?:bool|string|int|real|double|var) +.*$",
+                                source, flags=re.MULTILINE)
+        methods = re.findall(r"^    function (\w+)\(.*?^    }$", source,
+                             flags=re.MULTILINE | re.DOTALL)
+        functions = []
+        for name in methods:
+            if name == "mpvSend":
+                continue
+            match = re.search(r"^    function " + name + r"\(.*?^    }$", source,
+                              flags=re.MULTILINE | re.DOTALL)
+            functions.append(match[0].replace("Mpris.players.values", "root.testPlayers"))
+        timers = []
+        for name in ("externalSettleTimer", "noPlayerGraceTimer"):
+            match = re.search(r"^    Timer {\n        id: " + name + r"\n.*?^    }$",
+                              source, flags=re.MULTILINE | re.DOTALL)
+            self.assertIsNotNone(match, name)
+            timers.append(match[0])
+        qml = (SHELL.parents[1] / ".github/checks/qmltests/player/fixtures/PlayerSources.qml.in").read_text()
+        qml = qml.replace("__PROPERTIES__", "\n".join(properties))
+        qml = qml.replace("__FUNCTIONS__", "\n".join(functions))
+        qml = qml.replace("__TIMERS__", "\n".join(timers))
+        test_file = self.path / "tst_PlayerSources.qml"
+        test_file.write_text(qml)
+        result = subprocess.run([QML_TEST_RUNNER, "-input", str(test_file)],
+                                env={**os.environ, "QT_QPA_PLATFORM": "offscreen",
+                                     "QT_QUICK_BACKEND": "software"},
+                                capture_output=True, text=True, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(Path(QML_TEST_RUNNER).is_file(), "qmltestrunner is not installed")
     def test_shell_auto_next_policy(self) -> None:
         # Use the actual shell methods without starting desktop services.
         source = (SHELL / "services/PlayerService.qml").read_text()
@@ -188,6 +222,7 @@ import QtTest
 TestCase {
     id: root
     name: "LocalAutoNext"
+    property var suspendedLocalPlayback: null
     property bool localMode: true
     property bool mpvReady: false
     property var lastMpvEndEntry: -1
