@@ -375,6 +375,8 @@ Scope {
                             TextArea {
                                 id: bodyField
                                 width: bodyScroll.availableWidth
+                                implicitWidth: 0
+                                implicitHeight: contentHeight + topPadding + bottomPadding
                                 font.family: Theme.mono; font.pixelSize: 16 * drawer.s
                                 wrapMode: TextEdit.Wrap
                                 textFormat: TextEdit.PlainText

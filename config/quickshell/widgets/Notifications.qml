@@ -13,6 +13,7 @@
 
 import QtQuick
 import QtQuick.Layouts
+import QtQml.Models
 import Quickshell
 import Quickshell.Io
 import Quickshell.Services.Notifications
@@ -42,7 +43,6 @@ Scope {
         onNotification: (n) => {
             n.tracked = true;
             root.record(n)
-            root.watchUpdates(n)
             if (root.dndEnabled) {
                 n.tracked = false
             }
@@ -98,19 +98,28 @@ Scope {
         root.history = list
     }
 
-    // A Notify with a replaces_id that is still tracked updates the existing
-    // object in place without emitting onNotification again, so the history
-    // copy would go stale. Re-record on any copied field's change signal.
-    // The entryIndex guard keeps dismissed or dropped entries out.
-    function watchUpdates(n) {
-        var refresh = function() {
-            if (root.entryIndex(n.id) >= 0) root.record(n)
-        }
-        var names = ["summary", "body", "appName", "appIcon", "urgency",
-            "expireTimeout", "desktopEntry", "image", "actions", "hints"]
-        for (var i = 0; i < names.length; i++) {
-            var signal = n[names[i] + "Changed"]
-            if (signal && signal.connect) signal.connect(refresh)
+    // Replacement notifications update in place. Connections follow the
+    // tracked model and are destroyed with this shell generation on reload.
+    Instantiator {
+        model: root.tracked
+        delegate: Connections {
+            required property var modelData
+            target: modelData
+
+            function refreshHistory() {
+                if (root.entryIndex(modelData.id) >= 0) root.record(modelData)
+            }
+
+            function onSummaryChanged() { refreshHistory() }
+            function onBodyChanged() { refreshHistory() }
+            function onAppNameChanged() { refreshHistory() }
+            function onAppIconChanged() { refreshHistory() }
+            function onUrgencyChanged() { refreshHistory() }
+            function onExpireTimeoutChanged() { refreshHistory() }
+            function onDesktopEntryChanged() { refreshHistory() }
+            function onImageChanged() { refreshHistory() }
+            function onActionsChanged() { refreshHistory() }
+            function onHintsChanged() { refreshHistory() }
         }
     }
 
@@ -798,8 +807,8 @@ Scope {
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
                                 onClicked: {
-                                    if (modelData && modelData.invoke) modelData.invoke();
                                     notif.state = "closing";
+                                    if (modelData && modelData.invoke) modelData.invoke();
                                 }
                             }
                         }

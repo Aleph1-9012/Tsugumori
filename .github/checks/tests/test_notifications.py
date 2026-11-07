@@ -39,8 +39,12 @@ def run_qml_case(body: str, name: str) -> subprocess.CompletedProcess:
 
 NOTIFICATION_METHODS = extract_functions(
     NOTIFICATIONS_QML.read_text(encoding="utf-8"),
-    "record", "watchUpdates", "popupTimeout", "entryIndex", "removeEntry",
+    "record", "popupTimeout", "entryIndex", "removeEntry",
     "dismiss", "activate", "clearAll")
+
+NOTIFICATION_OBSERVERS = re.search(
+    r"^    Instantiator \{.*?^    }$", NOTIFICATIONS_QML.read_text(),
+    flags=re.MULTILINE | re.DOTALL)[0]
 
 FAKES = """
     function fakeNotification(properties) {
@@ -74,10 +78,12 @@ FAKES = """
 def notification_case(tests: str) -> str:
     return """import QtQuick
 import QtTest
+import QtQml.Models
 TestCase {
     id: root
     name: "NotificationHistory"
     property var history: []
+    property var tracked: []
     readonly property int defaultTimeout: 5000
     readonly property int criticalTimeout: 10000
 
@@ -104,7 +110,7 @@ TestCase {
             function expire() { tracked = false; expired = true }
         }
     }
-""" + FAKES + NOTIFICATION_METHODS + tests + """
+""" + FAKES + NOTIFICATION_METHODS + NOTIFICATION_OBSERVERS + tests + """
 }
 """
 
@@ -218,8 +224,8 @@ class NotificationHistoryTests(unittest.TestCase):
     function test_watched_update() {
         var a = liveNotification.createObject(root, {id: 1, summary: "a"})
         var b = liveNotification.createObject(root, {id: 2})
-        record(a); watchUpdates(a)
-        record(b); watchUpdates(b)
+        record(a); record(b)
+        tracked = [a, b]
         a.summary = "a2"
         a.body = "body2"
         compare(history.length, 2)
@@ -233,7 +239,7 @@ class NotificationHistoryTests(unittest.TestCase):
         self.run_case("""
     function test_watched_hints() {
         var n = liveNotification.createObject(root, {id: 1})
-        record(n); watchUpdates(n)
+        record(n); tracked = [n]
         n.hints = {category: "email"}
         compare(history[0].category, "email")
     }
@@ -243,13 +249,89 @@ class NotificationHistoryTests(unittest.TestCase):
         self.run_case("""
     function test_no_resurrect() {
         var n = liveNotification.createObject(root, {id: 1, summary: "a"})
-        record(n); watchUpdates(n)
+        record(n); tracked = [n]
         dismiss(1)
         compare(history.length, 0)
         n.summary = "late update"
         compare(history.length, 0)
     }
 """)
+
+    def test_update_connections_end_with_their_owner_or_tracked_entry(self) -> None:
+        self.run_case("""
+    Component {
+        id: observerOwner
+        Item {
+            id: owner
+            property var tracked: []
+            property int updates: 0
+            function entryIndex(id) { return 0 }
+            function record(notification) { updates++ }
+""" + NOTIFICATION_OBSERVERS.replace("root.", "owner.") + """
+        }
+    }
+    function test_observer_lifetime() {
+        failOnWarning(/.*/)
+        var n = liveNotification.createObject(root, {id: 1})
+        var owner = observerOwner.createObject(root, {tracked: [n]})
+        n.summary = "first"
+        compare(owner.updates, 1)
+        owner.tracked = []
+        n.summary = "untracked"
+        compare(owner.updates, 1)
+        owner.tracked = [n]
+        owner.destroy()
+        wait(0)
+        n.summary = "after reload"
+        wait(0)
+    }
+""")
+
+    def test_action_can_destroy_its_popup_without_accessing_it_afterward(self) -> None:
+        source = NOTIFICATIONS_QML.read_text()
+        click = re.search(r"id: actMouse.*?onClicked: \{(.*?)\n\s*}", source, re.DOTALL)[1]
+        result = run_qml_case('''import QtQuick
+import QtTest
+TestCase {
+    id: test
+    name: "NotificationActionLifetime"
+    width: 100; height: 100
+    visible: true
+    when: windowShown
+    property int invocations: 0
+    QtObject {
+        id: action
+        function invoke() {
+            test.compare(popups.itemAt(0).state, "closing")
+            test.invocations++
+            popups.model = 0
+        }
+    }
+    Repeater {
+        id: popups
+        model: []
+        delegate: Item {
+            id: notif
+            width: 100; height: 100
+            required property var modelData
+            MouseArea {
+                anchors.fill: parent
+                objectName: "notificationAction"
+                onClicked: {''' + click + '''
+                }
+            }
+        }
+    }
+    function test_invoke() {
+        failOnWarning(/.*/)
+        popups.model = [action]
+        mouseClick(findChild(test, "notificationAction"), 10, 10)
+        compare(invocations, 1)
+        compare(popups.count, 0)
+    }
+}
+''', "NotificationActionLifetime")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_popup_timeout_never_expires_on_zero(self) -> None:
         self.run_case("""
