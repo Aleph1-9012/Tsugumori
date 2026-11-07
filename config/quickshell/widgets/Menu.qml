@@ -199,7 +199,6 @@ Item {
 
         // Content.
         Rectangle {
-            id:     panelContent
             anchors.fill: parent
             transform: Translate { x: panelHost.closeOffset }
             color:  root.paper
@@ -449,7 +448,7 @@ Item {
                                 spacing:10
                                 Text { anchors.verticalCenter:parent.verticalCenter; text:"▸"; font.family:root.listFont; font.pixelSize:13; color:root.ink }
                                 FocusScope {
-                                    id:searchScope; width:parent.width-60; height:30
+                                    width:parent.width-60; height:30
                                     anchors.verticalCenter:parent.verticalCenter
                                     focus: root.menuOpen
 
@@ -641,7 +640,7 @@ Item {
                                 }
 
                                 MouseArea {
-                                    id:appMA; anchors.fill:parent; hoverEnabled:true
+                                    anchors.fill:parent; hoverEnabled:true
                                     onEntered: root.focusIdx=index
                                     onClicked: root.launchApp(modelData.desktopFile)
                                 }
@@ -668,7 +667,6 @@ Item {
                 Rectangle { anchors.top:parent.top; width:parent.width; height:1; color:root.lineSoft }
 
                 Row {
-                    id: launchActions
                     anchors { left:parent.left; leftMargin:24; verticalCenter:parent.verticalCenter }
                     spacing: 8
                     MenuFooterButton {
@@ -684,7 +682,6 @@ Item {
                 }
 
                 Row {
-                    id: sessionActions
                     anchors { right:parent.right; rightMargin:24; verticalCenter:parent.verticalCenter }
                     spacing: 8
                     MenuFooterButton {

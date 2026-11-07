@@ -96,6 +96,37 @@ Higher opacity for darker glyphs was checked with a rendered before-and-after
 comparison. QML lint reported no errors for the artwork component. The full
 repository validation remains required in the Arch GitHub Actions job.
 
+## Validation for v1.2.5
+
+The release tree passed strict validation on 2026-11-07 in a disposable Arch
+container with the same required tools and command as GitHub Actions.
+
+| Component | Version |
+|---|---|
+| Hyprland | 0.57.1-1 |
+| Quickshell | 0.3.2-1 |
+| Qt Declarative | 6.12.0-4 |
+| mpv | 1:0.41.0-7 |
+| Python | 3.14.9-1 |
+| ShellCheck | 0.11.0-163 |
+
+All 138 Python tests and 41 standalone Qt behavior cases passed. Qt reported
+57 passes including 16 setup and cleanup entries. One shader-render case was
+skipped because the offscreen software backend cannot run it; shader source
+compilation and bundled shader checks passed separately. The minimal container
+also reported missing Nerd Font warnings in the player rendering tests.
+
+Bash, Fish, Lua, and Python syntax checks, ShellCheck, Hyprland configuration
+verification, package and asset checks, and QML lint/import checks across 32
+files passed. The notification regressions cover observer teardown and actions
+that immediately destroy their popup. This run did not repeat an interactive
+GPU/PAM test or a full desktop installation.
+
+The project-wide unused-code audit removed eight unreferenced QML IDs across
+the menu, Control Center, wallpaper picker, and lock screen. Public IPC methods,
+framework callbacks, shader uniforms, and dynamically loaded assets were
+retained. The cleanup does not change appearance or behavior.
+
 ## How to install pinned versions
 
 Pinned manifests are not currently committed to this branch, so `--pinned`

@@ -283,7 +283,6 @@ ShellRoot {
         }
 
         WlSessionLockSurface {
-            id: lockSurface
             color: "black"
 
             PhaseLockView {

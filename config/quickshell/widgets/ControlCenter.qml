@@ -1246,7 +1246,6 @@ ShellRoot {
 
                 ControlCenterView {
                     active: controlPanel.isActive
-                    id: controlView
                     controller: root
                     enabled: !qrOverlay.blocking
                     width: Math.max(280, Math.min(936, parent.width - 80))

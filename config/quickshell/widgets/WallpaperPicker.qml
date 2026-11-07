@@ -53,7 +53,6 @@ ShellRoot {
 
     // ── List wallpapers ──
     Process {
-        id: listWallpapers
         command: [
             "find", root.wallpaperDir,
             "-maxdepth", "1", "-type", "f",
